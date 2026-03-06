@@ -25,6 +25,8 @@ import {
   existsDuplicate,
 } from "../data/TransactionRepository";
 
+import { ingestNotification as serviceIngestNotification } from "../services/IngestionService";
+
 import {
   addTag,
   addTagToTransaction as repoAddTagToTx,
@@ -101,6 +103,18 @@ export interface UseTransactionsResult {
     packageName: string | null,
     receivedAt: string
   ) => boolean;
+  /**
+   * Ingests a notification, applying all smart behaviours:
+   * deduplication, auto-soft-delete, and auto-tag by vendor.
+   *
+   * @returns The persisted transaction, or `null` when it was a duplicate
+   *   and was silently skipped.
+   */
+  ingestNotification: (
+    title: string | null,
+    body: string | null,
+    packageName: string | null
+  ) => Promise<Transaction | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -384,6 +398,38 @@ export function useTransactions(
     [db]
   );
 
+  // -------------------------------------------------------------------------
+  // ingestNotification
+  // -------------------------------------------------------------------------
+
+  const ingestNotification = useCallback(
+    async (
+      title: string | null,
+      body: string | null,
+      packageName: string | null
+    ): Promise<Transaction | null> => {
+      const receivedAt = new Date().toISOString();
+      const result = serviceIngestNotification(db, {
+        notificationTitle: title,
+        notificationBody: body,
+        packageName,
+        receivedAt,
+        rawContent: [title, body].filter(Boolean).join(" ") || null,
+        jsonContent: JSON.stringify({ title, body, packageName, timestamp: receivedAt }),
+        amount: null,
+        currency: null,
+        isDeleted: false,
+        isCash: false,
+        isIncome: false,
+      });
+      if (result !== null) {
+        await loadTransactions();
+      }
+      return result;
+    },
+    [db, loadTransactions]
+  );
+
   return {
     transactions,
     loading,
@@ -398,5 +444,6 @@ export function useTransactions(
     removeTagFromTransaction,
     searchTags,
     checkDuplicate,
+    ingestNotification,
   };
 }
