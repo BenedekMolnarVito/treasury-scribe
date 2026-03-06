@@ -1,2 +1,4 @@
 .github
 .qa
+node_modules/
+dist/
