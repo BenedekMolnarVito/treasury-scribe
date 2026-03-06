@@ -16,6 +16,11 @@ export interface TransactionTag {
   tagId: number;
   /** ISO 8601 UTC timestamp when the link was created. */
   createdAt: string;
+  /**
+   * Eagerly loaded tag name from the Tags table.
+   * Populated when transactions are fetched via the repository JOIN query.
+   */
+  tagName?: string;
 }
 
 /**

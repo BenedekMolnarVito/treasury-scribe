@@ -41,6 +41,8 @@ interface TransactionRow {
   TtId: number | null;
   TagId: number | null;
   TtCreatedAt: string | null;
+  /** Eagerly loaded tag name from the Tags table. */
+  TagName: string | null;
 }
 
 /**
@@ -84,6 +86,7 @@ function groupTransactionRows(rows: TransactionRow[]): Transaction[] {
         transactionId: row.Id,
         tagId: row.TagId,
         createdAt: row.TtCreatedAt ?? "",
+        tagName: row.TagName ?? undefined,
       };
       map.get(row.Id)!.transactionTags.push(tag);
     }
@@ -134,9 +137,11 @@ const SELECT_WITH_TAGS = `
     t.IsIncome,
     tt.Id       AS TtId,
     tt.TagId    AS TagId,
-    tt.CreatedAt AS TtCreatedAt
+    tt.CreatedAt AS TtCreatedAt,
+    tg.Name     AS TagName
   FROM Transactions t
   LEFT JOIN TransactionTags tt ON tt.TransactionId = t.Id
+  LEFT JOIN Tags tg ON tg.Id = tt.TagId
 `;
 
 // ---------------------------------------------------------------------------
