@@ -118,6 +118,18 @@ export interface UseTransactionsResult {
 }
 
 // ---------------------------------------------------------------------------
+// Tag helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the human-readable tag name when available; falls back to the raw
+ * tagId when the name is unexpectedly absent.
+ */
+function getTagDisplayName(tt: { tagName?: string; tagId: number }): string {
+  return tt.tagName && tt.tagName.length > 0 ? tt.tagName : String(tt.tagId);
+}
+
+// ---------------------------------------------------------------------------
 // CSV helpers
 // ---------------------------------------------------------------------------
 
@@ -151,7 +163,9 @@ function csvEscape(value: string | number | boolean | null | undefined): string 
 /**
  * Converts the transaction list to a CSV string with the canonical headers.
  *
- * Tags are serialized as a semicolon-separated string within the Tags column.
+ * Tags are serialized as a semicolon-separated string of tag names within the
+ * Tags column. When a tag name is unexpectedly absent, the raw tagId is used
+ * as a fallback.
  *
  * @param transactions - Non-deleted transactions to serialize.
  */
@@ -160,10 +174,9 @@ function transactionsToCSV(transactions: Transaction[]): string {
   const dataLines = transactions.map((tx) => {
     const tagNames = tx.transactionTags
       .map((tt) => {
-        // transactionTags only carry tagId; the tag name is not loaded here.
-        // We expose the raw tagId as a fallback. The component layer should
-        // ensure tag names are populated when the tags are needed.
-        return String(tt.tagId);
+        // Prefer the human-readable tagName when available, but fall back to
+        // the raw tagId if the name is unexpectedly missing.
+        return getTagDisplayName(tt);
       })
       .join(";");
 
@@ -203,7 +216,8 @@ interface ExportRow {
 
 /**
  * Converts the transaction list to an indented JSON string.
- * Tags are rendered as a semicolon-separated string of tag ids.
+ * Tags are rendered as a semicolon-separated string of tag names (falling
+ * back to the raw tagId when the name is unexpectedly missing).
  *
  * @param transactions - Non-deleted transactions to serialize.
  */
@@ -217,7 +231,9 @@ function transactionsToJSON(transactions: Transaction[]): string {
     Amount: tx.amount,
     Currency: tx.currency,
     IsCash: tx.isCash ? 1 : 0,
-    Tags: tx.transactionTags.map((tt) => String(tt.tagId)).join(";"),
+    Tags: tx.transactionTags
+      .map((tt) => getTagDisplayName(tt))
+      .join(";"),
     IsDeleted: tx.isDeleted ? 1 : 0,
   }));
   return JSON.stringify(rows, null, 2);

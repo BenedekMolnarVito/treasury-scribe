@@ -9,7 +9,6 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import android.text.TextUtils
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -50,6 +49,9 @@ class NotificationListenerPlugin : Plugin() {
          */
         private val MIUI_MANUFACTURERS = setOf("xiaomi", "redmi", "poco")
     }
+
+    /** Pending call awaiting the POST_NOTIFICATIONS permission dialog result. */
+    private var pendingPostNotificationsCall: PluginCall? = null
 
     // -------------------------------------------------------------------------
     // Plugin lifecycle
@@ -97,6 +99,9 @@ class NotificationListenerPlugin : Plugin() {
      * Requests the POST_NOTIFICATIONS runtime permission on Android 13+.
      *
      * On earlier API levels resolves immediately with `{ granted: true }`.
+     * On Android 13+ the call is held open until the user responds to the
+     * system dialog; the final `{ granted: true/false }` is delivered via
+     * [handleOnRequestPermissionsResult].
      */
     @PluginMethod
     fun requestPostNotificationsPermission(call: PluginCall) {
@@ -110,22 +115,34 @@ class NotificationListenerPlugin : Plugin() {
                 result.put("granted", true)
                 call.resolve(result)
             } else {
-                // Store call for result handling in onRequestPermissionsResult
-                ActivityCompat.requestPermissions(
-                    activity,
-                    arrayOf(POST_NOTIFICATIONS),
-                    REQUEST_POST_NOTIFICATIONS
-                )
-                // Resolve optimistically; the listener service will still work
-                // once the user grants via the system dialog.
-                val result = JSObject()
-                result.put("granted", false)
-                call.resolve(result)
+                // Hold the call open and resolve it once the user responds.
+                pendingPostNotificationsCall = call
+                pluginRequestPermissions(arrayOf(POST_NOTIFICATIONS), REQUEST_POST_NOTIFICATIONS)
             }
         } else {
             val result = JSObject()
             result.put("granted", true)
             call.resolve(result)
+        }
+    }
+
+    /**
+     * Delivers the POST_NOTIFICATIONS permission dialog result back to the
+     * waiting JavaScript call.
+     */
+    override fun handleOnRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
+        super.handleOnRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_POST_NOTIFICATIONS) {
+            val pending = pendingPostNotificationsCall ?: return
+            pendingPostNotificationsCall = null
+            val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+            val result = JSObject()
+            result.put("granted", granted)
+            pending.resolve(result)
         }
     }
 
