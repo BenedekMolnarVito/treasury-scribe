@@ -74,8 +74,9 @@
              from com.revolut.revolut and forwards them to the Capacitor bridge.
 
              android:foregroundServiceType="specialUse" — required on API 34+.
-             The service is NOT exported so only the system can bind to it via
-             the BIND_NOTIFICATION_LISTENER_SERVICE permission.
+             The service is exported so the system can bind to it via the
+             BIND_NOTIFICATION_LISTENER_SERVICE permission, which restricts
+             binding to the system only.
              ================================================================= -->
         <service
             android:name="com.vitobudget.tracker.RevolutNotificationService"

@@ -94,9 +94,9 @@ function extractCurrencyFromJson(json: string | null): string | null {
 }
 
 /**
- * Creates a plain Transaction object (without computed properties).
- * The `parsedAmount` and `parsedCurrency` getters are added separately via
- * {@link withComputedProps}.
+ * Creates a plain Transaction object with `parsedAmount` and `parsedCurrency`
+ * getters already defined. For objects reconstructed from the database (which
+ * lack these getters), use {@link withComputedProps} instead.
  */
 export function createTransaction(
   fields: Partial<Omit<Transaction, "parsedAmount" | "parsedCurrency" | "id">> &

@@ -362,12 +362,6 @@ export function findSoftDeletedMatch(
   title: string | null,
   body: string | null
 ): Transaction | null {
-  const sql = `${SELECT_WITH_TAGS}
-    WHERE t.IsDeleted = 1
-      AND t.NotificationTitle IS ?
-      AND t.NotificationBody  IS ?
-    ORDER BY t.ReceivedAt DESC
-    LIMIT 1`;
   // LIMIT on a JOIN may return multiple rows for the same transaction when it
   // has multiple tags. Use a subquery approach to get only the most recent id.
   const idRows = queryRows<{ Id: number }>(

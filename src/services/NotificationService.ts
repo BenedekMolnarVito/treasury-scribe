@@ -57,10 +57,10 @@ export interface ParsedAmountCurrency {
  *
  * Supported formats (in order of matching priority):
  * 1. **European** – `1.234,56 EUR`  (period thousands, comma decimal)
- * 2. **US**       – `$1,234.56`     (comma thousands, period decimal, leading symbol)
- * 3. **Symbol-prefixed plain** – `$50.00`
- * 4. **Space-separated with trailing code/symbol** – `6 337 Ft`
- * 5. **Code-prefixed space-separated** – `HUF 1 234`
+ * 2. **Space-separated with trailing code/symbol** – `6 337 Ft`
+ * 3. **Code-prefixed space-separated** – `HUF 1 234`
+ * 4. **US** – `$1,234.56` or `1,234.56 USD` (comma thousands, period decimal)
+ * 5. **Bare amount (last resort)** – `50.00` (no currency context)
  *
  * @param text - Raw notification body or title text.
  * @returns `{ amount, currency }` where either field may be `null` if not found.
