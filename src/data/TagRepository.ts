@@ -194,6 +194,25 @@ export function addTagToTransaction(
 }
 
 /**
+ * Returns all tags linked to the given transaction.
+ *
+ * @param db - sql.js Database instance.
+ * @param transactionId - Primary key of the transaction.
+ * @returns All {@link Tag} objects linked to the transaction.
+ */
+export function getTagsForTransaction(db: Database, transactionId: number): Tag[] {
+  const rows = queryRows<TagRow>(
+    db,
+    `SELECT t.Id, t.Name, t.LastUsedAt
+     FROM Tags t
+     JOIN TransactionTags tt ON tt.TagId = t.Id
+     WHERE tt.TransactionId = ?`,
+    [transactionId]
+  );
+  return rows.map(rowToTag);
+}
+
+/**
  * Removes the link between a transaction and a tag.
  *
  * @param db - sql.js Database instance.
