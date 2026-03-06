@@ -7,7 +7,7 @@
  * more than once is safe (idempotent).
  */
 
-import initSqlJs, { type Database, type SqlJsStatic } from "sql.js";
+import initSqlJs, { type Database } from "sql.js";
 
 /** SQL DDL executed on every call to {@link initDatabase}. */
 const CREATE_TABLES_SQL = `
@@ -61,7 +61,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_transaction_tags_unique
 export async function initDatabase(
   wasmBinaryOrPath?: string | ArrayBuffer
 ): Promise<Database> {
-  const config: Parameters<SqlJsStatic>[0] = {};
+  const config: Parameters<typeof initSqlJs>[0] = {};
 
   if (typeof wasmBinaryOrPath === "string") {
     config.locateFile = () => wasmBinaryOrPath;

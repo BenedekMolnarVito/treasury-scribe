@@ -400,8 +400,8 @@ describe("exportTransactions('csv')", () => {
     const columns = dataLine.split(",");
     // Tags column is at index 8.
     const tagsColumn = columns[8] ?? "";
-    // Should be a numeric tagId (at least one digit).
-    expect(tagsColumn).toMatch(/^\d+/);
+    // Should contain the human-readable tag name "AddedManually".
+    expect(tagsColumn).toBe("AddedManually");
   });
 });
 
