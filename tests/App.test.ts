@@ -13,8 +13,8 @@ import { render, screen, cleanup } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { describe, it, expect, afterEach } from "vitest";
 
-// Dynamic import used because Vitest esbuild transforms .tsx files via the
-// module graph; using a direct static import with a .tsx extension path.
+// Static imports for the .tsx page components (Vitest/esbuild transforms them
+// via the module graph).
 import TransactionsPage from "../src/pages/TransactionsPage.tsx";
 import EditTransactionPage from "../src/pages/EditTransactionPage.tsx";
 

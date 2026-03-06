@@ -17,7 +17,7 @@
 
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
 import type { Database } from "sql.js";
 
 import { initDatabase } from "../../src/data/DatabaseService";
@@ -49,6 +49,20 @@ beforeAll(async () => {
 async function makeDb(): Promise<Database> {
   return initDatabase(wasmBinary);
 }
+
+// ---------------------------------------------------------------------------
+// Per-test database lifecycle
+// ---------------------------------------------------------------------------
+
+let db: Database;
+
+beforeEach(async () => {
+  db = await makeDb();
+});
+
+afterEach(() => {
+  db.close();
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -90,8 +104,7 @@ function makeTxData(
 // ---------------------------------------------------------------------------
 
 describe("ingestNotification – deduplication", () => {
-  it("returns a Transaction when no duplicate exists", async () => {
-    const db = await makeDb();
+  it("returns a Transaction when no duplicate exists", () => {
     const ts = makeTimestamp();
 
     const result = ingestNotification(db, makeTxData("Title A", "Body A", "com.app", ts));
@@ -100,8 +113,7 @@ describe("ingestNotification – deduplication", () => {
     expect(result!.notificationTitle).toBe("Title A");
   });
 
-  it("returns null and does not persist when an identical notification is within ±5 s", async () => {
-    const db = await makeDb();
+  it("returns null and does not persist when an identical notification is within ±5 s", () => {
     const ts = makeTimestamp();
 
     // First ingestion – should succeed.
@@ -117,8 +129,7 @@ describe("ingestNotification – deduplication", () => {
     expect(second).toBeNull();
   });
 
-  it("persists when the same title+body arrives more than 5 s later", async () => {
-    const db = await makeDb();
+  it("persists when the same title+body arrives more than 5 s later", () => {
     const ts = makeTimestamp();
 
     ingestNotification(db, makeTxData("Title C", "Body C", "com.app", ts));
@@ -132,8 +143,7 @@ describe("ingestNotification – deduplication", () => {
     expect(result).not.toBeNull();
   });
 
-  it("treats different packageName as a non-duplicate", async () => {
-    const db = await makeDb();
+  it("treats different packageName as a non-duplicate", () => {
     const ts = makeTimestamp();
 
     ingestNotification(db, makeTxData("Title D", "Body D", "com.app.one", ts));
@@ -151,8 +161,7 @@ describe("ingestNotification – deduplication", () => {
 // ---------------------------------------------------------------------------
 
 describe("ingestNotification – auto-soft-delete", () => {
-  it("soft-deletes the new transaction when a matching soft-deleted tx exists", async () => {
-    const db = await makeDb();
+  it("soft-deletes the new transaction when a matching soft-deleted tx exists", () => {
 
     // Create an existing transaction and soft-delete it.
     const existing = addTransaction(
@@ -177,8 +186,7 @@ describe("ingestNotification – auto-soft-delete", () => {
     expect(result!.isDeleted).toBe(true);
   });
 
-  it("does NOT soft-delete the new transaction when no matching soft-deleted tx exists", async () => {
-    const db = await makeDb();
+  it("does NOT soft-delete the new transaction when no matching soft-deleted tx exists", () => {
     const ts = makeTimestamp();
 
     const result = ingestNotification(
@@ -190,8 +198,7 @@ describe("ingestNotification – auto-soft-delete", () => {
     expect(result!.isDeleted).toBe(false);
   });
 
-  it("only matches on title+body (different body means no auto-soft-delete)", async () => {
-    const db = await makeDb();
+  it("only matches on title+body (different body means no auto-soft-delete)", () => {
 
     // Create an existing transaction and soft-delete it (different body).
     const existing = addTransaction(
@@ -220,8 +227,7 @@ describe("ingestNotification – auto-soft-delete", () => {
 // ---------------------------------------------------------------------------
 
 describe("ingestNotification – auto-tag by vendor", () => {
-  it("copies tags from the previous same-title transaction", async () => {
-    const db = await makeDb();
+  it("copies tags from the previous same-title transaction", () => {
 
     // Insert a previous transaction with a tag.
     const prev = addTransaction(
@@ -247,8 +253,7 @@ describe("ingestNotification – auto-tag by vendor", () => {
     expect(tagNames).toContain("Food");
   });
 
-  it("does NOT copy the 'AddedManually' tag from the previous transaction", async () => {
-    const db = await makeDb();
+  it("does NOT copy the 'AddedManually' tag from the previous transaction", () => {
 
     // Insert a previous transaction tagged with 'AddedManually' and another tag.
     const prev = addTransaction(
@@ -276,8 +281,7 @@ describe("ingestNotification – auto-tag by vendor", () => {
     expect(tagNames).not.toContain("AddedManually");
   });
 
-  it("does not copy tags when no previous transaction with that title exists", async () => {
-    const db = await makeDb();
+  it("does not copy tags when no previous transaction with that title exists", () => {
 
     const result = ingestNotification(
       db,
@@ -288,8 +292,7 @@ describe("ingestNotification – auto-tag by vendor", () => {
     expect(result!.transactionTags).toHaveLength(0);
   });
 
-  it("copies multiple tags from the previous transaction (excluding AddedManually)", async () => {
-    const db = await makeDb();
+  it("copies multiple tags from the previous transaction (excluding AddedManually)", () => {
 
     const prev = addTransaction(
       db,
@@ -319,8 +322,7 @@ describe("ingestNotification – auto-tag by vendor", () => {
     expect(tagNames).not.toContain("AddedManually");
   });
 
-  it("uses the most recent previous transaction (not an older one) for auto-tagging", async () => {
-    const db = await makeDb();
+  it("uses the most recent previous transaction (not an older one) for auto-tagging", () => {
 
     // Older transaction tagged "OldTag".
     const older = addTransaction(
@@ -363,8 +365,7 @@ describe("ingestNotification – auto-tag by vendor", () => {
 // ---------------------------------------------------------------------------
 
 describe("ingestNotification – combined behaviours", () => {
-  it("applies both auto-soft-delete and auto-tag in one ingestion", async () => {
-    const db = await makeDb();
+  it("applies both auto-soft-delete and auto-tag in one ingestion", () => {
 
     // Previous transaction tagged "Recurring".
     const prev = addTransaction(

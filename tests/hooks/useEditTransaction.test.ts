@@ -43,6 +43,20 @@ async function makeDb(): Promise<Database> {
 }
 
 // ---------------------------------------------------------------------------
+// Per-test database lifecycle
+// ---------------------------------------------------------------------------
+
+let db: Database;
+
+beforeEach(async () => {
+  db = await makeDb();
+});
+
+afterEach(() => {
+  db.close();
+});
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -73,8 +87,7 @@ function insertTransaction(
 // ---------------------------------------------------------------------------
 
 describe("loadTransaction", () => {
-  it("populates title from notificationTitle", async () => {
-    const db = await makeDb();
+  it("populates title from notificationTitle", () => {
     const id = insertTransaction(db, { title: "My Title" });
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -84,8 +97,7 @@ describe("loadTransaction", () => {
     expect(result.current.title).toBe("My Title");
   });
 
-  it("populates description from notificationBody", async () => {
-    const db = await makeDb();
+  it("populates description from notificationBody", () => {
     const id = insertTransaction(db, { body: "My Body" });
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -95,8 +107,7 @@ describe("loadTransaction", () => {
     expect(result.current.description).toBe("My Body");
   });
 
-  it("populates isCash", async () => {
-    const db = await makeDb();
+  it("populates isCash", () => {
     const id = insertTransaction(db, { isCash: true });
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -106,8 +117,7 @@ describe("loadTransaction", () => {
     expect(result.current.isCash).toBe(true);
   });
 
-  it("populates isIncome", async () => {
-    const db = await makeDb();
+  it("populates isIncome", () => {
     const id = insertTransaction(db, { isIncome: true });
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -117,8 +127,7 @@ describe("loadTransaction", () => {
     expect(result.current.isIncome).toBe(true);
   });
 
-  it("populates currentTags from linked tags", async () => {
-    const db = await makeDb();
+  it("populates currentTags from linked tags", () => {
     const id = insertTransaction(db);
 
     const tag = addTag(db, "groceries");
@@ -132,8 +141,7 @@ describe("loadTransaction", () => {
     expect(result.current.currentTags[0].name).toBe("groceries");
   });
 
-  it("resets newTagName to empty string", async () => {
-    const db = await makeDb();
+  it("resets newTagName to empty string", () => {
     const id = insertTransaction(db);
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -146,8 +154,7 @@ describe("loadTransaction", () => {
     expect(result.current.newTagName).toBe("");
   });
 
-  it("throws when the transaction id does not exist", async () => {
-    const db = await makeDb();
+  it("throws when the transaction id does not exist", () => {
 
     const { result } = renderHook(() => useEditTransaction(db));
 
@@ -160,8 +167,7 @@ describe("loadTransaction", () => {
 // ---------------------------------------------------------------------------
 
 describe("save", () => {
-  it("persists edited title back to the database", async () => {
-    const db = await makeDb();
+  it("persists edited title back to the database", () => {
     const id = insertTransaction(db, { title: "Original" });
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -177,8 +183,7 @@ describe("save", () => {
     expect(result2.current.title).toBe("Updated Title");
   });
 
-  it("persists edited description back to the database", async () => {
-    const db = await makeDb();
+  it("persists edited description back to the database", () => {
     const id = insertTransaction(db, { body: "Original body" });
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -193,8 +198,7 @@ describe("save", () => {
     expect(result2.current.description).toBe("Updated Body");
   });
 
-  it("persists isCash change", async () => {
-    const db = await makeDb();
+  it("persists isCash change", () => {
     const id = insertTransaction(db, { isCash: false });
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -209,8 +213,7 @@ describe("save", () => {
     expect(result2.current.isCash).toBe(true);
   });
 
-  it("persists isIncome change", async () => {
-    const db = await makeDb();
+  it("persists isIncome change", () => {
     const id = insertTransaction(db, { isIncome: false });
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -225,8 +228,7 @@ describe("save", () => {
     expect(result2.current.isIncome).toBe(true);
   });
 
-  it("is a no-op when no transaction has been loaded", async () => {
-    const db = await makeDb();
+  it("is a no-op when no transaction has been loaded", () => {
 
     const { result } = renderHook(() => useEditTransaction(db));
 
@@ -240,8 +242,7 @@ describe("save", () => {
 // ---------------------------------------------------------------------------
 
 describe("addTag", () => {
-  it("creates a new tag and links it to the transaction", async () => {
-    const db = await makeDb();
+  it("creates a new tag and links it to the transaction", () => {
     const id = insertTransaction(db);
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -252,8 +253,7 @@ describe("addTag", () => {
     expect(result.current.currentTags.some((t) => t.name === "transport")).toBe(true);
   });
 
-  it("finds an existing tag by name instead of creating a duplicate", async () => {
-    const db = await makeDb();
+  it("finds an existing tag by name instead of creating a duplicate", () => {
     const id = insertTransaction(db);
 
     // Pre-create the tag.
@@ -270,8 +270,7 @@ describe("addTag", () => {
     expect(foodTags[0].id).toBe(existing.id);
   });
 
-  it("does not duplicate a tag already linked to the transaction", async () => {
-    const db = await makeDb();
+  it("does not duplicate a tag already linked to the transaction", () => {
     const id = insertTransaction(db);
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -290,8 +289,7 @@ describe("addTag", () => {
 // ---------------------------------------------------------------------------
 
 describe("removeTag", () => {
-  it("unlinks the tag from the transaction", async () => {
-    const db = await makeDb();
+  it("unlinks the tag from the transaction", () => {
     const id = insertTransaction(db);
 
     const tag = addTag(db, "removable");
@@ -307,8 +305,7 @@ describe("removeTag", () => {
     expect(result.current.currentTags.some((t) => t.id === tag.id)).toBe(false);
   });
 
-  it("persists the removal (tag stays unlinked after reload)", async () => {
-    const db = await makeDb();
+  it("persists the removal (tag stays unlinked after reload)", () => {
     const id = insertTransaction(db);
 
     const tag = addTag(db, "temporary");
@@ -340,8 +337,7 @@ describe("searchTags", () => {
     vi.useRealTimers();
   });
 
-  it("does not update searchResults for queries under 2 characters", async () => {
-    const db = await makeDb();
+  it("does not update searchResults for queries under 2 characters", () => {
     addTag(db, "alpha");
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -352,8 +348,7 @@ describe("searchTags", () => {
     expect(result.current.searchResults).toHaveLength(0);
   });
 
-  it("clears searchResults immediately for short queries", async () => {
-    const db = await makeDb();
+  it("clears searchResults immediately for short queries", () => {
     addTag(db, "alpha");
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -368,8 +363,7 @@ describe("searchTags", () => {
     expect(result.current.searchResults).toHaveLength(0);
   });
 
-  it("does not fire before the 300 ms debounce window", async () => {
-    const db = await makeDb();
+  it("does not fire before the 300 ms debounce window", () => {
     addTag(db, "beta");
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -379,8 +373,7 @@ describe("searchTags", () => {
     expect(result.current.searchResults).toHaveLength(0);
   });
 
-  it("fires after the 300 ms debounce window and returns matching tags", async () => {
-    const db = await makeDb();
+  it("fires after the 300 ms debounce window and returns matching tags", () => {
     addTag(db, "gamma");
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -391,8 +384,7 @@ describe("searchTags", () => {
     expect(result.current.searchResults.some((t) => t.name === "gamma")).toBe(true);
   });
 
-  it("debounces multiple rapid calls (only fires once)", async () => {
-    const db = await makeDb();
+  it("debounces multiple rapid calls (only fires once)", () => {
     addTag(db, "delta");
 
     const { result } = renderHook(() => useEditTransaction(db));
@@ -416,8 +408,7 @@ describe("searchTags", () => {
 // ---------------------------------------------------------------------------
 
 describe("loadRecentTags", () => {
-  it("returns the top-5 most common tags", async () => {
-    const db = await makeDb();
+  it("returns the top-5 most common tags", () => {
 
     // Create 7 tags with varying usage counts.
     const tagNames = ["t1", "t2", "t3", "t4", "t5", "t6", "t7"];
@@ -441,8 +432,7 @@ describe("loadRecentTags", () => {
     expect(result.current.recentTags[0].name).toBe("t1");
   });
 
-  it("returns fewer than 5 when fewer tags exist", async () => {
-    const db = await makeDb();
+  it("returns fewer than 5 when fewer tags exist", () => {
     addTag(db, "only");
 
     const { result } = renderHook(() => useEditTransaction(db));
