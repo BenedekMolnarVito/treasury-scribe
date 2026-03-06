@@ -8,7 +8,7 @@
 - Must NOT move business logic into the Kotlin native layer — keep the Capacitor plugin as a thin bridge
 - Android-only — no iOS support required
 - All data persisted in a single on-device SQLite database via sql.js (WebAssembly)
-
+- All implementation files should go into */src* folder and subfolders! 
 ---
 
 ## Agent guidance
