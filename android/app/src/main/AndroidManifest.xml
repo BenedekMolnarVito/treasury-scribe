@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.vitobudget.tracker">
+
+    <!-- =====================================================================
+         Permissions
+         ===================================================================== -->
+
+    <!--
+        Notification Access: allows RevolutNotificationService to read all
+        posted notifications on the device.  Must be granted by the user via
+        Settings → Notification Access (cannot be granted programmatically).
+    -->
+    <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+        tools:ignore="ProtectedPermissions" />
+
+    <!--
+        POST_NOTIFICATIONS: runtime permission required on Android 13+ (API 33)
+        to display the foreground service notification.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+        FOREGROUND_SERVICE: allows the app to run RevolutNotificationService
+        as a persistent foreground service.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!--
+        FOREGROUND_SERVICE_SPECIAL_USE: required on Android 14+ (API 34) for
+        foreground services that do not fit a predefined type.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!--
+        REQUEST_IGNORE_BATTERY_OPTIMIZATIONS: allows the app to request that
+        the user exclude it from battery optimization, keeping the foreground
+        service alive during Doze mode.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!--
+        RECEIVE_BOOT_COMPLETED: allows the app to restart the foreground service
+        automatically after device reboot.
+    -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- =====================================================================
+         Application
+         ===================================================================== -->
+
+    <application
+        android:label="VitoBudget Tracker"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <!-- Main Capacitor activity -->
+        <activity
+            android:name="com.vitobudget.tracker.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- =================================================================
+             RevolutNotificationService
+             Extends NotificationListenerService; processes posted notifications
+             from com.revolut.revolut and forwards them to the Capacitor bridge.
+
+             android:foregroundServiceType="specialUse" — required on API 34+.
+             The service is NOT exported so only the system can bind to it via
+             the BIND_NOTIFICATION_LISTENER_SERVICE permission.
+             ================================================================= -->
+        <service
+            android:name="com.vitobudget.tracker.RevolutNotificationService"
+            android:exported="true"
+            android:foregroundServiceType="specialUse"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+
+            <!--
+                required-for-foreground-service-type: documents the purpose of
+                the foreground service for Google Play review.
+            -->
+            <meta-data
+                android:name="android.app.notification.default_channel_id"
+                android:value="vito_budget_tracker_channel" />
+        </service>
+
+        <!-- =================================================================
+             BootReceiver
+             Restarts the foreground service on device reboot so notification
+             monitoring resumes without manual user intervention.
+             ================================================================= -->
+        <receiver
+            android:name="com.vitobudget.tracker.BootReceiver"
+            android:exported="false">
+            <intent-filter android:priority="999">
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>
