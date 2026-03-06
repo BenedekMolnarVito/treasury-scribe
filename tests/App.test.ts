@@ -57,9 +57,8 @@ describe("App routing", () => {
     ).toBeTruthy();
   });
 
-  it("passes the id param to EditTransactionPage", () => {
+  it("renders EditTransactionPage without db and shows fallback message", () => {
     renderAt("/edit/99");
-    const el = screen.getByTestId("transaction-id");
-    expect(el.textContent).toBe("99");
+    expect(screen.getByTestId("no-db-message")).toBeTruthy();
   });
 });
