@@ -70,86 +70,14 @@ export function parseAmountAndCurrency(
 ): ParsedAmountCurrency {
   if (!text) return { amount: null, currency: null };
 
-  // -------------------------------------------------------------------------
-  // 1. European format: 1.234,56 EUR  /  1.234,56€
-  //    Thousands separator = period, decimal separator = comma.
-  // -------------------------------------------------------------------------
-  const europeanRegex =
-    /(\d{1,3}(?:\.\d{3})*,\d+)\s*([A-Z]{2,4}|[€£¥₹₽₣₩$])/i;
-  const europeanMatch = text.match(europeanRegex);
-  if (europeanMatch) {
-    const raw = europeanMatch[1].replace(/\./g, "").replace(",", ".");
-    const amount = parseFloat(raw);
-    const currency = resolveCurrencyToken(europeanMatch[2]);
-    if (!isNaN(amount)) return { amount, currency };
-  }
-
-  // -------------------------------------------------------------------------
-  // 2. Space-separated with trailing code/symbol: 6 337 Ft  /  10 000 HUF
-  //    Two or more groups of digits separated by single spaces, followed by a
-  //    currency token.  Requires at least one \s\d{3} repetition to avoid
-  //    false-positive matches inside US-format strings.
-  // -------------------------------------------------------------------------
-  const spaceTrailingRegex =
-    /(\d{1,3}(?:\s\d{3})+)\s+([A-Za-z]{2,4}|[€£¥₹₽₣₩$])(?:\s|$)/;
-  const spaceTrailingMatch = text.match(spaceTrailingRegex);
-  if (spaceTrailingMatch) {
-    const raw = spaceTrailingMatch[1].replace(/\s/g, "");
-    const amount = parseFloat(raw);
-    const currency = resolveCurrencyToken(spaceTrailingMatch[2]);
-    if (!isNaN(amount)) return { amount, currency };
-  }
-
-  // -------------------------------------------------------------------------
-  // 3. Code-prefixed space-separated: HUF 1 234  /  EUR 500
-  //    Currency token first, then a number (space-grouped or plain).
-  // -------------------------------------------------------------------------
-  const spacePrefixRegex =
-    /([A-Z]{2,4}|[€£¥₹₽₣₩$])\s+(\d{1,3}(?:\s\d{3})*)(?:\s|$)/;
-  const spacePrefixMatch = text.match(spacePrefixRegex);
-  if (spacePrefixMatch) {
-    const raw = spacePrefixMatch[2].replace(/\s/g, "");
-    const amount = parseFloat(raw);
-    const currency = resolveCurrencyToken(spacePrefixMatch[1]);
-    if (!isNaN(amount)) return { amount, currency };
-  }
-
-  // -------------------------------------------------------------------------
-  // 4. US format: $1,234.56  /  1,234.56 USD
-  //    Thousands separator = comma, decimal separator = period.
-  //    Leading currency symbol or trailing ISO code.
-  // -------------------------------------------------------------------------
-  const usRegex =
-    /([€£¥₹₽₣₩$])(\d{1,3}(?:,\d{3})*(?:\.\d+)?)|(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*([A-Z]{2,4}|[€£¥₹₽₣₩$])/;
-  const usMatch = text.match(usRegex);
-  if (usMatch) {
-    if (usMatch[1] && usMatch[2]) {
-      // Leading symbol: $1,234.56
-      const raw = usMatch[2].replace(/,/g, "");
-      const amount = parseFloat(raw);
-      const currency = resolveCurrencyToken(usMatch[1]);
-      if (!isNaN(amount)) return { amount, currency };
-    } else if (usMatch[3] && usMatch[4]) {
-      // Trailing code: 1,234.56 USD
-      const raw = usMatch[3].replace(/,/g, "");
-      const amount = parseFloat(raw);
-      const currency = resolveCurrencyToken(usMatch[4]);
-      if (!isNaN(amount)) return { amount, currency };
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // 5. Bare amount with no currency context (last resort)
-  // -------------------------------------------------------------------------
-  const bareRegex = /(\d+(?:[.,]\d+)?)/;
-  const bareMatch = text.match(bareRegex);
-  if (bareMatch) {
-    const raw = bareMatch[1].replace(",", ".");
-    const amount = parseFloat(raw);
-    if (!isNaN(amount)) return { amount, currency: null };
-  }
-
-  return { amount: null, currency: null };
+  return (
+    tryParseEuropean(text) ??
+    tryParseSpaceTrailing(text) ??
+    tryParseSpacePrefix(text) ??
+    tryParseUS(text) ??
+    tryParseBare(text) ??
+    { amount: null, currency: null }
+  );
 }
 
 /**
@@ -206,7 +134,79 @@ export function createTransactionFromNotification(
 }
 
 // ---------------------------------------------------------------------------
-// Internal helpers
+// Internal helpers – format-specific parsers (CC ≤ 3 each)
+// ---------------------------------------------------------------------------
+
+/**
+ * Tries European format: 1.234,56 EUR / 1.234,56€
+ * (period thousands separator, comma decimal separator)
+ */
+function tryParseEuropean(text: string): ParsedAmountCurrency | null {
+  const match = text.match(/(\d{1,3}(?:\.\d{3})*,\d+)\s*([A-Z]{2,4}|[€£¥₹₽₣₩$])/i);
+  if (!match) return null;
+  const amount = parseFloat(match[1].replace(/\./g, "").replace(",", "."));
+  if (isNaN(amount)) return null;
+  return { amount, currency: resolveCurrencyToken(match[2]) };
+}
+
+/**
+ * Tries space-separated digits with a trailing code/symbol: 6 337 Ft / 10 000 HUF
+ * Requires at least one \s\d{3} group to avoid false-positive matches inside US strings.
+ */
+function tryParseSpaceTrailing(text: string): ParsedAmountCurrency | null {
+  const match = text.match(/(\d{1,3}(?:\s\d{3})+)\s+([A-Za-z]{2,4}|[€£¥₹₽₣₩$])(?:\s|$)/);
+  if (!match) return null;
+  const amount = parseFloat(match[1].replace(/\s/g, ""));
+  if (isNaN(amount)) return null;
+  return { amount, currency: resolveCurrencyToken(match[2]) };
+}
+
+/**
+ * Tries code-prefixed space-separated digits: HUF 1 234 / EUR 500
+ */
+function tryParseSpacePrefix(text: string): ParsedAmountCurrency | null {
+  const match = text.match(/([A-Z]{2,4}|[€£¥₹₽₣₩$])\s+(\d{1,3}(?:\s\d{3})*)(?:\s|$)/);
+  if (!match) return null;
+  const amount = parseFloat(match[2].replace(/\s/g, ""));
+  if (isNaN(amount)) return null;
+  return { amount, currency: resolveCurrencyToken(match[1]) };
+}
+
+/**
+ * Tries US format: $1,234.56 (leading symbol) or 1,234.56 USD (trailing code/symbol)
+ * (comma thousands separator, period decimal separator)
+ */
+function tryParseUS(text: string): ParsedAmountCurrency | null {
+  const match = text.match(
+    /([€£¥₹₽₣₩$])(\d{1,3}(?:,\d{3})*(?:\.\d+)?)|(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*([A-Z]{2,4}|[€£¥₹₽₣₩$])/
+  );
+  if (!match) return null;
+  if (match[1] && match[2]) {
+    const amount = parseFloat(match[2].replace(/,/g, ""));
+    if (isNaN(amount)) return null;
+    return { amount, currency: resolveCurrencyToken(match[1]) };
+  }
+  if (match[3] && match[4]) {
+    const amount = parseFloat(match[3].replace(/,/g, ""));
+    if (isNaN(amount)) return null;
+    return { amount, currency: resolveCurrencyToken(match[4]) };
+  }
+  return null;
+}
+
+/**
+ * Tries a bare number with no currency context (last resort): 50.00 / 1,500
+ */
+function tryParseBare(text: string): ParsedAmountCurrency | null {
+  const match = text.match(/(\d+(?:[.,]\d+)?)/);
+  if (!match) return null;
+  const amount = parseFloat(match[1].replace(",", "."));
+  if (isNaN(amount)) return null;
+  return { amount, currency: null };
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers – currency resolution
 // ---------------------------------------------------------------------------
 
 /**

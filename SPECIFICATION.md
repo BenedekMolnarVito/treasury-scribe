@@ -12,10 +12,10 @@
 ---
 
 ## Agent guidance
-**Refer to Mission.md for Agent-specific guidance**
-- You MUST spawn all seven agents at least one.
+**Refer to AGENTS.md**
+- You MUST use EACH agents at least one.
 - You MUST use *short-term* and *episodic* memory functionalities while iterating through a multi-session implementation flow.
-- Optionally, store recurring issues and mission statements into *long-term* memory (vector-embeddings)
+- Store recurring issues and mission statements into *long-term* memory (vector-embeddings)
 
 ## Acceptance Criteria
 

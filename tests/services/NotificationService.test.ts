@@ -146,6 +146,48 @@ describe("parseAmountAndCurrency", () => {
       expect(result.amount).toBeCloseTo(42);
       expect(result.currency).toBeNull();
     });
+
+    it("returns null amount and null currency for text with no digits", () => {
+      // All try-parse helpers require at least one digit — none should match.
+      expect(parseAmountAndCurrency("no digits here")).toEqual({
+        amount: null,
+        currency: null,
+      });
+    });
+
+    it("returns null amount and null currency for a currency-code-only string", () => {
+      // "EUR" alone matches no format because every format requires digits.
+      expect(parseAmountAndCurrency("EUR")).toEqual({
+        amount: null,
+        currency: null,
+      });
+    });
+  });
+
+  // MC/DC: US format — trailing currency symbol (groups 3 & 4 with a symbol token)
+  describe("US format – trailing currency symbol", () => {
+    it("parses amount with trailing dollar symbol: '100 $'", () => {
+      // Exercises the tryParseUS groups-3&4 path with a symbol instead of ISO code.
+      const result = parseAmountAndCurrency("You owe 100 $");
+      expect(result.amount).toBeCloseTo(100);
+      expect(result.currency).toBe("USD");
+    });
+
+    it("parses amount with trailing euro symbol: '25.50 €'", () => {
+      const result = parseAmountAndCurrency("Total 25.50 €");
+      expect(result.amount).toBeCloseTo(25.5);
+      expect(result.currency).toBe("EUR");
+    });
+  });
+
+  // Format priority — European wins over US when both could match
+  describe("format priority", () => {
+    it("European format takes priority over bare-number fallback", () => {
+      // "1.234,56 EUR" must be parsed as European (1234.56), not as "1" bare.
+      const result = parseAmountAndCurrency("1.234,56 EUR");
+      expect(result.amount).toBeCloseTo(1234.56);
+      expect(result.currency).toBe("EUR");
+    });
   });
 });
 

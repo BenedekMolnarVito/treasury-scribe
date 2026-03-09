@@ -18,6 +18,12 @@ import type { Database } from "sql.js";
 
 import { initDatabase } from "../../src/data/DatabaseService";
 import { useTransactions } from "../../src/hooks/useTransactions";
+import {
+  addTransaction,
+  softDeleteTransaction,
+} from "../../src/data/TransactionRepository";
+import { addTag, addTagToTransaction } from "../../src/data/TagRepository";
+import { createTransaction } from "../../src/models/Transaction";
 
 // ---------------------------------------------------------------------------
 // WASM setup
@@ -522,5 +528,115 @@ describe("tag management", () => {
 
     const tags = result.current.searchTags("A");
     expect(tags).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ingestNotification
+// ---------------------------------------------------------------------------
+
+describe("ingestNotification", () => {
+  it("returns a Transaction and refreshes the list on a new unique notification", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    let tx: Awaited<ReturnType<typeof result.current.ingestNotification>>;
+    await act(async () => {
+      tx = await result.current.ingestNotification("Lidl", "Payment 500 HUF", "com.revolut.revolut");
+    });
+
+    expect(tx).not.toBeNull();
+    expect(tx!.notificationTitle).toBe("Lidl");
+    expect(result.current.transactions.length).toBe(1);
+  });
+
+  it("returns null and does not refresh the list when the notification is a duplicate", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    // First ingestion to establish the existing record.
+    await act(async () => {
+      await result.current.ingestNotification("Lidl", "Payment 500 HUF", "com.revolut.revolut");
+    });
+
+    // Manually set a known receivedAt so the next call lands within the ±5 s window.
+    db.run("UPDATE Transactions SET ReceivedAt = ?", [new Date().toISOString()]);
+
+    let second: Awaited<ReturnType<typeof result.current.ingestNotification>>;
+    await act(async () => {
+      second = await result.current.ingestNotification("Lidl", "Payment 500 HUF", "com.revolut.revolut");
+    });
+
+    expect(second).toBeNull();
+    // List must not grow — still 1 transaction.
+    expect(result.current.transactions.length).toBe(1);
+  });
+
+  it("soft-deletes the new transaction when a matching soft-deleted tx already exists", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    // Seed a soft-deleted transaction with a known title + body via the repository.
+    const existing = addTransaction(
+      db,
+      createTransaction({
+        notificationTitle: "Netflix",
+        notificationBody: "12 EUR charge",
+        packageName: "com.revolut.revolut",
+        receivedAt: new Date(Date.now() - 60_000).toISOString(),
+      })
+    );
+    softDeleteTransaction(db, existing.id);
+
+    let tx: Awaited<ReturnType<typeof result.current.ingestNotification>>;
+    await act(async () => {
+      tx = await result.current.ingestNotification("Netflix", "12 EUR charge", "com.revolut.revolut");
+    });
+
+    expect(tx).not.toBeNull();
+    expect(tx!.isDeleted).toBe(true);
+  });
+
+  it("auto-tags the new transaction from the previous same-title transaction (excluding AddedManually)", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    // Seed a previous transaction with "Groceries" and "AddedManually" tags.
+    const prev = addTransaction(
+      db,
+      createTransaction({
+        notificationTitle: "Tesco",
+        notificationBody: "3 200 HUF",
+        packageName: "com.revolut.revolut",
+        receivedAt: new Date(Date.now() - 120_000).toISOString(),
+      })
+    );
+    const manualTag = addTag(db, "AddedManually");
+    const groceriesTag = addTag(db, "Groceries");
+    addTagToTransaction(db, prev.id, manualTag.id);
+    addTagToTransaction(db, prev.id, groceriesTag.id);
+
+    let tx: Awaited<ReturnType<typeof result.current.ingestNotification>>;
+    await act(async () => {
+      tx = await result.current.ingestNotification("Tesco", "3 200 HUF", "com.revolut.revolut");
+    });
+
+    expect(tx).not.toBeNull();
+    const tagNames = tx!.transactionTags.map((tt) => tt.tagName);
+    expect(tagNames).toContain("Groceries");
+    expect(tagNames).not.toContain("AddedManually");
+  });
+
+  it("returns a Transaction with no tags when no previous same-title transaction exists", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    let tx: Awaited<ReturnType<typeof result.current.ingestNotification>>;
+    await act(async () => {
+      tx = await result.current.ingestNotification("BrandNewMerchant", null, "com.revolut.revolut");
+    });
+
+    expect(tx).not.toBeNull();
+    expect(tx!.transactionTags).toHaveLength(0);
   });
 });

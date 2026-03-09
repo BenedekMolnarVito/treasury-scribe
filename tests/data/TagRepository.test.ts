@@ -18,6 +18,7 @@ import {
   getTagsOrderedByLastUsed,
   addTagToTransaction,
   removeTagFromTransaction,
+  getTagsForTransaction,
 } from "../../src/data/TagRepository";
 
 // ---------------------------------------------------------------------------
@@ -322,5 +323,41 @@ describe("removeTagFromTransaction", () => {
       [txId, tagB.id]
     );
     expect(rows[0].values[0][0]).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getTagsForTransaction
+// ---------------------------------------------------------------------------
+
+describe("getTagsForTransaction", () => {
+  it("returns an empty array when the transaction has no linked tags", () => {
+    const txId = insertTransaction();
+    expect(getTagsForTransaction(db, txId)).toEqual([]);
+  });
+
+  it("returns all tags linked to the transaction", () => {
+    const txId = insertTransaction();
+    const tagA = addTag(db, "food");
+    const tagB = addTag(db, "transport");
+    addTagToTransaction(db, txId, tagA.id);
+    addTagToTransaction(db, txId, tagB.id);
+
+    const tags = getTagsForTransaction(db, txId);
+    const names = tags.map((t) => t.name);
+
+    expect(tags).toHaveLength(2);
+    expect(names).toContain("food");
+    expect(names).toContain("transport");
+  });
+
+  it("does not return tags linked to a different transaction", () => {
+    const txA = insertTransaction("2024-01-01T00:00:00.000Z");
+    const txB = insertTransaction("2024-01-02T00:00:00.000Z");
+    const tag = addTag(db, "groceries");
+    addTagToTransaction(db, txB, tag.id);
+
+    const tagsForA = getTagsForTransaction(db, txA);
+    expect(tagsForA).toEqual([]);
   });
 });
