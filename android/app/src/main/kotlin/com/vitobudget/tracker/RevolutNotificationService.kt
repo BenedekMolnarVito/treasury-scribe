@@ -1,5 +1,6 @@
 package com.vitobudget.tracker
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -25,6 +26,7 @@ class RevolutNotificationService : NotificationListenerService() {
         private const val FOREGROUND_NOTIFICATION_ID = 1001
         private const val FOREGROUND_NOTIFICATION_TEXT =
             "VitoBudget Tracker — Monitoring notifications"
+        private const val RESTART_DELAY_MS = 5_000L
 
         @Volatile
         var pluginInstance: NotificationListenerPlugin? = null
@@ -39,6 +41,8 @@ class RevolutNotificationService : NotificationListenerService() {
         }
     }
 
+    private val pendingNotifications = mutableListOf<JSObject>()
+
     override fun onCreate() {
         super.onCreate()
         serviceInstance = this
@@ -46,10 +50,41 @@ class RevolutNotificationService : NotificationListenerService() {
         startForeground(FOREGROUND_NOTIFICATION_ID, buildForegroundNotification())
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         pluginInstance = null
         serviceInstance = null
+        scheduleRestart()
+    }
+
+    private fun scheduleRestart() {
+        val restartIntent = Intent(this, ServiceRestartReceiver::class.java)
+        val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, 0, restartIntent, pendingIntentFlags
+        )
+        val alarmManager = getSystemService(AlarmManager::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                System.currentTimeMillis() + RESTART_DELAY_MS,
+                pendingIntent
+            )
+        } else {
+            alarmManager.setExact(
+                AlarmManager.RTC_WAKEUP,
+                System.currentTimeMillis() + RESTART_DELAY_MS,
+                pendingIntent
+            )
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -64,13 +99,30 @@ class RevolutNotificationService : NotificationListenerService() {
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val body = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
 
-        pluginInstance?.let { plugin ->
-            val data = JSObject().apply {
-                put("title", title)
-                put("body", body)
-                put("packageName", REVOLUT_PACKAGE)
-                put("postedAt", formatPostedAt(sbn.postTime))
+        val data = JSObject().apply {
+            put("title", title)
+            put("body", body)
+            put("packageName", REVOLUT_PACKAGE)
+            put("postedAt", formatPostedAt(sbn.postTime))
+        }
+
+        val plugin = pluginInstance
+        if (plugin != null) {
+            plugin.dispatchNotificationReceived(data)
+        } else {
+            synchronized(pendingNotifications) {
+                pendingNotifications.add(data)
             }
+        }
+    }
+
+    fun flushPendingNotifications(plugin: NotificationListenerPlugin) {
+        val queued: List<JSObject>
+        synchronized(pendingNotifications) {
+            queued = pendingNotifications.toList()
+            pendingNotifications.clear()
+        }
+        for (data in queued) {
             plugin.dispatchNotificationReceived(data)
         }
     }

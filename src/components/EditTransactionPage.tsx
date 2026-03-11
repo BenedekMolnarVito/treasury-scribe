@@ -222,6 +222,8 @@ const EditTransactionPageContent: React.FC<
     description,
     isCash,
     isIncome,
+    amount,
+    currency,
     newTagName,
     currentTags,
     recentTags,
@@ -230,6 +232,8 @@ const EditTransactionPageContent: React.FC<
     setDescription,
     setIsCash,
     setIsIncome,
+    setAmount,
+    setCurrency,
     setNewTagName,
     loadTransaction,
     save,
@@ -306,6 +310,40 @@ const EditTransactionPageContent: React.FC<
         aria-label="Description"
         data-testid="input-description"
         placeholder="Transaction description"
+      />
+
+      {/* Amount & Currency */}
+      <label htmlFor="edit-amount" style={STYLE.label}>
+        Amount
+      </label>
+      <input
+        id="edit-amount"
+        type="number"
+        style={STYLE.input}
+        value={amount ?? ""}
+        onChange={(e) => {
+          const parsed = parseFloat(e.target.value);
+          setAmount(isNaN(parsed) ? null : parsed);
+        }}
+        aria-label="Amount"
+        data-testid="input-amount"
+        placeholder="0"
+        min="0"
+        step="any"
+      />
+
+      <label htmlFor="edit-currency" style={STYLE.label}>
+        Currency
+      </label>
+      <input
+        id="edit-currency"
+        style={STYLE.input}
+        value={currency}
+        onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+        aria-label="Currency"
+        data-testid="input-currency"
+        placeholder="HUF"
+        maxLength={4}
       />
 
       {/* Cash Transaction toggle */}

@@ -70,6 +70,8 @@ function insertTransaction(
     body: string;
     isCash: boolean;
     isIncome: boolean;
+    amount: number | null;
+    currency: string | null;
   }> = {}
 ): number {
   const tx = addTransaction(db, {
@@ -78,6 +80,8 @@ function insertTransaction(
     notificationBody: overrides.body ?? "Test Body",
     isCash: overrides.isCash ?? false,
     isIncome: overrides.isIncome ?? false,
+    amount: overrides.amount !== undefined ? overrides.amount : null,
+    currency: overrides.currency !== undefined ? overrides.currency : null,
   });
   return tx.id;
 }
@@ -134,6 +138,36 @@ describe("loadTransaction", () => {
     act(() => result.current.loadTransaction(id));
 
     expect(result.current.isIncome).toBe(true);
+  });
+
+  it("populates amount from the stored transaction", () => {
+    const id = insertTransaction(db, { amount: 1599, currency: "HUF" });
+
+    const { result } = renderHook(() => useEditTransaction(db));
+
+    act(() => result.current.loadTransaction(id));
+
+    expect(result.current.amount).toBe(1599);
+  });
+
+  it("populates currency from the stored transaction", () => {
+    const id = insertTransaction(db, { amount: 25.5, currency: "USD" });
+
+    const { result } = renderHook(() => useEditTransaction(db));
+
+    act(() => result.current.loadTransaction(id));
+
+    expect(result.current.currency).toBe("USD");
+  });
+
+  it("populates null amount when the transaction has no amount", () => {
+    const id = insertTransaction(db, { amount: null });
+
+    const { result } = renderHook(() => useEditTransaction(db));
+
+    act(() => result.current.loadTransaction(id));
+
+    expect(result.current.amount).toBeNull();
   });
 
   it("populates currentTags from linked tags", () => {
@@ -243,6 +277,36 @@ describe("save", () => {
 
     // Should not throw.
     expect(() => act(() => result.current.save())).not.toThrow();
+  });
+
+  it("persists edited amount back to the database", () => {
+    const id = insertTransaction(db, { amount: 100, currency: "EUR" });
+
+    const { result } = renderHook(() => useEditTransaction(db));
+
+    act(() => result.current.loadTransaction(id));
+    act(() => result.current.setAmount(250));
+    act(() => result.current.save());
+
+    const { result: result2 } = renderHook(() => useEditTransaction(db));
+    act(() => result2.current.loadTransaction(id));
+
+    expect(result2.current.amount).toBe(250);
+  });
+
+  it("persists edited currency back to the database", () => {
+    const id = insertTransaction(db, { amount: 100, currency: "EUR" });
+
+    const { result } = renderHook(() => useEditTransaction(db));
+
+    act(() => result.current.loadTransaction(id));
+    act(() => result.current.setCurrency("GBP"));
+    act(() => result.current.save());
+
+    const { result: result2 } = renderHook(() => useEditTransaction(db));
+    act(() => result2.current.loadTransaction(id));
+
+    expect(result2.current.currency).toBe("GBP");
   });
 
   it("notifies the app when saving changes", () => {

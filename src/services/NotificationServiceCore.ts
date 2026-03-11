@@ -30,6 +30,7 @@ export function parseAmountAndCurrency(
   if (!text) return { amount: null, currency: null };
 
   return (
+    tryParseHungarianPayment(text) ??
     tryParseEuropean(text) ??
     tryParseSpaceTrailing(text) ??
     tryParseSpacePrefix(text) ??
@@ -75,6 +76,25 @@ export function createTransactionFromNotification(
     isIncome: false,
     transactionTags: [],
   });
+}
+
+/**
+ * Matches the Hungarian Revolut payment sentence:
+ *   "1 599 Ft összeget fizettél itt: OBI."
+ * Must run before tryParseEuropean, which would otherwise match the balance
+ * amount on the second line of the same notification.
+ */
+function tryParseHungarianPayment(text: string): ParsedAmountCurrency | null {
+  const match = text.match(/(\d+(?:\s\d+)*)\s*Ft\s+összeget\s+fizett/i);
+  if (!match) return null;
+
+  const amountText = match[1];
+  if (!amountText) return null;
+
+  const amount = parseFloat(amountText.replace(/\s/g, ""));
+  if (isNaN(amount)) return null;
+
+  return { amount, currency: "HUF" };
 }
 
 function tryParseEuropean(text: string): ParsedAmountCurrency | null {

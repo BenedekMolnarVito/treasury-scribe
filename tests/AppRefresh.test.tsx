@@ -163,22 +163,26 @@ async function renderAppAndGetRefresh() {
 
 describe("App Flow 7 refresh pipeline", () => {
   it("processes unseen active Revolut notifications during refresh", async () => {
-    notificationListenerMock.getActiveNotifications.mockResolvedValue({
-      notifications: [
-        {
-          title: "Lidl",
-          body: "Paid 6 337 Ft",
-          packageName: "com.revolut.revolut",
-          postedAt: "2024-01-01T10:00:00.000Z",
-        },
-        {
-          title: "Ignored",
-          body: "hello",
-          packageName: "com.whatsapp",
-          postedAt: "2024-01-01T10:00:00.000Z",
-        },
-      ],
-    });
+    // First call (startup auto-recovery): return empty so it doesn't consume the test data.
+    // Subsequent calls (manual refresh): return the actual test notifications.
+    notificationListenerMock.getActiveNotifications
+      .mockResolvedValueOnce({ notifications: [] })
+      .mockResolvedValue({
+        notifications: [
+          {
+            title: "Lidl",
+            body: "Paid 6 337 Ft",
+            packageName: "com.revolut.revolut",
+            postedAt: "2024-01-01T10:00:00.000Z",
+          },
+          {
+            title: "Ignored",
+            body: "hello",
+            packageName: "com.whatsapp",
+            postedAt: "2024-01-01T10:00:00.000Z",
+          },
+        ],
+      });
 
     const refreshActiveNotifications = await renderAppAndGetRefresh();
 
@@ -209,16 +213,19 @@ describe("App Flow 7 refresh pipeline", () => {
       })
     );
 
-    notificationListenerMock.getActiveNotifications.mockResolvedValue({
-      notifications: [
-        {
-          title: "Refresh Vendor",
-          body: "Refresh Body",
-          packageName: "com.revolut.revolut",
-          postedAt: "2024-01-01T10:00:01.000Z",
-        },
-      ],
-    });
+    // First call (startup): empty; second call (manual refresh): the test notification.
+    notificationListenerMock.getActiveNotifications
+      .mockResolvedValueOnce({ notifications: [] })
+      .mockResolvedValue({
+        notifications: [
+          {
+            title: "Refresh Vendor",
+            body: "Refresh Body",
+            packageName: "com.revolut.revolut",
+            postedAt: "2024-01-01T10:00:01.000Z",
+          },
+        ],
+      });
 
     const refreshActiveNotifications = await renderAppAndGetRefresh();
 
@@ -243,16 +250,19 @@ describe("App Flow 7 refresh pipeline", () => {
       })
     );
 
-    notificationListenerMock.getActiveNotifications.mockResolvedValue({
-      notifications: [
-        {
-          title: "Refresh Vendor",
-          body: "Refresh Body",
-          packageName: "com.revolut.revolut",
-          postedAt: "2024-01-01T10:00:02.000Z",
-        },
-      ],
-    });
+    // First call (startup): empty; second call (manual refresh): the test notification.
+    notificationListenerMock.getActiveNotifications
+      .mockResolvedValueOnce({ notifications: [] })
+      .mockResolvedValue({
+        notifications: [
+          {
+            title: "Refresh Vendor",
+            body: "Refresh Body",
+            packageName: "com.revolut.revolut",
+            postedAt: "2024-01-01T10:00:02.000Z",
+          },
+        ],
+      });
 
     const refreshActiveNotifications = await renderAppAndGetRefresh();
 
@@ -266,7 +276,9 @@ describe("App Flow 7 refresh pipeline", () => {
     expect(persistDatabaseMock).toHaveBeenCalledWith(db);
   });
 
-  it("can recover missed notifications from the shade after app startup", async () => {
+  it("automatically recovers missed notifications from the shade at app startup", async () => {
+    // The startup auto-recovery (triggered during bootstrapNotifications) should
+    // process this notification without the user needing to click Refresh.
     notificationListenerMock.getActiveNotifications.mockResolvedValue({
       notifications: [
         {
@@ -278,16 +290,15 @@ describe("App Flow 7 refresh pipeline", () => {
       ],
     });
 
-    const refreshActiveNotifications = await renderAppAndGetRefresh();
+    await renderAppAndGetRefresh();
 
     expect(notificationListenerMock.startListening).toHaveBeenCalledOnce();
 
-    let addedCount = 0;
-    await act(async () => {
-      addedCount = await refreshActiveNotifications();
+    // The startup refresh should have already persisted the transaction.
+    await waitFor(() => {
+      expect(persistDatabaseMock).toHaveBeenCalledWith(db);
     });
 
-    expect(addedCount).toBe(1);
     const transactions = getAllTransactions(db);
     expect(transactions).toHaveLength(1);
     expect(transactions[0]?.notificationTitle).toBe("Missed After Restart");

@@ -24,6 +24,7 @@ class NotificationListenerPlugin : Plugin() {
     override fun load() {
         super.load()
         RevolutNotificationService.pluginInstance = this
+        RevolutNotificationService.serviceInstance?.flushPendingNotifications(this)
     }
     fun dispatchNotificationReceived(data: JSObject) {
         super.notifyListeners("notificationReceived", data)
@@ -121,6 +122,7 @@ class NotificationListenerPlugin : Plugin() {
     @PluginMethod
     fun startListening(call: PluginCall) {
         RevolutNotificationService.pluginInstance = this
+        RevolutNotificationService.serviceInstance?.flushPendingNotifications(this)
         val intent = Intent(context, RevolutNotificationService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(intent)

@@ -23,6 +23,24 @@ import {
 } from "./services/NotificationService";
 import { ingestNotification as ingestNotificationTransaction } from "./services/IngestionService";
 
+/** Safely reads a value from localStorage; returns null if unavailable. */
+function safeGetLocalStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** Safely writes a value to localStorage; silently no-ops if unavailable. */
+function safeSetLocalStorage(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Silently ignore (e.g., private browsing, test environments)
+  }
+}
+
 const App: React.FC = () => {
   const [db, setDb] = useState<Database | null>(null);
   const [dbVersion, setDbVersion] = useState(0);
@@ -33,7 +51,6 @@ const App: React.FC = () => {
   const [startupError, setStartupError] = useState<string | null>(null);
   const notificationAccessPromptedRef = useRef(false);
   const batteryOptimizationPromptedRef = useRef(false);
-  const autoStartGuidanceShownRef = useRef(false);
   const listeningStartedRef = useRef(false);
 
   const handleDatabaseChanged = useCallback((database: Database): void => {
@@ -120,14 +137,14 @@ const App: React.FC = () => {
       }
       batteryOptimizationPromptedRef.current = false;
 
-      if (!autoStartGuidanceShownRef.current) {
+      if (safeGetLocalStorage("autoStartGuidanceShown") !== "true") {
         const autoStartGuidance = await NotificationListener.showAutoStartGuidance();
         if (autoStartGuidance.shown) {
           console.info(
             "Displayed MIUI/HyperOS guidance for Autostart and recents lock."
           );
+          safeSetLocalStorage("autoStartGuidanceShown", "true");
         }
-        autoStartGuidanceShownRef.current = autoStartGuidance.shown;
       }
 
       if (!listeningStartedRef.current) {
@@ -226,6 +243,9 @@ const App: React.FC = () => {
         );
 
         await ensureNotificationMonitoring();
+        // Catch any notifications that arrived before the listener was ready
+        // (e.g. during WebView initialisation or while pluginInstance was null).
+        await refreshActiveNotifications();
       } catch (error) {
         const message =
           error instanceof Error ? error.message : String(error ?? "Unknown error");
@@ -260,7 +280,7 @@ const App: React.FC = () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       void listenerHandle?.remove();
     };
-  }, [db, ensureNotificationMonitoring, handleDatabaseChanged]);
+  }, [db, ensureNotificationMonitoring, handleDatabaseChanged, refreshActiveNotifications]);
 
   if (loading) {
     return (

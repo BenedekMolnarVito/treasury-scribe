@@ -189,6 +189,43 @@ describe("parseAmountAndCurrency", () => {
       expect(result.currency).toBe("EUR");
     });
   });
+
+  // Hungarian payment sentence with balance line that would confuse tryParseEuropean
+  describe("Hungarian payment format (Ft összeget fizettél)", () => {
+    it("parses the full OBI notification text correctly", () => {
+      const result = parseAmountAndCurrency(
+        "1 599 Ft összeget fizettél itt: OBI.\nA(z) HUF Zseb egyenlege: 56 604,23 Ft"
+      );
+      expect(result.amount).toBeCloseTo(1599);
+      expect(result.currency).toBe("HUF");
+    });
+
+    it("does not misparse the balance line as the payment amount", () => {
+      // tryParseEuropean would greedily match "604,23 Ft" from the balance.
+      // tryParseHungarianPayment must run first and win.
+      const result = parseAmountAndCurrency(
+        "500 Ft összeget fizettél itt: Aldi.\nA(z) HUF Zseb egyenlege: 12 500,00 Ft"
+      );
+      expect(result.amount).toBeCloseTo(500);
+      expect(result.currency).toBe("HUF");
+    });
+
+    it("parses a payment with no thousands separator", () => {
+      const result = parseAmountAndCurrency(
+        "750 Ft összeget fizettél itt: SPAR.\nA(z) HUF Zseb egyenlege: 4 250,00 Ft"
+      );
+      expect(result.amount).toBeCloseTo(750);
+      expect(result.currency).toBe("HUF");
+    });
+
+    it("parses a large payment with multiple space-grouped digit groups", () => {
+      const result = parseAmountAndCurrency(
+        "1 234 567 Ft összeget fizettél itt: Dealership.\nA(z) HUF Zseb egyenlege: 5 000 000,00 Ft"
+      );
+      expect(result.amount).toBeCloseTo(1234567);
+      expect(result.currency).toBe("HUF");
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

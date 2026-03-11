@@ -51,6 +51,10 @@ export interface UseEditTransactionResult {
   isCash: boolean;
   /** Editable copy of `isIncome`. */
   isIncome: boolean;
+  /** Editable copy of `amount`. */
+  amount: number | null;
+  /** Editable copy of `currency`. */
+  currency: string;
   /** Controlled input value for the "add tag" text field. */
   newTagName: string;
   /** Tags currently linked to the transaction. */
@@ -68,6 +72,8 @@ export interface UseEditTransactionResult {
   setDescription: (value: string) => void;
   setIsCash: (value: boolean) => void;
   setIsIncome: (value: boolean) => void;
+  setAmount: (value: number | null) => void;
+  setCurrency: (value: string) => void;
   setNewTagName: (value: string) => void;
 
   // -------------------------------------------------------------------------
@@ -145,6 +151,8 @@ export function useEditTransaction(
   const [description, setDescription] = useState<string>("");
   const [isCash, setIsCash] = useState<boolean>(false);
   const [isIncome, setIsIncome] = useState<boolean>(false);
+  const [amount, setAmount] = useState<number | null>(null);
+  const [currency, setCurrency] = useState<string>("HUF");
   const [newTagName, setNewTagName] = useState<string>("");
 
   // Tag collections
@@ -171,6 +179,8 @@ export function useEditTransaction(
       setDescription(tx.notificationBody ?? "");
       setIsCash(tx.isCash);
       setIsIncome(tx.isIncome);
+      setAmount(tx.amount);
+      setCurrency(tx.currency ?? "HUF");
       setNewTagName("");
 
       // Eagerly load the full Tag objects (name + metadata) for the current tags.
@@ -197,9 +207,11 @@ export function useEditTransaction(
       notificationBody: description,
       isCash,
       isIncome,
+      amount,
+      currency,
     });
     onDatabaseChanged(db);
-  }, [db, title, description, isCash, isIncome, onDatabaseChanged]);
+  }, [db, title, description, isCash, isIncome, amount, currency, onDatabaseChanged]);
 
   // -------------------------------------------------------------------------
   // addTag
@@ -278,6 +290,8 @@ export function useEditTransaction(
     description,
     isCash,
     isIncome,
+    amount,
+    currency,
     newTagName,
     currentTags,
     recentTags,
@@ -287,6 +301,8 @@ export function useEditTransaction(
     setDescription,
     setIsCash,
     setIsIncome,
+    setAmount,
+    setCurrency,
     setNewTagName,
 
     loadTransaction,

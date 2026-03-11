@@ -33,6 +33,7 @@ const {
     showAutoStartGuidance: vi.fn(),
     startListening: vi.fn(),
     stopListening: vi.fn(),
+    getActiveNotifications: vi.fn(),
   },
 }));
 
@@ -78,6 +79,9 @@ describe("App notification lifecycle", () => {
       shown: false,
     });
     notificationListenerMock.startListening.mockResolvedValue(undefined);
+    notificationListenerMock.getActiveNotifications.mockResolvedValue({
+      notifications: [],
+    });
   });
 
   afterEach(() => {
