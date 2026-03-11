@@ -424,6 +424,7 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
     softDeleteAllTransactions,
     addManualTransaction,
     exportTransactions,
+    ingestNotification,
   } = useTransactions(db, undefined, onDatabaseChanged);
 
   // Load transactions on mount and whenever showDeleted changes.
@@ -466,6 +467,32 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
     }
   }, [softDeleteAllTransactions]);
 
+  const handleTestNotification = useCallback((): void => {
+    void (async () => {
+      // Generate a test Revolut notification with a random EUR amount between 1-50
+      const amount = (Math.random() * 49 + 1).toFixed(2);
+      const title = "Payment sent";
+      const body = `${amount} EUR to Test Vendor`;
+      
+      const result = await ingestNotification(title, body, "com.revolut.revolut");
+      await loadTransactions();
+      
+      if (result) {
+        window.alert(
+          `✓ Test notification received!\n\n` +
+          `Title: ${title}\n` +
+          `Body: ${body}\n` +
+          `Amount: ${result.parsedAmount} ${result.parsedCurrency}`
+        );
+      } else {
+        window.alert(
+          "⚠ Test notification was a duplicate and was skipped (within 5-second window).\n\n" +
+          "Try again in a few seconds."
+        );
+      }
+    })();
+  }, [ingestNotification, loadTransactions]);
+
   // -------------------------------------------------------------------------
   // Card handlers
   // -------------------------------------------------------------------------
@@ -505,6 +532,13 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
         </button>
         <button onClick={handleExport} aria-label="Export">
           Export
+        </button>
+        <button
+          onClick={handleTestNotification}
+          aria-label="Send Test Notification"
+          style={{ backgroundColor: "#4CAF50", color: "white" }}
+        >
+          🧪 Test Notification
         </button>
         <button onClick={handleClearAll} aria-label="Clear All">
           Clear All
