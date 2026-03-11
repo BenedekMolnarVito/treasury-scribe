@@ -285,4 +285,17 @@ describe("createTransactionFromNotification", () => {
     const tx = createTransactionFromNotification("T", "B", "com.example");
     expect(tx.isCash).toBe(false);
   });
+
+  it("uses the supplied posted timestamp when provided", () => {
+    const tx = createTransactionFromNotification(
+      "Payment received",
+      "You received $50.00",
+      "com.revolut.revolut",
+      "2024-06-15T11:59:00.000Z"
+    );
+    expect(tx.receivedAt).toBe("2024-06-15T11:59:00.000Z");
+
+    const json = JSON.parse(tx.jsonContent as string);
+    expect(json.timestamp).toBe("2024-06-15T11:59:00.000Z");
+  });
 });

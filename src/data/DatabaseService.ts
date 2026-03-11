@@ -9,6 +9,14 @@
 
 import initSqlJs, { type Database } from "sql.js";
 
+export const DATABASE_STORAGE_KEY = "treasury-scribe.sqlite";
+
+export interface StorageLike {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
 /** SQL DDL executed on every call to {@link initDatabase}. */
 const CREATE_TABLES_SQL = `
 PRAGMA foreign_keys = ON;
@@ -50,6 +58,64 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_transaction_tags_unique
   ON TransactionTags (TransactionId, TagId);
 `;
 
+function getSqlJsConfig(
+  wasmBinaryOrPath?: string | ArrayBuffer
+): Parameters<typeof initSqlJs>[0] {
+  const config: Parameters<typeof initSqlJs>[0] = {};
+
+  if (typeof wasmBinaryOrPath === "string") {
+    config.locateFile = () => wasmBinaryOrPath;
+  } else if (wasmBinaryOrPath instanceof ArrayBuffer) {
+    config.wasmBinary = wasmBinaryOrPath;
+  }
+
+  return config;
+}
+
+function getDefaultStorage(): StorageLike | null {
+  return typeof window !== "undefined" && window.localStorage
+    ? window.localStorage
+    : null;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(bytes).toString("base64");
+  }
+
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  if (typeof Buffer !== "undefined") {
+    return new Uint8Array(Buffer.from(value, "base64"));
+  }
+
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function createDatabase(
+  wasmBinaryOrPath?: string | ArrayBuffer,
+  persistedBytes?: Uint8Array
+): Promise<Database> {
+  const SQL = await initSqlJs(getSqlJsConfig(wasmBinaryOrPath));
+  const db = persistedBytes
+    ? new SQL.Database(persistedBytes)
+    : new SQL.Database();
+  db.run(CREATE_TABLES_SQL);
+  return db;
+}
+
 /**
  * Initialises sql.js and creates (or verifies) the application schema.
  *
@@ -61,19 +127,36 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_transaction_tags_unique
 export async function initDatabase(
   wasmBinaryOrPath?: string | ArrayBuffer
 ): Promise<Database> {
-  const config: Parameters<typeof initSqlJs>[0] = {};
+  return createDatabase(wasmBinaryOrPath);
+}
 
-  if (typeof wasmBinaryOrPath === "string") {
-    config.locateFile = () => wasmBinaryOrPath;
-  } else if (wasmBinaryOrPath instanceof ArrayBuffer) {
-    config.wasmBinary = wasmBinaryOrPath;
+export async function loadPersistedDatabase(
+  wasmBinaryOrPath?: string | ArrayBuffer,
+  storage: StorageLike | null = getDefaultStorage()
+): Promise<Database> {
+  const persisted = storage?.getItem(DATABASE_STORAGE_KEY);
+  if (!persisted) {
+    return createDatabase(wasmBinaryOrPath);
   }
 
-  const SQL = await initSqlJs(config);
-  const db = new SQL.Database();
+  try {
+    return await createDatabase(wasmBinaryOrPath, base64ToBytes(persisted));
+  } catch {
+    storage?.removeItem(DATABASE_STORAGE_KEY);
+    return createDatabase(wasmBinaryOrPath);
+  }
+}
 
-  // Enable foreign-key enforcement and create all tables / indexes.
-  db.run(CREATE_TABLES_SQL);
+export function persistDatabase(
+  db: Database,
+  storage: StorageLike | null = getDefaultStorage()
+): void {
+  if (!storage) return;
+  storage.setItem(DATABASE_STORAGE_KEY, bytesToBase64(db.export()));
+}
 
-  return db;
+export function clearPersistedDatabase(
+  storage: StorageLike | null = getDefaultStorage()
+): void {
+  storage?.removeItem(DATABASE_STORAGE_KEY);
 }

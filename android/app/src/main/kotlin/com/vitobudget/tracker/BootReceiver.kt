@@ -12,9 +12,6 @@ import android.os.Build
  * broadcasts and restarts the [RevolutNotificationService] foreground service so
  * that notification monitoring resumes automatically after device reboot or app
  * update without requiring the user to reopen the app.
- *
- * Declared in [AndroidManifest.xml] with the
- * `android.permission.RECEIVE_BOOT_COMPLETED` permission.
  */
 class BootReceiver : BroadcastReceiver() {
 
@@ -32,3 +29,4 @@ class BootReceiver : BroadcastReceiver() {
         }
     }
 }
+

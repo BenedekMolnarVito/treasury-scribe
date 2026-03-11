@@ -10,7 +10,11 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { describe, it, expect, beforeAll } from "vitest";
 import type { Database } from "sql.js";
-import { initDatabase } from "../src/data/DatabaseService";
+import {
+  initDatabase,
+  loadPersistedDatabase,
+  persistDatabase,
+} from "../src/data/DatabaseService";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,6 +66,27 @@ function queryAll<T extends Record<string, unknown>>(
   return values.map((row) =>
     Object.fromEntries(columns.map((col, i) => [col, row[i]])) as T
   );
+}
+
+interface MemoryStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+  dump(): Record<string, string>;
+}
+
+function createMemoryStorage(): MemoryStorage {
+  const store = new Map<string, string>();
+  return {
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => {
+      store.set(key, value);
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+    dump: () => Object.fromEntries(store.entries()),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -365,5 +390,44 @@ describe("DatabaseService – initDatabase", () => {
         [txId, tagId, "2024-08-02T00:00:00Z"]
       )
     ).toThrow();
+  });
+
+  // -------------------------------------------------------------------------
+  // Persistence
+  // -------------------------------------------------------------------------
+
+  it("persists an exported database snapshot to storage", () => {
+    const storage = createMemoryStorage();
+
+    db.run(
+      "INSERT INTO Transactions (ReceivedAt, NotificationTitle) VALUES (?, ?)",
+      ["2024-09-01T00:00:00Z", "Persisted title"]
+    );
+
+    persistDatabase(db, storage);
+
+    const values = Object.values(storage.dump());
+    expect(values).toHaveLength(1);
+    expect(values[0].length).toBeGreaterThan(0);
+  });
+
+  it("reloads a persisted database snapshot with existing rows intact", async () => {
+    const storage = createMemoryStorage();
+
+    db.run(
+      "INSERT INTO Transactions (ReceivedAt, NotificationTitle) VALUES (?, ?)",
+      ["2024-10-01T00:00:00Z", "Restored row"]
+    );
+    persistDatabase(db, storage);
+
+    const restoredDb = await loadPersistedDatabase(wasmBinary, storage);
+    const restored = queryOne<{ NotificationTitle: string }>(
+      restoredDb,
+      "SELECT NotificationTitle FROM Transactions WHERE NotificationTitle = ?",
+      ["Restored row"]
+    );
+
+    expect(restored?.NotificationTitle).toBe("Restored row");
+    restoredDb.close();
   });
 });

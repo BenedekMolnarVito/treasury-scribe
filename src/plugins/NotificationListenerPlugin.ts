@@ -22,6 +22,13 @@ export interface NotificationEventData {
   body: string;
   /** Android package name — always `"com.revolut.revolut"` for this event. */
   packageName: string;
+  /** ISO 8601 UTC timestamp for when Android posted the notification, when available. */
+  postedAt?: string;
+}
+
+export interface ActiveNotificationsResult {
+  /** Currently active notifications returned by the native listener service. */
+  notifications: NotificationEventData[];
 }
 
 // ---------------------------------------------------------------------------
@@ -112,6 +119,12 @@ export interface NotificationListenerPlugin {
    * Stops the `RevolutNotificationService` foreground service.
    */
   stopListening(): Promise<void>;
+
+  /**
+   * Returns the active notifications currently visible to the notification
+   * listener service.
+   */
+  getActiveNotifications(): Promise<ActiveNotificationsResult>;
 
   /**
    * Registers a listener for incoming Revolut notification events.

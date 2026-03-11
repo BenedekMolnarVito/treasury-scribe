@@ -21,7 +21,7 @@ import type { Tag } from "../models/Tag";
  * @param sql - SQL statement string.
  * @param params - Positional bind parameters.
  */
-function queryRows<T extends Record<string, unknown>>(
+function queryRows<T>(
   db: Database,
   sql: string,
   params: (string | number | null)[] = []
@@ -77,8 +77,9 @@ export function addTag(db: Database, name: string): Tag {
     "SELECT Id, Name, LastUsedAt FROM Tags WHERE Name = ? LIMIT 1",
     [name]
   );
-  if (existing.length > 0) {
-    return rowToTag(existing[0]);
+  const existingRow = existing[0];
+  if (existingRow) {
+    return rowToTag(existingRow);
   }
 
   const now = new Date().toISOString();
@@ -88,7 +89,10 @@ export function addTag(db: Database, name: string): Tag {
     db,
     "SELECT last_insert_rowid() AS id"
   );
-  const newId = idRows[0].id;
+  const newId = idRows[0]?.id;
+  if (newId === undefined) {
+    throw new Error("Failed to resolve inserted tag id.");
+  }
 
   return {
     id: newId,
@@ -113,16 +117,19 @@ export function searchTags(db: Database, query: string): Tag[] {
     return [];
   }
 
+  // Escape LIKE wildcards so user input with % or _ is treated literally.
+  const escaped = query.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+
   const rows = queryRows<TagRow>(
     db,
     `SELECT t.Id, t.Name, t.LastUsedAt
      FROM Tags t
      LEFT JOIN TransactionTags tt ON tt.TagId = t.Id
-     WHERE t.Name LIKE ?
+     WHERE t.Name LIKE ? ESCAPE '\\'
      GROUP BY t.Id, t.Name, t.LastUsedAt
      ORDER BY COUNT(tt.Id) DESC
      LIMIT 10`,
-    [`%${query}%`]
+    [`%${escaped}%`]
   );
 
   return rows.map(rowToTag);
@@ -182,15 +189,28 @@ export function addTagToTransaction(
   transactionId: number,
   tagId: number
 ): void {
+  const currentRows = queryRows<{ lastUsedAt: string }>(
+    db,
+    "SELECT LastUsedAt AS lastUsedAt FROM Tags WHERE Id = ?",
+    [tagId]
+  );
+  const currentLastUsedAt = currentRows[0]?.lastUsedAt;
   const now = new Date().toISOString();
+  const effectiveTimestamp =
+    currentLastUsedAt && currentLastUsedAt >= now
+      ? new Date(new Date(currentLastUsedAt).getTime() + 1).toISOString()
+      : now;
 
   db.run(
     `INSERT OR IGNORE INTO TransactionTags (TransactionId, TagId, CreatedAt)
      VALUES (?, ?, ?)`,
-    [transactionId, tagId, now]
+    [transactionId, tagId, effectiveTimestamp]
   );
 
-  db.run("UPDATE Tags SET LastUsedAt = ? WHERE Id = ?", [now, tagId]);
+  db.run("UPDATE Tags SET LastUsedAt = ? WHERE Id = ?", [
+    effectiveTimestamp,
+    tagId,
+  ]);
 }
 
 /**

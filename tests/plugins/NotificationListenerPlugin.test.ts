@@ -30,6 +30,7 @@ const { mockPluginInstance, registerPluginMock } = vi.hoisted(() => {
     showAutoStartGuidance: vi.fn(),
     startListening: vi.fn(),
     stopListening: vi.fn(),
+    getActiveNotifications: vi.fn(),
     addListener: vi.fn(),
     removeAllListeners: vi.fn(),
   };
@@ -51,6 +52,7 @@ import {
   type NotificationEventData,
   type PermissionResult,
   type AutoStartGuidanceResult,
+  type ActiveNotificationsResult,
 } from "../../src/plugins/NotificationListenerPlugin";
 
 // ---------------------------------------------------------------------------
@@ -110,6 +112,10 @@ describe("NotificationListenerPlugin interface methods", () => {
     expect(typeof NotificationListener.stopListening).toBe("function");
   });
 
+  it("has getActiveNotifications method", () => {
+    expect(typeof NotificationListener.getActiveNotifications).toBe("function");
+  });
+
   it("has addListener method", () => {
     expect(typeof NotificationListener.addListener).toBe("function");
   });
@@ -125,10 +131,12 @@ describe("NotificationEventData type shape", () => {
       title: "Revolut",
       body: "You paid 1,000 HUF",
       packageName: "com.revolut.revolut",
+      postedAt: "2026-03-10T10:00:00.000Z",
     };
     expect(event.title).toBe("Revolut");
     expect(event.body).toBe("You paid 1,000 HUF");
     expect(event.packageName).toBe("com.revolut.revolut");
+    expect(event.postedAt).toBe("2026-03-10T10:00:00.000Z");
   });
 });
 
@@ -145,6 +153,23 @@ describe("AutoStartGuidanceResult type shape", () => {
     const resultNotShown: AutoStartGuidanceResult = { shown: false };
     expect(resultShown.shown).toBe(true);
     expect(resultNotShown.shown).toBe(false);
+  });
+});
+
+describe("ActiveNotificationsResult type shape", () => {
+  it("accepts an object with a notifications array", () => {
+    const result: ActiveNotificationsResult = {
+      notifications: [
+        {
+          title: "Revolut",
+          body: "You paid 1,000 HUF",
+          packageName: "com.revolut.revolut",
+          postedAt: "2026-03-10T10:00:00.000Z",
+        },
+      ],
+    };
+    expect(result.notifications).toHaveLength(1);
+    expect(result.notifications[0].postedAt).toBe("2026-03-10T10:00:00.000Z");
   });
 });
 

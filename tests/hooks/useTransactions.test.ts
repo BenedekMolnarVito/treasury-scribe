@@ -65,11 +65,24 @@ function makeShareMock() {
 /**
  * Render the hook with an optional share mock and return helpers.
  */
-async function setup(db: Database, shareMock?: ReturnType<typeof makeShareMock>) {
+async function setup(
+  db: Database,
+  shareMock?: ReturnType<typeof makeShareMock>
+) {
   const { result } = renderHook(() =>
     useTransactions(db, shareMock?.fn)
   );
   return result;
+}
+
+async function setupWithCallback(
+  db: Database,
+  onDatabaseChanged = vi.fn()
+) {
+  const { result } = renderHook(() =>
+    useTransactions(db, undefined, onDatabaseChanged)
+  );
+  return { result, onDatabaseChanged };
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +279,17 @@ describe("addManualTransaction", () => {
     expect(tx?.currency).toBe("EUR");
     expect(tx?.isCash).toBe(true);
   });
+
+  it("notifies the app when a manual transaction is added", async () => {
+    const db = await makeDb();
+    const { result, onDatabaseChanged } = await setupWithCallback(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction("Callback test", "body");
+    });
+
+    expect(onDatabaseChanged).toHaveBeenCalledWith(db);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -340,6 +364,61 @@ describe("exportTransactions('json')", () => {
     expect(title).toBe("transactions.json");
     expect(text).toContain("Share test");
   });
+
+  it("exports an empty JSON array when there are no non-deleted transactions", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    let jsonContent = "";
+    await act(async () => {
+      jsonContent = await result.current.exportTransactions("json");
+    });
+
+    expect(jsonContent).toBe("[]");
+    expect(shareMock.fn).toHaveBeenCalledOnce();
+  });
+
+  it("exports a stable snapshot even if new data is saved during sharing", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    shareMock.fn.mockImplementationOnce(async (_title: string, text: string) => {
+      shareMock.calls.push({ title: "transactions.json", text });
+      addTransaction(
+        db,
+        createTransaction({
+          notificationTitle: "Late arrival",
+          notificationBody: "Saved during export",
+          packageName: "Manual",
+          receivedAt: new Date().toISOString(),
+        })
+      );
+    });
+
+    const result = await setup(db, shareMock);
+
+    await act(async () => {
+      await result.current.addManualTransaction("Snapshot base", "body");
+    });
+
+    let jsonContent = "";
+    await act(async () => {
+      jsonContent = await result.current.exportTransactions("json");
+    });
+
+    expect(jsonContent).toContain("Snapshot base");
+    expect(jsonContent).not.toContain("Late arrival");
+
+    await act(async () => {
+      await result.current.loadTransactions();
+    });
+
+    expect(
+      result.current.transactions.some(
+        (tx) => tx.notificationTitle === "Late arrival"
+      )
+    ).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -408,6 +487,63 @@ describe("exportTransactions('csv')", () => {
     const tagsColumn = columns[8] ?? "";
     // Should contain the human-readable tag name "AddedManually".
     expect(tagsColumn).toBe("AddedManually");
+  });
+
+  it("exports header-only CSV when there are no non-deleted transactions", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    let csvContent = "";
+    await act(async () => {
+      csvContent = await result.current.exportTransactions("csv");
+    });
+
+    expect(csvContent).toBe(
+      "Id,ReceivedAt,NotificationTitle,NotificationBody,PackageName,Amount,Currency,IsCash,Tags,IsDeleted"
+    );
+    expect(shareMock.fn).toHaveBeenCalledOnce();
+  });
+
+  it("quotes title and body fields that contain commas", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    await act(async () => {
+      await result.current.addManualTransaction("Shop, Inc.", "Paid 1,000 Ft");
+    });
+
+    let csvContent = "";
+    await act(async () => {
+      csvContent = await result.current.exportTransactions("csv");
+    });
+
+    expect(csvContent).toContain('"Shop, Inc."');
+    expect(csvContent).toContain('"Paid 1,000 Ft"');
+  });
+
+  it("escapes semicolons inside individual tag names", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    await act(async () => {
+      await result.current.addManualTransaction("Tagged edge", "body");
+    });
+
+    const txId = result.current.transactions[0]!.id;
+    await act(async () => {
+      await result.current.addTagToTransaction(txId, "food;drink");
+      await result.current.loadTransactions();
+    });
+
+    let csvContent = "";
+    await act(async () => {
+      csvContent = await result.current.exportTransactions("csv");
+    });
+
+    expect(csvContent).toContain("food\\;drink");
   });
 });
 

@@ -11,117 +11,70 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
 import com.getcapacitor.JSObject
-import com.getcapacitor.Bridge
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
-/**
- * RevolutNotificationService
- *
- * Android [NotificationListenerService] that monitors posted notifications,
- * filters to the Revolut application, and forwards payloads to the
- * Capacitor JavaScript layer via [NotificationListenerPlugin].
- *
- * The service runs as a foreground service with a persistent low-priority
- * notification to ensure it survives memory pressure on modern Android
- * versions.
- */
 class RevolutNotificationService : NotificationListenerService() {
 
     companion object {
-        /** Android package name for the Revolut application. */
         const val REVOLUT_PACKAGE = "com.revolut.revolut"
-
-        /** Capacitor event name emitted to the JavaScript layer. */
         const val EVENT_NOTIFICATION_RECEIVED = "notificationReceived"
-
-        /** Foreground service notification channel ID. */
         private const val CHANNEL_ID = "vito_budget_tracker_channel"
-
-        /** Foreground service notification ID (must be > 0). */
         private const val FOREGROUND_NOTIFICATION_ID = 1001
-
-        /**
-         * Text shown in the persistent foreground service notification,
-         * as specified in the acceptance criteria.
-         */
         private const val FOREGROUND_NOTIFICATION_TEXT =
             "VitoBudget Tracker — Monitoring notifications"
 
-        /**
-         * Static reference to the active Capacitor [Bridge] instance.
-         * Set by [NotificationListenerPlugin] when the plugin is loaded.
-         */
         @Volatile
-        var bridge: Bridge? = null
-    }
+        var pluginInstance: NotificationListenerPlugin? = null
 
-    // -------------------------------------------------------------------------
-    // Service lifecycle
-    // -------------------------------------------------------------------------
+        @Volatile
+        var serviceInstance: RevolutNotificationService? = null
+
+        fun formatPostedAt(postTime: Long): String {
+            return SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }.format(Date(postTime))
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
+        serviceInstance = this
         createNotificationChannel()
         startForeground(FOREGROUND_NOTIFICATION_ID, buildForegroundNotification())
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        bridge = null
+        pluginInstance = null
+        serviceInstance = null
     }
 
-    /**
-     * Required override — binding is handled by the system for
-     * [NotificationListenerService]; returning null here keeps default
-     * system-managed binding.
-     */
     override fun onBind(intent: Intent?): IBinder? {
         return super.onBind(intent)
     }
 
-    // -------------------------------------------------------------------------
-    // Notification listener callback
-    // -------------------------------------------------------------------------
-
-    /**
-     * Called by the Android framework when any notification is posted.
-     *
-     * Only notifications from [REVOLUT_PACKAGE] are processed; all other
-     * packages are silently ignored.
-     *
-     * Extracts `android.title` and `android.text` extras from the
-     * notification and fires the [EVENT_NOTIFICATION_RECEIVED] Capacitor event.
-     */
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
-
-        // Silently ignore all non-Revolut packages
         if (sbn.packageName != REVOLUT_PACKAGE) return
 
         val extras = sbn.notification?.extras ?: return
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val body = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
 
-        // Forward the payload to the Capacitor JavaScript layer
-        bridge?.let { activeBridge ->
+        pluginInstance?.let { plugin ->
             val data = JSObject().apply {
                 put("title", title)
                 put("body", body)
                 put("packageName", REVOLUT_PACKAGE)
+                put("postedAt", formatPostedAt(sbn.postTime))
             }
-            activeBridge.triggerJSEvent(EVENT_NOTIFICATION_RECEIVED, "window", data.toString())
+            plugin.dispatchNotificationReceived(data)
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Foreground service notification helpers
-    // -------------------------------------------------------------------------
-
-    /**
-     * Creates the notification channel required on Android 8+ (API 26+).
-     *
-     * The channel uses [NotificationManager.IMPORTANCE_LOW] so the persistent
-     * foreground notification does not make sound or appear as a heads-up alert.
-     */
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -137,12 +90,6 @@ class RevolutNotificationService : NotificationListenerService() {
         }
     }
 
-    /**
-     * Builds the persistent low-priority foreground service notification.
-     *
-     * The notification text matches the acceptance criteria verbatim:
-     * *"VitoBudget Tracker — Monitoring notifications"*.
-     */
     private fun buildForegroundNotification(): Notification {
         val launchIntent: Intent = packageManager.getLaunchIntentForPackage(packageName)
             ?: Intent(this, MainActivity::class.java).apply {

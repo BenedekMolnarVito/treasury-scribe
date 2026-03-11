@@ -82,6 +82,15 @@ function insertTransaction(
   return tx.id;
 }
 
+function renderHookWithCallback(
+  onDatabaseChanged = vi.fn()
+) {
+  return {
+    onDatabaseChanged,
+    ...renderHook(() => useEditTransaction(db, onDatabaseChanged)),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // loadTransaction
 // ---------------------------------------------------------------------------
@@ -235,6 +244,18 @@ describe("save", () => {
     // Should not throw.
     expect(() => act(() => result.current.save())).not.toThrow();
   });
+
+  it("notifies the app when saving changes", () => {
+    const id = insertTransaction(db, { title: "Original" });
+
+    const { result, onDatabaseChanged } = renderHookWithCallback();
+
+    act(() => result.current.loadTransaction(id));
+    act(() => result.current.setTitle("Updated Title"));
+    act(() => result.current.save());
+
+    expect(onDatabaseChanged).toHaveBeenCalledWith(db);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -282,6 +303,17 @@ describe("addTag", () => {
     const utilTags = result.current.currentTags.filter((t) => t.name === "utilities");
     expect(utilTags).toHaveLength(1);
   });
+
+  it("notifies the app when a tag is added", () => {
+    const id = insertTransaction(db);
+
+    const { result, onDatabaseChanged } = renderHookWithCallback();
+
+    act(() => result.current.loadTransaction(id));
+    act(() => result.current.addTag("transport"));
+
+    expect(onDatabaseChanged).toHaveBeenCalledWith(db);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -321,6 +353,21 @@ describe("removeTag", () => {
     act(() => result2.current.loadTransaction(id));
 
     expect(result2.current.currentTags.some((t) => t.id === tag.id)).toBe(false);
+  });
+
+  it("notifies the app when a tag is removed", () => {
+    const id = insertTransaction(db);
+
+    const tag = addTag(db, "removable-callback");
+    addTagToTransaction(db, id, tag.id);
+
+    const { result, onDatabaseChanged } = renderHookWithCallback();
+
+    act(() => result.current.loadTransaction(id));
+    onDatabaseChanged.mockClear();
+    act(() => result.current.removeTag(tag.id));
+
+    expect(onDatabaseChanged).toHaveBeenCalledWith(db);
   });
 });
 

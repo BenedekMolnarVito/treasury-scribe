@@ -11,6 +11,7 @@
 import { useState, useRef, useCallback } from "react";
 import type { Database } from "sql.js";
 import type { Tag } from "../models/Tag";
+import type { DatabaseChangedFn } from "./useTransactions";
 
 import { getTransactionById, updateTransaction } from "../data/TransactionRepository";
 import {
@@ -128,7 +129,10 @@ export interface UseEditTransactionResult {
  *
  * @param db - sql.js Database instance (caller is responsible for lifecycle).
  */
-export function useEditTransaction(db: Database): UseEditTransactionResult {
+export function useEditTransaction(
+  db: Database,
+  onDatabaseChanged: DatabaseChangedFn = () => undefined
+): UseEditTransactionResult {
   // -------------------------------------------------------------------------
   // Internal state
   // -------------------------------------------------------------------------
@@ -194,7 +198,8 @@ export function useEditTransaction(db: Database): UseEditTransactionResult {
       isCash,
       isIncome,
     });
-  }, [db, title, description, isCash, isIncome]);
+    onDatabaseChanged(db);
+  }, [db, title, description, isCash, isIncome, onDatabaseChanged]);
 
   // -------------------------------------------------------------------------
   // addTag
@@ -210,8 +215,9 @@ export function useEditTransaction(db: Database): UseEditTransactionResult {
 
       // Refresh current tags from the database to stay consistent.
       setCurrentTags(getTagsForTransaction(db, id));
+      onDatabaseChanged(db);
     },
-    [db]
+    [db, onDatabaseChanged]
   );
 
   // -------------------------------------------------------------------------
@@ -225,8 +231,9 @@ export function useEditTransaction(db: Database): UseEditTransactionResult {
 
       removeTagFromTransaction(db, id, tagId);
       setCurrentTags((prev) => prev.filter((t) => t.id !== tagId));
+      onDatabaseChanged(db);
     },
-    [db]
+    [db, onDatabaseChanged]
   );
 
   // -------------------------------------------------------------------------

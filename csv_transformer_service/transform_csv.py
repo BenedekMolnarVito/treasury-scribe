@@ -218,7 +218,7 @@ def run(base_dir: str) -> None:
         filename = os.path.basename(input_path)
         output_path = os.path.join(outputs_dir, filename)
         n = transform_file(input_path, output_path)
-        print("Transformed {} → {} ({} rows)".format(filename, output_path, n))
+        print("Transformed {} -> {} ({} rows)".format(filename, output_path, n))
 
 
 # ---------------------------------------------------------------------------

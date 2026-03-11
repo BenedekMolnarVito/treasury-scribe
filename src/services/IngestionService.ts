@@ -21,7 +21,7 @@ import type { Transaction } from "../models/Transaction";
 
 import {
   addTransaction,
-  existsDuplicate,
+  existsDuplicateWithinSeconds,
   findSoftDeletedMatch,
   findLastTransactionByTitle,
   getTransactionById,
@@ -58,18 +58,20 @@ const MANUAL_TAG = "AddedManually";
  */
 export function ingestNotification(
   db: Database,
-  txData: Omit<Transaction, "id" | "parsedAmount" | "parsedCurrency" | "transactionTags">
+  txData: Omit<Transaction, "id" | "parsedAmount" | "parsedCurrency" | "transactionTags">,
+  duplicateWindowSeconds = 5
 ): Transaction | null {
   // -------------------------------------------------------------------------
   // 1. Deduplication guard
   // -------------------------------------------------------------------------
   if (
-    existsDuplicate(
+    existsDuplicateWithinSeconds(
       db,
       txData.notificationTitle,
       txData.notificationBody,
       txData.packageName,
-      txData.receivedAt
+      txData.receivedAt,
+      duplicateWindowSeconds
     )
   ) {
     return null;

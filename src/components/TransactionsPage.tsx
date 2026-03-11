@@ -299,6 +299,7 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           placeholder="Description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
+          required
           aria-label="Description"
         />
         <input
@@ -335,12 +336,67 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
 };
 
 // ---------------------------------------------------------------------------
+// ExportModal
+// ---------------------------------------------------------------------------
+
+interface ExportModalProps {
+  onSelect: (format: "json" | "csv") => void;
+  onClose: () => void;
+}
+
+const ExportModal: React.FC<ExportModalProps> = ({ onSelect, onClose }) => {
+  const handleBackdropClick = (
+    e: React.MouseEvent<HTMLDivElement>
+  ): void => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Export transactions"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+      }}
+      onClick={handleBackdropClick}
+    >
+      <div
+        style={{
+          background: "white",
+          padding: 24,
+          borderRadius: 12,
+          minWidth: 280,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Export Transactions</h2>
+        <button type="button" onClick={() => onSelect("json")}>JSON</button>
+        <button type="button" onClick={() => onSelect("csv")}>CSV</button>
+        <button type="button" onClick={onClose}>Cancel</button>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // TransactionsPageContent  (requires db; always calls the hook)
 // ---------------------------------------------------------------------------
 
 interface TransactionsPageContentProps {
   /** Initialised sql.js Database instance. */
   db: Database;
+  onDatabaseChanged?: (db: Database) => void;
+  dbVersion?: number;
+  refreshActiveNotifications?: () => Promise<number>;
 }
 
 /**
@@ -350,9 +406,13 @@ interface TransactionsPageContentProps {
  */
 const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
   db,
+  onDatabaseChanged,
+  dbVersion = 0,
+  refreshActiveNotifications,
 }) => {
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const {
     transactions,
@@ -364,25 +424,41 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
     softDeleteAllTransactions,
     addManualTransaction,
     exportTransactions,
-  } = useTransactions(db);
+  } = useTransactions(db, undefined, onDatabaseChanged);
 
   // Load transactions on mount and whenever showDeleted changes.
   useEffect(() => {
     void loadTransactions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showDeleted]);
+  }, [showDeleted, dbVersion]);
 
   // -------------------------------------------------------------------------
   // Header button handlers
   // -------------------------------------------------------------------------
 
-  const handleRefresh = useCallback((): void => {
-    void loadTransactions();
-  }, [loadTransactions]);
+  const handleRefresh = useCallback(async (): Promise<void> => {
+    const addedCount = refreshActiveNotifications
+      ? await refreshActiveNotifications()
+      : 0;
+    await loadTransactions();
+    window.alert(
+      addedCount > 0
+        ? `${addedCount} new notifications added.`
+        : "No new notifications to process."
+    );
+  }, [loadTransactions, refreshActiveNotifications]);
 
   const handleExport = useCallback((): void => {
-    void exportTransactions("csv");
-  }, [exportTransactions]);
+    setShowExportModal(true);
+  }, []);
+
+  const handleExportSelection = useCallback(
+    (format: "json" | "csv"): void => {
+      setShowExportModal(false);
+      void exportTransactions(format);
+    },
+    [exportTransactions]
+  );
 
   const handleClearAll = useCallback((): void => {
     if (window.confirm("Delete all transactions? This cannot be undone.")) {
@@ -493,6 +569,13 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
           onClose={() => setShowModal(false)}
         />
       )}
+
+      {showExportModal && (
+        <ExportModal
+          onSelect={handleExportSelection}
+          onClose={() => setShowExportModal(false)}
+        />
+      )}
     </>
   );
 };
@@ -509,6 +592,9 @@ export interface TransactionsPageProps {
    * the title and an empty-state message without attempting database access.
    */
   db?: Database;
+  onDatabaseChanged?: (db: Database) => void;
+  dbVersion?: number;
+  refreshActiveNotifications?: () => Promise<number>;
 }
 
 /**
@@ -518,14 +604,26 @@ export interface TransactionsPageProps {
  * be called unconditionally inside the inner component, satisfying the
  * Rules of Hooks.
  */
-const TransactionsPage: React.FC<TransactionsPageProps> = ({ db }) => {
+const TransactionsPage: React.FC<TransactionsPageProps> = ({
+  db,
+  onDatabaseChanged,
+  dbVersion,
+  refreshActiveNotifications,
+}) => {
   return (
     <main style={{ padding: 16 }}>
       {/* Page title — always rendered so routing tests can find the heading */}
       <h1>Transactions</h1>
 
       {db ? (
-        <TransactionsPageContent db={db} />
+        <TransactionsPageContent
+          db={db}
+          {...(onDatabaseChanged ? { onDatabaseChanged } : {})}
+          {...(dbVersion !== undefined ? { dbVersion } : {})}
+          {...(refreshActiveNotifications
+            ? { refreshActiveNotifications }
+            : {})}
+        />
       ) : (
         <p data-testid="empty-state">
           No transactions yet — Revolut notifications will appear here.

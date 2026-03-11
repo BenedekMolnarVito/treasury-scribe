@@ -154,6 +154,25 @@ describe("ingestNotification – deduplication", () => {
     );
     expect(result).not.toBeNull();
   });
+
+  it("supports a narrower deduplication window for refresh processing", () => {
+    const ts = makeTimestamp();
+
+    const first = ingestNotification(
+      db,
+      makeTxData("Refresh Vendor", "Refresh Body", "com.app", ts),
+      1
+    );
+    expect(first).not.toBeNull();
+
+    const tsPlus2 = makeTimestamp(2);
+    const second = ingestNotification(
+      db,
+      makeTxData("Refresh Vendor", "Refresh Body", "com.app", tsPlus2),
+      1
+    );
+    expect(second).not.toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------

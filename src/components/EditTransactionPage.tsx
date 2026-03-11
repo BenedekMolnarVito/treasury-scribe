@@ -190,7 +190,7 @@ const TagChip: React.FC<TagChipProps> = ({ tag, onRemove }) => (
       data-testid={`remove-tag-${tag.id}`}
       onClick={() => onRemove(tag.id)}
     >
-      ✕
+      Remove
     </button>
   </span>
 );
@@ -204,6 +204,7 @@ interface EditTransactionPageContentProps {
   db: Database;
   /** Transaction id parsed from URL params. */
   transactionId: number;
+  onDatabaseChanged?: (db: Database) => void;
 }
 
 /**
@@ -213,7 +214,7 @@ interface EditTransactionPageContentProps {
  */
 const EditTransactionPageContent: React.FC<
   EditTransactionPageContentProps
-> = ({ db, transactionId }) => {
+> = ({ db, transactionId, onDatabaseChanged }) => {
   const navigate = useNavigate();
 
   const {
@@ -236,7 +237,7 @@ const EditTransactionPageContent: React.FC<
     removeTag,
     searchTags,
     loadRecentTags,
-  } = useEditTransaction(db);
+  } = useEditTransaction(db, onDatabaseChanged);
 
   // Load transaction and recent tags on mount.
   useEffect(() => {
@@ -372,7 +373,7 @@ const EditTransactionPageContent: React.FC<
         onChange={handleSearchChange}
         aria-label="Tag search"
         data-testid="input-tag-search"
-        placeholder="Type to search tags (2+ chars)…"
+        placeholder="Enter tag name..."
       />
 
       {/* Search suggestions */}
@@ -432,6 +433,7 @@ export interface EditTransactionPageProps {
    * attempting database access.
    */
   db?: Database;
+  onDatabaseChanged?: (db: Database) => void;
 }
 
 /**
@@ -440,7 +442,10 @@ export interface EditTransactionPageProps {
  * Reads the transaction `id` from URL params and delegates to
  * {@link EditTransactionPageContent} once a valid db and id are available.
  */
-const EditTransactionPage: React.FC<EditTransactionPageProps> = ({ db }) => {
+const EditTransactionPage: React.FC<EditTransactionPageProps> = ({
+  db,
+  onDatabaseChanged,
+}) => {
   const { id } = useParams<{ id: string }>();
   const numericId = id !== undefined ? parseInt(id, 10) : NaN;
 
@@ -449,7 +454,11 @@ const EditTransactionPage: React.FC<EditTransactionPageProps> = ({ db }) => {
       <h1 style={STYLE.heading}>Edit Transaction</h1>
 
       {db && !isNaN(numericId) ? (
-        <EditTransactionPageContent db={db} transactionId={numericId} />
+        <EditTransactionPageContent
+          db={db}
+          transactionId={numericId}
+          {...(onDatabaseChanged ? { onDatabaseChanged } : {})}
+        />
       ) : (
         <p data-testid="no-db-message">Unable to load transaction.</p>
       )}
