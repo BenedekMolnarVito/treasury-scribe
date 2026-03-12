@@ -86,8 +86,10 @@ function groupTransactionRows(rows: TransactionRow[]): Transaction[] {
         transactionId: row.Id,
         tagId: row.TagId,
         createdAt: row.TtCreatedAt ?? "",
-        tagName: row.TagName ?? undefined,
       };
+      if (row.TagName !== null) {
+        tag.tagName = row.TagName;
+      }
       map.get(row.Id)!.transactionTags.push(tag);
     }
   }
@@ -102,7 +104,7 @@ function groupTransactionRows(rows: TransactionRow[]): Transaction[] {
  * @param sql - SQL statement string.
  * @param params - Positional bind parameters.
  */
-function queryRows<T extends Record<string, unknown>>(
+function queryRows<T>(
   db: Database,
   sql: string,
   params: (string | number | null)[] = []
@@ -186,7 +188,7 @@ export function getTransactionById(
   const sql = `${SELECT_WITH_TAGS} WHERE t.Id = ?`;
   const rows = queryRows<TransactionRow>(db, sql, [id]);
   const results = groupTransactionRows(rows);
-  return results.length > 0 ? results[0] : null;
+  return results[0] ?? null;
 }
 
 /**
@@ -221,7 +223,10 @@ export function addTransaction(
   );
 
   const idRow = queryRows<{ id: number }>(db, "SELECT last_insert_rowid() AS id");
-  const newId = idRow[0].id;
+  const newId = idRow[0]?.id;
+  if (newId === undefined) {
+    throw new Error("Failed to resolve inserted transaction id.");
+  }
 
   return getTransactionById(db, newId)!;
 }
@@ -314,6 +319,33 @@ export function softDeleteAllTransactions(db: Database): void {
 }
 
 /**
+ * Checks whether a duplicate transaction exists within a caller-supplied
+ * ±N-second window.
+ */
+export function existsDuplicateWithinSeconds(
+  db: Database,
+  title: string | null,
+  body: string | null,
+  packageName: string | null,
+  receivedAt: string,
+  windowSeconds: number
+): boolean {
+  const rows = queryRows<{ cnt: number }>(
+    db,
+    `SELECT COUNT(*) AS cnt
+     FROM Transactions
+     WHERE NotificationTitle IS ?
+       AND NotificationBody  IS ?
+       AND PackageName       IS ?
+       AND ABS(
+             (julianday(ReceivedAt) - julianday(?)) * 86400.0
+           ) <= ?`,
+    [title, body, packageName, receivedAt, windowSeconds + 0.0001]
+  );
+  return (rows[0]?.cnt ?? 0) > 0;
+}
+
+/**
  * Checks whether a duplicate transaction exists within a ±5-second window.
  *
  * A duplicate is defined as a transaction with the same `notificationTitle`,
@@ -334,19 +366,14 @@ export function existsDuplicate(
   packageName: string | null,
   receivedAt: string
 ): boolean {
-  const rows = queryRows<{ cnt: number }>(
+  return existsDuplicateWithinSeconds(
     db,
-    `SELECT COUNT(*) AS cnt
-     FROM Transactions
-     WHERE NotificationTitle IS ?
-       AND NotificationBody  IS ?
-       AND PackageName       IS ?
-       AND ABS(
-             (julianday(ReceivedAt) - julianday(?)) * 86400.0
-           ) <= 5.0001`,
-    [title, body, packageName, receivedAt]
+    title,
+    body,
+    packageName,
+    receivedAt,
+    5
   );
-  return (rows[0]?.cnt ?? 0) > 0;
 }
 
 /**
@@ -375,7 +402,9 @@ export function findSoftDeletedMatch(
     [title, body]
   );
   if (idRows.length === 0) return null;
-  return getTransactionById(db, idRows[0].Id);
+  const matchId = idRows[0]?.Id;
+  if (matchId === undefined) return null;
+  return getTransactionById(db, matchId);
 }
 
 /**
@@ -400,5 +429,7 @@ export function findLastTransactionByTitle(
     [title]
   );
   if (idRows.length === 0) return null;
-  return getTransactionById(db, idRows[0].Id);
+  const matchId = idRows[0]?.Id;
+  if (matchId === undefined) return null;
+  return getTransactionById(db, matchId);
 }

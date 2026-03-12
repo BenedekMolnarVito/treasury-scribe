@@ -108,6 +108,8 @@ function insertTx(
     body: string;
     isCash: boolean;
     isIncome: boolean;
+    amount: number | null;
+    currency: string | null;
   }> = {}
 ): number {
   const tx = addTransaction(db, {
@@ -116,6 +118,8 @@ function insertTx(
     notificationBody: overrides.body ?? "Test Body",
     isCash: overrides.isCash ?? false,
     isIncome: overrides.isIncome ?? false,
+    amount: overrides.amount !== undefined ? overrides.amount : null,
+    currency: overrides.currency !== undefined ? overrides.currency : null,
   });
   return tx.id;
 }
@@ -178,6 +182,22 @@ describe("core fields", () => {
       expect(screen.getByTestId("btn-add-tag")).toBeTruthy()
     );
   });
+
+  it("renders Amount input", async () => {
+    const id = insertTx();
+    renderPage(id);
+    await waitFor(() =>
+      expect(screen.getByTestId("input-amount")).toBeTruthy()
+    );
+  });
+
+  it("renders Currency input", async () => {
+    const id = insertTx();
+    renderPage(id);
+    await waitFor(() =>
+      expect(screen.getByTestId("input-currency")).toBeTruthy()
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -218,6 +238,33 @@ describe("pre-populated values", () => {
     await waitFor(() => {
       const cb = screen.getByTestId("toggle-income") as HTMLInputElement;
       expect(cb.checked).toBe(true);
+    });
+  });
+
+  it("populates Amount input with the stored amount", async () => {
+    const id = insertTx({ amount: 1599, currency: "HUF" });
+    renderPage(id);
+    await waitFor(() => {
+      const input = screen.getByTestId("input-amount") as HTMLInputElement;
+      expect(input.value).toBe("1599");
+    });
+  });
+
+  it("populates Currency input with the stored currency", async () => {
+    const id = insertTx({ amount: 25.5, currency: "USD" });
+    renderPage(id);
+    await waitFor(() => {
+      const input = screen.getByTestId("input-currency") as HTMLInputElement;
+      expect(input.value).toBe("USD");
+    });
+  });
+
+  it("leaves Amount input empty when the transaction has no amount", async () => {
+    const id = insertTx({ amount: null });
+    renderPage(id);
+    await waitFor(() => {
+      const input = screen.getByTestId("input-amount") as HTMLInputElement;
+      expect(input.value).toBe("");
     });
   });
 });

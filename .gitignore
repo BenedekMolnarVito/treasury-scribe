@@ -2,3 +2,5 @@
 .qa
 node_modules/
 dist/
+.idea/
+*.iml

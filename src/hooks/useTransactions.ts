@@ -26,6 +26,7 @@ import {
 } from "../data/TransactionRepository";
 
 import { ingestNotification as serviceIngestNotification } from "../services/IngestionService";
+import { parseAmountAndCurrency } from "../services/NotificationService";
 
 import {
   addTag,
@@ -44,6 +45,7 @@ import {
  * production.
  */
 export type ShareFn = (title: string, text: string) => Promise<void>;
+export type DatabaseChangedFn = (db: Database) => void;
 
 /**
  * Everything the hook exposes to the UI layer.
@@ -176,7 +178,9 @@ function transactionsToCSV(transactions: Transaction[]): string {
       .map((tt) => {
         // Prefer the human-readable tagName when available, but fall back to
         // the raw tagId if the name is unexpectedly missing.
-        return getTagDisplayName(tt);
+        // Escape semicolons in individual tag names so they are not confused
+        // with the semicolon separator between tags.
+        return getTagDisplayName(tt).replace(/;/g, "\\;");
       })
       .join(";");
 
@@ -232,7 +236,7 @@ function transactionsToJSON(transactions: Transaction[]): string {
     Currency: tx.currency,
     IsCash: tx.isCash ? 1 : 0,
     Tags: tx.transactionTags
-      .map((tt) => getTagDisplayName(tt))
+      .map((tt) => getTagDisplayName(tt).replace(/;/g, "\\;"))
       .join(";"),
     IsDeleted: tx.isDeleted ? 1 : 0,
   }));
@@ -248,16 +252,42 @@ function transactionsToJSON(transactions: Transaction[]): string {
  * Loaded lazily via dynamic import so the module can be used in environments
  * where Capacitor is not available (e.g., unit-test Node process).
  */
-const capacitorShare: ShareFn = async (title: string, text: string) => {
-  // Dynamic import is resolved to a no-op stub during unit tests via the
-  // resolve.alias in vitest.config.ts; in production (Capacitor WebView)
-  // the real @capacitor/share package is used.
-  const { Share } = await import("@capacitor/share");
-  await (Share as { share: (opts: Record<string, string>) => Promise<void> }).share({
-    title,
-    text,
-    dialogTitle: title,
+async function downloadExportFile(title: string, text: string): Promise<void> {
+  if (typeof document === "undefined" || typeof URL === "undefined") {
+    return;
+  }
+
+  const blob = new Blob([text], {
+    type: title.endsWith(".json")
+      ? "application/json;charset=utf-8"
+      : "text/csv;charset=utf-8",
   });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = title;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+const capacitorShare: ShareFn = async (title: string, text: string) => {
+  try {
+    const { Share } = await import("@capacitor/share");
+    await (
+      Share as unknown as { share?: (opts: Record<string, string>) => Promise<unknown> }
+    ).share?.({
+      title,
+      text,
+      dialogTitle: title,
+    });
+    return;
+  } catch {
+    // Fall through to the browser download fallback below.
+  }
+
+  await downloadExportFile(title, text);
 };
 
 // ---------------------------------------------------------------------------
@@ -273,7 +303,8 @@ const capacitorShare: ShareFn = async (title: string, text: string) => {
  */
 export function useTransactions(
   db: Database,
-  share: ShareFn = capacitorShare
+  share: ShareFn = capacitorShare,
+  onDatabaseChanged: DatabaseChangedFn = () => undefined
 ): UseTransactionsResult {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -302,9 +333,10 @@ export function useTransactions(
   const softDeleteTransaction = useCallback(
     async (id: number): Promise<void> => {
       repoSoftDelete(db, id);
+      onDatabaseChanged(db);
       await loadTransactions();
     },
-    [db, loadTransactions]
+    [db, loadTransactions, onDatabaseChanged]
   );
 
   // -------------------------------------------------------------------------
@@ -313,8 +345,9 @@ export function useTransactions(
 
   const softDeleteAllTransactions = useCallback(async (): Promise<void> => {
     repoSoftDeleteAll(db);
+    onDatabaseChanged(db);
     await loadTransactions();
-  }, [db, loadTransactions]);
+  }, [db, loadTransactions, onDatabaseChanged]);
 
   // -------------------------------------------------------------------------
   // addManualTransaction
@@ -345,10 +378,11 @@ export function useTransactions(
       // Auto-tag with "AddedManually".
       const tag = addTag(db, "AddedManually");
       repoAddTagToTx(db, newTx.id, tag.id);
+      onDatabaseChanged(db);
 
       await loadTransactions();
     },
-    [db, loadTransactions]
+    [db, loadTransactions, onDatabaseChanged]
   );
 
   // -------------------------------------------------------------------------
@@ -384,15 +418,17 @@ export function useTransactions(
     async (transactionId: number, tagName: string): Promise<void> => {
       const tag = addTag(db, tagName);
       repoAddTagToTx(db, transactionId, tag.id);
+      onDatabaseChanged(db);
     },
-    [db]
+    [db, onDatabaseChanged]
   );
 
   const removeTagFromTransaction = useCallback(
     (transactionId: number, tagId: number): void => {
       repoRemoveTagFromTx(db, transactionId, tagId);
+      onDatabaseChanged(db);
     },
-    [db]
+    [db, onDatabaseChanged]
   );
 
   const searchTags = useCallback(
@@ -425,25 +461,33 @@ export function useTransactions(
       packageName: string | null
     ): Promise<Transaction | null> => {
       const receivedAt = new Date().toISOString();
+      const rawText = [title, body].filter(Boolean).join(" ");
+      const { amount, currency: detectedCurrency } = parseAmountAndCurrency(
+        rawText || null
+      );
+      const currency = detectedCurrency ?? "HUF";
       const result = serviceIngestNotification(db, {
         notificationTitle: title,
         notificationBody: body,
         packageName,
         receivedAt,
-        rawContent: [title, body].filter(Boolean).join(" ") || null,
-        jsonContent: JSON.stringify({ title, body, packageName, timestamp: receivedAt }),
-        amount: null,
-        currency: null,
+        rawContent: rawText || null,
+        jsonContent: JSON.stringify({
+          title, body, packageName, timestamp: receivedAt, rawText, amount, currency,
+        }),
+        amount,
+        currency,
         isDeleted: false,
         isCash: false,
         isIncome: false,
       });
       if (result !== null) {
+        onDatabaseChanged(db);
         await loadTransactions();
       }
       return result;
     },
-    [db, loadTransactions]
+    [db, loadTransactions, onDatabaseChanged]
   );
 
   return {

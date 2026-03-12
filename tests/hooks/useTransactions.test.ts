@@ -18,6 +18,12 @@ import type { Database } from "sql.js";
 
 import { initDatabase } from "../../src/data/DatabaseService";
 import { useTransactions } from "../../src/hooks/useTransactions";
+import {
+  addTransaction,
+  softDeleteTransaction,
+} from "../../src/data/TransactionRepository";
+import { addTag, addTagToTransaction } from "../../src/data/TagRepository";
+import { createTransaction } from "../../src/models/Transaction";
 
 // ---------------------------------------------------------------------------
 // WASM setup
@@ -59,11 +65,24 @@ function makeShareMock() {
 /**
  * Render the hook with an optional share mock and return helpers.
  */
-async function setup(db: Database, shareMock?: ReturnType<typeof makeShareMock>) {
+async function setup(
+  db: Database,
+  shareMock?: ReturnType<typeof makeShareMock>
+) {
   const { result } = renderHook(() =>
     useTransactions(db, shareMock?.fn)
   );
   return result;
+}
+
+async function setupWithCallback(
+  db: Database,
+  onDatabaseChanged = vi.fn()
+) {
+  const { result } = renderHook(() =>
+    useTransactions(db, undefined, onDatabaseChanged)
+  );
+  return { result, onDatabaseChanged };
 }
 
 // ---------------------------------------------------------------------------
@@ -260,6 +279,17 @@ describe("addManualTransaction", () => {
     expect(tx?.currency).toBe("EUR");
     expect(tx?.isCash).toBe(true);
   });
+
+  it("notifies the app when a manual transaction is added", async () => {
+    const db = await makeDb();
+    const { result, onDatabaseChanged } = await setupWithCallback(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction("Callback test", "body");
+    });
+
+    expect(onDatabaseChanged).toHaveBeenCalledWith(db);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -334,6 +364,61 @@ describe("exportTransactions('json')", () => {
     expect(title).toBe("transactions.json");
     expect(text).toContain("Share test");
   });
+
+  it("exports an empty JSON array when there are no non-deleted transactions", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    let jsonContent = "";
+    await act(async () => {
+      jsonContent = await result.current.exportTransactions("json");
+    });
+
+    expect(jsonContent).toBe("[]");
+    expect(shareMock.fn).toHaveBeenCalledOnce();
+  });
+
+  it("exports a stable snapshot even if new data is saved during sharing", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    shareMock.fn.mockImplementationOnce(async (_title: string, text: string) => {
+      shareMock.calls.push({ title: "transactions.json", text });
+      addTransaction(
+        db,
+        createTransaction({
+          notificationTitle: "Late arrival",
+          notificationBody: "Saved during export",
+          packageName: "Manual",
+          receivedAt: new Date().toISOString(),
+        })
+      );
+    });
+
+    const result = await setup(db, shareMock);
+
+    await act(async () => {
+      await result.current.addManualTransaction("Snapshot base", "body");
+    });
+
+    let jsonContent = "";
+    await act(async () => {
+      jsonContent = await result.current.exportTransactions("json");
+    });
+
+    expect(jsonContent).toContain("Snapshot base");
+    expect(jsonContent).not.toContain("Late arrival");
+
+    await act(async () => {
+      await result.current.loadTransactions();
+    });
+
+    expect(
+      result.current.transactions.some(
+        (tx) => tx.notificationTitle === "Late arrival"
+      )
+    ).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -402,6 +487,63 @@ describe("exportTransactions('csv')", () => {
     const tagsColumn = columns[8] ?? "";
     // Should contain the human-readable tag name "AddedManually".
     expect(tagsColumn).toBe("AddedManually");
+  });
+
+  it("exports header-only CSV when there are no non-deleted transactions", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    let csvContent = "";
+    await act(async () => {
+      csvContent = await result.current.exportTransactions("csv");
+    });
+
+    expect(csvContent).toBe(
+      "Id,ReceivedAt,NotificationTitle,NotificationBody,PackageName,Amount,Currency,IsCash,Tags,IsDeleted"
+    );
+    expect(shareMock.fn).toHaveBeenCalledOnce();
+  });
+
+  it("quotes title and body fields that contain commas", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    await act(async () => {
+      await result.current.addManualTransaction("Shop, Inc.", "Paid 1,000 Ft");
+    });
+
+    let csvContent = "";
+    await act(async () => {
+      csvContent = await result.current.exportTransactions("csv");
+    });
+
+    expect(csvContent).toContain('"Shop, Inc."');
+    expect(csvContent).toContain('"Paid 1,000 Ft"');
+  });
+
+  it("escapes semicolons inside individual tag names", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    await act(async () => {
+      await result.current.addManualTransaction("Tagged edge", "body");
+    });
+
+    const txId = result.current.transactions[0]!.id;
+    await act(async () => {
+      await result.current.addTagToTransaction(txId, "food;drink");
+      await result.current.loadTransactions();
+    });
+
+    let csvContent = "";
+    await act(async () => {
+      csvContent = await result.current.exportTransactions("csv");
+    });
+
+    expect(csvContent).toContain("food\\;drink");
   });
 });
 
@@ -522,5 +664,115 @@ describe("tag management", () => {
 
     const tags = result.current.searchTags("A");
     expect(tags).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ingestNotification
+// ---------------------------------------------------------------------------
+
+describe("ingestNotification", () => {
+  it("returns a Transaction and refreshes the list on a new unique notification", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    let tx: Awaited<ReturnType<typeof result.current.ingestNotification>>;
+    await act(async () => {
+      tx = await result.current.ingestNotification("Lidl", "Payment 500 HUF", "com.revolut.revolut");
+    });
+
+    expect(tx).not.toBeNull();
+    expect(tx!.notificationTitle).toBe("Lidl");
+    expect(result.current.transactions.length).toBe(1);
+  });
+
+  it("returns null and does not refresh the list when the notification is a duplicate", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    // First ingestion to establish the existing record.
+    await act(async () => {
+      await result.current.ingestNotification("Lidl", "Payment 500 HUF", "com.revolut.revolut");
+    });
+
+    // Manually set a known receivedAt so the next call lands within the ±5 s window.
+    db.run("UPDATE Transactions SET ReceivedAt = ?", [new Date().toISOString()]);
+
+    let second: Awaited<ReturnType<typeof result.current.ingestNotification>>;
+    await act(async () => {
+      second = await result.current.ingestNotification("Lidl", "Payment 500 HUF", "com.revolut.revolut");
+    });
+
+    expect(second).toBeNull();
+    // List must not grow — still 1 transaction.
+    expect(result.current.transactions.length).toBe(1);
+  });
+
+  it("soft-deletes the new transaction when a matching soft-deleted tx already exists", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    // Seed a soft-deleted transaction with a known title + body via the repository.
+    const existing = addTransaction(
+      db,
+      createTransaction({
+        notificationTitle: "Netflix",
+        notificationBody: "12 EUR charge",
+        packageName: "com.revolut.revolut",
+        receivedAt: new Date(Date.now() - 60_000).toISOString(),
+      })
+    );
+    softDeleteTransaction(db, existing.id);
+
+    let tx: Awaited<ReturnType<typeof result.current.ingestNotification>>;
+    await act(async () => {
+      tx = await result.current.ingestNotification("Netflix", "12 EUR charge", "com.revolut.revolut");
+    });
+
+    expect(tx).not.toBeNull();
+    expect(tx!.isDeleted).toBe(true);
+  });
+
+  it("auto-tags the new transaction from the previous same-title transaction (excluding AddedManually)", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    // Seed a previous transaction with "Groceries" and "AddedManually" tags.
+    const prev = addTransaction(
+      db,
+      createTransaction({
+        notificationTitle: "Tesco",
+        notificationBody: "3 200 HUF",
+        packageName: "com.revolut.revolut",
+        receivedAt: new Date(Date.now() - 120_000).toISOString(),
+      })
+    );
+    const manualTag = addTag(db, "AddedManually");
+    const groceriesTag = addTag(db, "Groceries");
+    addTagToTransaction(db, prev.id, manualTag.id);
+    addTagToTransaction(db, prev.id, groceriesTag.id);
+
+    let tx: Awaited<ReturnType<typeof result.current.ingestNotification>>;
+    await act(async () => {
+      tx = await result.current.ingestNotification("Tesco", "3 200 HUF", "com.revolut.revolut");
+    });
+
+    expect(tx).not.toBeNull();
+    const tagNames = tx!.transactionTags.map((tt) => tt.tagName);
+    expect(tagNames).toContain("Groceries");
+    expect(tagNames).not.toContain("AddedManually");
+  });
+
+  it("returns a Transaction with no tags when no previous same-title transaction exists", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    let tx: Awaited<ReturnType<typeof result.current.ingestNotification>>;
+    await act(async () => {
+      tx = await result.current.ingestNotification("BrandNewMerchant", null, "com.revolut.revolut");
+    });
+
+    expect(tx).not.toBeNull();
+    expect(tx!.transactionTags).toHaveLength(0);
   });
 });

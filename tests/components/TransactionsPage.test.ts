@@ -76,12 +76,15 @@ afterEach(() => {
  * Renders TransactionsPage wrapped in a MemoryRouter (required for
  * useNavigate) with or without a db prop.
  */
-function renderPage(database?: Database): void {
+function renderPage(
+  database?: Database,
+  props: Partial<React.ComponentProps<typeof TransactionsPage>> = {}
+): void {
   render(
     React.createElement(
       MemoryRouter,
       null,
-      React.createElement(TransactionsPage, { db: database })
+      React.createElement(TransactionsPage, { db: database, ...props })
     )
   );
 }
@@ -140,6 +143,92 @@ describe("TransactionsPage — header buttons", () => {
     expect(screen.getByRole("button", { name: /refresh/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /export/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /clear all/i })).toBeTruthy();
+  });
+
+  it("opens an export format dialog when Export is tapped", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /export/i }));
+    });
+
+    expect(screen.getByRole("dialog", { name: /export transactions/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "JSON" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "CSV" })).toBeTruthy();
+  });
+
+  it("shows refresh feedback after checking notifications", async () => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    const refreshActiveNotifications = vi.fn(async () => 0);
+
+    await act(async () => {
+      renderPage(db, { refreshActiveNotifications });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
+    });
+
+    expect(refreshActiveNotifications).toHaveBeenCalledOnce();
+    expect(alertSpy).toHaveBeenCalledWith("No new notifications to process.");
+    alertSpy.mockRestore();
+  });
+
+  it("reloads transactions from the database when Refresh is tapped", async () => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    const refreshActiveNotifications = vi.fn(async () => 0);
+
+    await act(async () => {
+      renderPage(db, { refreshActiveNotifications });
+    });
+
+    addTransaction(db, {
+      ...createTransaction({ receivedAt: new Date().toISOString() }),
+      notificationTitle: "Refresh Reloaded",
+      notificationBody: "Inserted outside the current UI state",
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
+    });
+
+    expect(refreshActiveNotifications).toHaveBeenCalledOnce();
+    expect(await screen.findByText("Refresh Reloaded")).toBeTruthy();
+    expect(
+      await screen.findByText("Inserted outside the current UI state")
+    ).toBeTruthy();
+    expect(alertSpy).toHaveBeenCalledWith("No new notifications to process.");
+    alertSpy.mockRestore();
+  });
+
+  it("shows how many active notifications were added during refresh", async () => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    const refreshActiveNotifications = vi.fn(async () => {
+      addTransaction(db, {
+        ...createTransaction({ receivedAt: new Date().toISOString() }),
+        notificationTitle: "Refresh Vendor",
+        notificationBody: "Paid 6 337 Ft",
+        packageName: "com.revolut.revolut",
+        amount: 6337,
+        currency: "HUF",
+      });
+      return 1;
+    });
+
+    await act(async () => {
+      renderPage(db, { refreshActiveNotifications });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
+    });
+
+    expect(refreshActiveNotifications).toHaveBeenCalledOnce();
+    expect(await screen.findByText("Refresh Vendor")).toBeTruthy();
+    expect(alertSpy).toHaveBeenCalledWith("1 new notifications added.");
+    alertSpy.mockRestore();
   });
 });
 

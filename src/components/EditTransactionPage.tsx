@@ -190,7 +190,7 @@ const TagChip: React.FC<TagChipProps> = ({ tag, onRemove }) => (
       data-testid={`remove-tag-${tag.id}`}
       onClick={() => onRemove(tag.id)}
     >
-      ✕
+      Remove
     </button>
   </span>
 );
@@ -204,6 +204,7 @@ interface EditTransactionPageContentProps {
   db: Database;
   /** Transaction id parsed from URL params. */
   transactionId: number;
+  onDatabaseChanged?: (db: Database) => void;
 }
 
 /**
@@ -213,7 +214,7 @@ interface EditTransactionPageContentProps {
  */
 const EditTransactionPageContent: React.FC<
   EditTransactionPageContentProps
-> = ({ db, transactionId }) => {
+> = ({ db, transactionId, onDatabaseChanged }) => {
   const navigate = useNavigate();
 
   const {
@@ -221,6 +222,8 @@ const EditTransactionPageContent: React.FC<
     description,
     isCash,
     isIncome,
+    amount,
+    currency,
     newTagName,
     currentTags,
     recentTags,
@@ -229,6 +232,8 @@ const EditTransactionPageContent: React.FC<
     setDescription,
     setIsCash,
     setIsIncome,
+    setAmount,
+    setCurrency,
     setNewTagName,
     loadTransaction,
     save,
@@ -236,7 +241,7 @@ const EditTransactionPageContent: React.FC<
     removeTag,
     searchTags,
     loadRecentTags,
-  } = useEditTransaction(db);
+  } = useEditTransaction(db, onDatabaseChanged);
 
   // Load transaction and recent tags on mount.
   useEffect(() => {
@@ -307,6 +312,40 @@ const EditTransactionPageContent: React.FC<
         placeholder="Transaction description"
       />
 
+      {/* Amount & Currency */}
+      <label htmlFor="edit-amount" style={STYLE.label}>
+        Amount
+      </label>
+      <input
+        id="edit-amount"
+        type="number"
+        style={STYLE.input}
+        value={amount ?? ""}
+        onChange={(e) => {
+          const parsed = parseFloat(e.target.value);
+          setAmount(isNaN(parsed) ? null : parsed);
+        }}
+        aria-label="Amount"
+        data-testid="input-amount"
+        placeholder="0"
+        min="0"
+        step="any"
+      />
+
+      <label htmlFor="edit-currency" style={STYLE.label}>
+        Currency
+      </label>
+      <input
+        id="edit-currency"
+        style={STYLE.input}
+        value={currency ?? ""}
+        onChange={(e) => setCurrency(e.target.value.toUpperCase() || null)}
+        aria-label="Currency"
+        data-testid="input-currency"
+        placeholder="HUF"
+        maxLength={4}
+      />
+
       {/* Cash Transaction toggle */}
       <label style={STYLE.toggleRow}>
         <input
@@ -372,7 +411,7 @@ const EditTransactionPageContent: React.FC<
         onChange={handleSearchChange}
         aria-label="Tag search"
         data-testid="input-tag-search"
-        placeholder="Type to search tags (2+ chars)…"
+        placeholder="Enter tag name..."
       />
 
       {/* Search suggestions */}
@@ -432,6 +471,7 @@ export interface EditTransactionPageProps {
    * attempting database access.
    */
   db?: Database;
+  onDatabaseChanged?: (db: Database) => void;
 }
 
 /**
@@ -440,7 +480,10 @@ export interface EditTransactionPageProps {
  * Reads the transaction `id` from URL params and delegates to
  * {@link EditTransactionPageContent} once a valid db and id are available.
  */
-const EditTransactionPage: React.FC<EditTransactionPageProps> = ({ db }) => {
+const EditTransactionPage: React.FC<EditTransactionPageProps> = ({
+  db,
+  onDatabaseChanged,
+}) => {
   const { id } = useParams<{ id: string }>();
   const numericId = id !== undefined ? parseInt(id, 10) : NaN;
 
@@ -449,7 +492,11 @@ const EditTransactionPage: React.FC<EditTransactionPageProps> = ({ db }) => {
       <h1 style={STYLE.heading}>Edit Transaction</h1>
 
       {db && !isNaN(numericId) ? (
-        <EditTransactionPageContent db={db} transactionId={numericId} />
+        <EditTransactionPageContent
+          db={db}
+          transactionId={numericId}
+          {...(onDatabaseChanged ? { onDatabaseChanged } : {})}
+        />
       ) : (
         <p data-testid="no-db-message">Unable to load transaction.</p>
       )}

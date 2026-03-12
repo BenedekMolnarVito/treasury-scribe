@@ -146,6 +146,85 @@ describe("parseAmountAndCurrency", () => {
       expect(result.amount).toBeCloseTo(42);
       expect(result.currency).toBeNull();
     });
+
+    it("returns null amount and null currency for text with no digits", () => {
+      // All try-parse helpers require at least one digit — none should match.
+      expect(parseAmountAndCurrency("no digits here")).toEqual({
+        amount: null,
+        currency: null,
+      });
+    });
+
+    it("returns null amount and null currency for a currency-code-only string", () => {
+      // "EUR" alone matches no format because every format requires digits.
+      expect(parseAmountAndCurrency("EUR")).toEqual({
+        amount: null,
+        currency: null,
+      });
+    });
+  });
+
+  // MC/DC: US format — trailing currency symbol (groups 3 & 4 with a symbol token)
+  describe("US format – trailing currency symbol", () => {
+    it("parses amount with trailing dollar symbol: '100 $'", () => {
+      // Exercises the tryParseUS groups-3&4 path with a symbol instead of ISO code.
+      const result = parseAmountAndCurrency("You owe 100 $");
+      expect(result.amount).toBeCloseTo(100);
+      expect(result.currency).toBe("USD");
+    });
+
+    it("parses amount with trailing euro symbol: '25.50 €'", () => {
+      const result = parseAmountAndCurrency("Total 25.50 €");
+      expect(result.amount).toBeCloseTo(25.5);
+      expect(result.currency).toBe("EUR");
+    });
+  });
+
+  // Format priority — European wins over US when both could match
+  describe("format priority", () => {
+    it("European format takes priority over bare-number fallback", () => {
+      // "1.234,56 EUR" must be parsed as European (1234.56), not as "1" bare.
+      const result = parseAmountAndCurrency("1.234,56 EUR");
+      expect(result.amount).toBeCloseTo(1234.56);
+      expect(result.currency).toBe("EUR");
+    });
+  });
+
+  // Hungarian payment sentence with balance line that would confuse tryParseEuropean
+  describe("Hungarian payment format (Ft összeget fizettél)", () => {
+    it("parses the full OBI notification text correctly", () => {
+      const result = parseAmountAndCurrency(
+        "1 599 Ft összeget fizettél itt: OBI.\nA(z) HUF Zseb egyenlege: 56 604,23 Ft"
+      );
+      expect(result.amount).toBeCloseTo(1599);
+      expect(result.currency).toBe("HUF");
+    });
+
+    it("does not misparse the balance line as the payment amount", () => {
+      // tryParseEuropean would greedily match "604,23 Ft" from the balance.
+      // tryParseHungarianPayment must run first and win.
+      const result = parseAmountAndCurrency(
+        "500 Ft összeget fizettél itt: Aldi.\nA(z) HUF Zseb egyenlege: 12 500,00 Ft"
+      );
+      expect(result.amount).toBeCloseTo(500);
+      expect(result.currency).toBe("HUF");
+    });
+
+    it("parses a payment with no thousands separator", () => {
+      const result = parseAmountAndCurrency(
+        "750 Ft összeget fizettél itt: SPAR.\nA(z) HUF Zseb egyenlege: 4 250,00 Ft"
+      );
+      expect(result.amount).toBeCloseTo(750);
+      expect(result.currency).toBe("HUF");
+    });
+
+    it("parses a large payment with multiple space-grouped digit groups", () => {
+      const result = parseAmountAndCurrency(
+        "1 234 567 Ft összeget fizettél itt: Dealership.\nA(z) HUF Zseb egyenlege: 5 000 000,00 Ft"
+      );
+      expect(result.amount).toBeCloseTo(1234567);
+      expect(result.currency).toBe("HUF");
+    });
   });
 });
 
@@ -242,5 +321,18 @@ describe("createTransactionFromNotification", () => {
   it("sets isCash to false by default", () => {
     const tx = createTransactionFromNotification("T", "B", "com.example");
     expect(tx.isCash).toBe(false);
+  });
+
+  it("uses the supplied posted timestamp when provided", () => {
+    const tx = createTransactionFromNotification(
+      "Payment received",
+      "You received $50.00",
+      "com.revolut.revolut",
+      "2024-06-15T11:59:00.000Z"
+    );
+    expect(tx.receivedAt).toBe("2024-06-15T11:59:00.000Z");
+
+    const json = JSON.parse(tx.jsonContent as string);
+    expect(json.timestamp).toBe("2024-06-15T11:59:00.000Z");
   });
 });

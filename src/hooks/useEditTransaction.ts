@@ -11,6 +11,7 @@
 import { useState, useRef, useCallback } from "react";
 import type { Database } from "sql.js";
 import type { Tag } from "../models/Tag";
+import type { DatabaseChangedFn } from "./useTransactions";
 
 import { getTransactionById, updateTransaction } from "../data/TransactionRepository";
 import {
@@ -50,6 +51,10 @@ export interface UseEditTransactionResult {
   isCash: boolean;
   /** Editable copy of `isIncome`. */
   isIncome: boolean;
+  /** Editable copy of `amount`. */
+  amount: number | null;
+  /** Editable copy of `currency`. */
+  currency: string | null;
   /** Controlled input value for the "add tag" text field. */
   newTagName: string;
   /** Tags currently linked to the transaction. */
@@ -67,6 +72,8 @@ export interface UseEditTransactionResult {
   setDescription: (value: string) => void;
   setIsCash: (value: boolean) => void;
   setIsIncome: (value: boolean) => void;
+  setAmount: (value: number | null) => void;
+  setCurrency: (value: string | null) => void;
   setNewTagName: (value: string) => void;
 
   // -------------------------------------------------------------------------
@@ -128,7 +135,10 @@ export interface UseEditTransactionResult {
  *
  * @param db - sql.js Database instance (caller is responsible for lifecycle).
  */
-export function useEditTransaction(db: Database): UseEditTransactionResult {
+export function useEditTransaction(
+  db: Database,
+  onDatabaseChanged: DatabaseChangedFn = () => undefined
+): UseEditTransactionResult {
   // -------------------------------------------------------------------------
   // Internal state
   // -------------------------------------------------------------------------
@@ -141,6 +151,8 @@ export function useEditTransaction(db: Database): UseEditTransactionResult {
   const [description, setDescription] = useState<string>("");
   const [isCash, setIsCash] = useState<boolean>(false);
   const [isIncome, setIsIncome] = useState<boolean>(false);
+  const [amount, setAmount] = useState<number | null>(null);
+  const [currency, setCurrency] = useState<string | null>(null);
   const [newTagName, setNewTagName] = useState<string>("");
 
   // Tag collections
@@ -167,6 +179,8 @@ export function useEditTransaction(db: Database): UseEditTransactionResult {
       setDescription(tx.notificationBody ?? "");
       setIsCash(tx.isCash);
       setIsIncome(tx.isIncome);
+      setAmount(tx.amount);
+      setCurrency(tx.currency ?? null);
       setNewTagName("");
 
       // Eagerly load the full Tag objects (name + metadata) for the current tags.
@@ -193,8 +207,11 @@ export function useEditTransaction(db: Database): UseEditTransactionResult {
       notificationBody: description,
       isCash,
       isIncome,
+      amount,
+      currency,
     });
-  }, [db, title, description, isCash, isIncome]);
+    onDatabaseChanged(db);
+  }, [db, title, description, isCash, isIncome, amount, currency, onDatabaseChanged]);
 
   // -------------------------------------------------------------------------
   // addTag
@@ -210,8 +227,9 @@ export function useEditTransaction(db: Database): UseEditTransactionResult {
 
       // Refresh current tags from the database to stay consistent.
       setCurrentTags(getTagsForTransaction(db, id));
+      onDatabaseChanged(db);
     },
-    [db]
+    [db, onDatabaseChanged]
   );
 
   // -------------------------------------------------------------------------
@@ -225,8 +243,9 @@ export function useEditTransaction(db: Database): UseEditTransactionResult {
 
       removeTagFromTransaction(db, id, tagId);
       setCurrentTags((prev) => prev.filter((t) => t.id !== tagId));
+      onDatabaseChanged(db);
     },
-    [db]
+    [db, onDatabaseChanged]
   );
 
   // -------------------------------------------------------------------------
@@ -271,6 +290,8 @@ export function useEditTransaction(db: Database): UseEditTransactionResult {
     description,
     isCash,
     isIncome,
+    amount,
+    currency,
     newTagName,
     currentTags,
     recentTags,
@@ -280,6 +301,8 @@ export function useEditTransaction(db: Database): UseEditTransactionResult {
     setDescription,
     setIsCash,
     setIsIncome,
+    setAmount,
+    setCurrency,
     setNewTagName,
 
     loadTransaction,
