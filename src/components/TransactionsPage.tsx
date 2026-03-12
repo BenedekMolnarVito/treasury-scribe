@@ -533,13 +533,15 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
         <button onClick={handleExport} aria-label="Export">
           Export
         </button>
-        <button
-          onClick={handleTestNotification}
-          aria-label="Send Test Notification"
-          style={{ backgroundColor: "#4CAF50", color: "white" }}
-        >
-          🧪 Test Notification
-        </button>
+        {import.meta.env.DEV && (
+          <button
+            onClick={handleTestNotification}
+            aria-label="Send Test Notification"
+            style={{ backgroundColor: "#4CAF50", color: "white" }}
+          >
+            Test Notification
+          </button>
+        )}
         <button onClick={handleClearAll} aria-label="Clear All">
           Clear All
         </button>

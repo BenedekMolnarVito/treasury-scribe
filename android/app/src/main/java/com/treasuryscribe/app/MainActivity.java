@@ -1,4 +1,4 @@
-package com.vitobudget.tracker;
+package com.treasuryscribe.app;
 
 import android.os.Bundle;
 

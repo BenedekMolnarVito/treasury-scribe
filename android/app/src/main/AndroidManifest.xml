@@ -47,7 +47,7 @@
 
             <meta-data
                 android:name="android.app.notification.default_channel_id"
-                android:value="vito_budget_tracker_channel" />
+                android:value="treasury_scribe_channel" />
         </service>
 
         <receiver
