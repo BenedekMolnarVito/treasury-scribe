@@ -54,7 +54,7 @@ export interface UseEditTransactionResult {
   /** Editable copy of `amount`. */
   amount: number | null;
   /** Editable copy of `currency`. */
-  currency: string;
+  currency: string | null;
   /** Controlled input value for the "add tag" text field. */
   newTagName: string;
   /** Tags currently linked to the transaction. */
@@ -73,7 +73,7 @@ export interface UseEditTransactionResult {
   setIsCash: (value: boolean) => void;
   setIsIncome: (value: boolean) => void;
   setAmount: (value: number | null) => void;
-  setCurrency: (value: string) => void;
+  setCurrency: (value: string | null) => void;
   setNewTagName: (value: string) => void;
 
   // -------------------------------------------------------------------------
@@ -152,7 +152,7 @@ export function useEditTransaction(
   const [isCash, setIsCash] = useState<boolean>(false);
   const [isIncome, setIsIncome] = useState<boolean>(false);
   const [amount, setAmount] = useState<number | null>(null);
-  const [currency, setCurrency] = useState<string>("HUF");
+  const [currency, setCurrency] = useState<string | null>(null);
   const [newTagName, setNewTagName] = useState<string>("");
 
   // Tag collections
@@ -180,7 +180,7 @@ export function useEditTransaction(
       setIsCash(tx.isCash);
       setIsIncome(tx.isIncome);
       setAmount(tx.amount);
-      setCurrency(tx.currency ?? "HUF");
+      setCurrency(tx.currency ?? null);
       setNewTagName("");
 
       // Eagerly load the full Tag objects (name + metadata) for the current tags.

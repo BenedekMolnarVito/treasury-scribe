@@ -338,8 +338,8 @@ const EditTransactionPageContent: React.FC<
       <input
         id="edit-currency"
         style={STYLE.input}
-        value={currency}
-        onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+        value={currency ?? ""}
+        onChange={(e) => setCurrency(e.target.value.toUpperCase() || null)}
         aria-label="Currency"
         data-testid="input-currency"
         placeholder="HUF"

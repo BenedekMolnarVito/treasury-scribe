@@ -1,4 +1,4 @@
-package com.getcapacitor.myapp;
+package com.treasuryscribe.app;
 
 import static org.junit.Assert.*;
 

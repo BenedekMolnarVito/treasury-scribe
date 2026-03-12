@@ -1,4 +1,4 @@
-package com.vitobudget.tracker
+package com.treasuryscribe.app
 
 import android.app.AlarmManager
 import android.app.Notification
@@ -22,10 +22,10 @@ class RevolutNotificationService : NotificationListenerService() {
     companion object {
         const val REVOLUT_PACKAGE = "com.revolut.revolut"
         const val EVENT_NOTIFICATION_RECEIVED = "notificationReceived"
-        private const val CHANNEL_ID = "vito_budget_tracker_channel"
+        private const val CHANNEL_ID = "treasury_scribe_channel"
         private const val FOREGROUND_NOTIFICATION_ID = 1001
         private const val FOREGROUND_NOTIFICATION_TEXT =
-            "VitoBudget Tracker — Monitoring notifications"
+            "Treasury Scribe — Monitoring notifications"
         private const val RESTART_DELAY_MS = 5_000L
 
         @Volatile
@@ -131,7 +131,7 @@ class RevolutNotificationService : NotificationListenerService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "VitoBudget Tracker",
+                "Treasury Scribe",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Foreground service channel for notification monitoring"
@@ -157,7 +157,7 @@ class RevolutNotificationService : NotificationListenerService() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("VitoBudget Tracker")
+            .setContentTitle("Treasury Scribe")
             .setContentText(FOREGROUND_NOTIFICATION_TEXT)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setPriority(NotificationCompat.PRIORITY_LOW)

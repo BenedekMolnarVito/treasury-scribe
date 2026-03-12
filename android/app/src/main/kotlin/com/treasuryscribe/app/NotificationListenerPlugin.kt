@@ -1,4 +1,4 @@
-﻿package com.vitobudget.tracker
+package com.treasuryscribe.app
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
