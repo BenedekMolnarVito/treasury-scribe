@@ -12,6 +12,7 @@ import type { Database } from "sql.js";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 import TransactionsPage from "./pages/TransactionsPage";
 import EditTransactionPage from "./pages/EditTransactionPage";
+import DashboardPage from "./pages/DashboardPage";
 import {
   loadPersistedDatabase,
   persistDatabase,
@@ -302,7 +303,7 @@ const App: React.FC = () => {
 
   return (
     <BrowserRouter>
-      <div style={{ padding: 16, paddingBottom: 0, color: "#555" }}>
+      <div style={{ padding: 16, paddingBottom: 0, color: "#888", background: "#121212" }}>
         <small>{startupMessage}</small>
       </div>
       <Routes>
@@ -323,6 +324,14 @@ const App: React.FC = () => {
             <EditTransactionPage
               db={db}
               onDatabaseChanged={handleDatabaseChanged}
+            />
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <DashboardPage
+              db={db}
             />
           }
         />

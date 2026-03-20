@@ -389,7 +389,7 @@ describe("TransactionsPage — transaction cards", () => {
 // ---------------------------------------------------------------------------
 
 describe("TransactionsPage — card backgrounds", () => {
-  it("applies #FFFACD (light yellow) background for untagged cards", async () => {
+  it("applies #2A2A1A (dark) background for untagged cards", async () => {
     insertTx({ title: "Untagged Card" });
 
     await act(async () => {
@@ -401,10 +401,10 @@ describe("TransactionsPage — card backgrounds", () => {
       name: /Transaction: Untagged Card/,
     }) as HTMLElement;
     // jsdom converts hex colours to rgb in computed style.
-    expect(cardFace.style.background).toMatch(/rgb\(255,\s*250,\s*205\)|#FFFACD/i);
+    expect(cardFace.style.background).toMatch(/rgb\(42,\s*42,\s*26\)|#2A2A1A/i);
   });
 
-  it("applies #90EE90 (light green) background for tagged cards", async () => {
+  it("applies #1A2A1A (dark green) background for tagged cards", async () => {
     const tx = insertTx({ title: "Tagged Card" });
     const tag = addTag(db, "tagged");
     addTagToTransaction(db, tx.id, tag.id);
@@ -416,7 +416,7 @@ describe("TransactionsPage — card backgrounds", () => {
     const cardFace = screen.getByRole("button", {
       name: /Transaction: Tagged Card/,
     }) as HTMLElement;
-    expect(cardFace.style.background).toMatch(/rgb\(144,\s*238,\s*144\)|#90EE90/i);
+    expect(cardFace.style.background).toMatch(/rgb\(26,\s*42,\s*26\)|#1A2A1A/i);
   });
 });
 
@@ -425,7 +425,7 @@ describe("TransactionsPage — card backgrounds", () => {
 // ---------------------------------------------------------------------------
 
 describe("TransactionsPage — amount colours", () => {
-  it("renders expense amount in red", async () => {
+  it("renders expense amount in #FF6B6B", async () => {
     insertTx({ amount: 100, currency: "EUR", isIncome: false });
 
     await act(async () => {
@@ -433,11 +433,11 @@ describe("TransactionsPage — amount colours", () => {
     });
 
     const amountEl = screen.getByText("100 EUR") as HTMLElement;
-    // jsdom may preserve "red" or convert to rgb(255,0,0).
-    expect(amountEl.style.color).toMatch(/^red$|rgb\(255,\s*0,\s*0\)/);
+    // jsdom converts #FF6B6B to rgb(255, 107, 107).
+    expect(amountEl.style.color).toMatch(/rgb\(255,\s*107,\s*107\)|#FF6B6B/i);
   });
 
-  it("renders income amount in dark green (#006400)", async () => {
+  it("renders income amount in #4CAF50", async () => {
     insertTx({ amount: 200, currency: "HUF", isIncome: true });
 
     await act(async () => {
@@ -445,8 +445,8 @@ describe("TransactionsPage — amount colours", () => {
     });
 
     const amountEl = screen.getByText("200 HUF") as HTMLElement;
-    // jsdom converts #006400 to rgb(0, 100, 0).
-    expect(amountEl.style.color).toMatch(/rgb\(0,\s*100,\s*0\)|#006400/i);
+    // jsdom converts #4CAF50 to rgb(76, 175, 80).
+    expect(amountEl.style.color).toMatch(/rgb\(76,\s*175,\s*80\)|#4CAF50/i);
   });
 });
 
@@ -585,5 +585,264 @@ describe("TransactionsPage — loading state", () => {
 
     // After act() the loading promise has resolved.
     expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dashboard button
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — dashboard navigation", () => {
+  it("renders a Dashboard button", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    expect(screen.getByRole("button", { name: /dashboard/i })).toBeTruthy();
+  });
+
+  it("Dashboard button has blue background", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    const btn = screen.getByRole("button", { name: /dashboard/i }) as HTMLElement;
+    expect(btn.style.background).toMatch(/rgb\(21,\s*101,\s*192\)|#1565C0/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Revolut Import button
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — Revolut import", () => {
+  it("renders a Revolut Import button", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    expect(screen.getByRole("button", { name: /revolut import/i })).toBeTruthy();
+  });
+
+  it("opens Revolut import modal when clicked", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /revolut import/i }));
+    });
+
+    expect(screen.getByRole("dialog", { name: /import revolut/i })).toBeTruthy();
+  });
+
+  it("Revolut import modal has file input and buttons", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /revolut import/i }));
+    });
+
+    expect(screen.getByTestId("revolut-file-input")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /import revolut/i })).toBeTruthy();
+  });
+
+  it("closes Revolut import modal on Cancel", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /revolut import/i }));
+    });
+
+    expect(screen.getByRole("dialog", { name: /import revolut/i })).toBeTruthy();
+
+    await act(async () => {
+      // Find Cancel inside the modal
+      const cancelBtns = screen.getAllByRole("button").filter(
+        (btn) => btn.textContent === "Cancel"
+      );
+      fireEvent.click(cancelBtns[cancelBtns.length - 1]!);
+    });
+
+    expect(screen.queryByRole("dialog", { name: /import revolut/i })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Import (CSV/JSON) button
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — import button", () => {
+  it("renders an Import button", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    expect(screen.getByRole("button", { name: /^import$/i })).toBeTruthy();
+  });
+
+  it("opens import modal when clicked", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^import$/i }));
+    });
+
+    expect(screen.getByRole("dialog", { name: /import transactions/i })).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tag filter chips
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — tag filter", () => {
+  it("does not show tag filter when no tags exist", async () => {
+    insertTx({ title: "No Tags" });
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    expect(screen.queryByLabelText("Tag filter")).toBeNull();
+  });
+
+  it("shows tag filter chips when transactions have tags", async () => {
+    const tx = insertTx({ title: "Tagged" });
+    const tag = addTag(db, "Food");
+    addTagToTransaction(db, tx.id, tag.id);
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    const filterArea = screen.getByLabelText("Tag filter");
+    expect(filterArea).toBeTruthy();
+    // Should show the tag name with count
+    expect(screen.getByText(/Food \(1\)/)).toBeTruthy();
+  });
+
+  it("shows Untagged chip", async () => {
+    const tx = insertTx({ title: "Tagged" });
+    const tag = addTag(db, "Food");
+    addTagToTransaction(db, tx.id, tag.id);
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    expect(screen.getByText("Untagged")).toBeTruthy();
+  });
+
+  it("filters transactions by selected tag", async () => {
+    const tx1 = insertTx({ title: "Food TX" });
+    const tag = addTag(db, "Food");
+    addTagToTransaction(db, tx1.id, tag.id);
+    insertTx({ title: "No Tag TX" });
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    // Both should be visible initially
+    expect(screen.getByText("Food TX")).toBeTruthy();
+    expect(screen.getByText("No Tag TX")).toBeTruthy();
+
+    // Click Food tag chip
+    await act(async () => {
+      fireEvent.click(screen.getByText(/Food \(1\)/));
+    });
+
+    // Only Food TX should remain
+    expect(screen.getByText("Food TX")).toBeTruthy();
+    expect(screen.queryByText("No Tag TX")).toBeNull();
+  });
+
+  it("filters to show only untagged transactions", async () => {
+    const tx1 = insertTx({ title: "Tagged TX" });
+    const tag = addTag(db, "Shopping");
+    addTagToTransaction(db, tx1.id, tag.id);
+    insertTx({ title: "Untagged TX" });
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    // Click Untagged chip
+    await act(async () => {
+      fireEvent.click(screen.getByText("Untagged"));
+    });
+
+    expect(screen.queryByText("Tagged TX")).toBeNull();
+    expect(screen.getByText("Untagged TX")).toBeTruthy();
+  });
+
+  it("shows Clear button when filter is active and clears on click", async () => {
+    const tx1 = insertTx({ title: "Food TX" });
+    const tag = addTag(db, "Food");
+    addTagToTransaction(db, tx1.id, tag.id);
+    insertTx({ title: "Other TX" });
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    // No clear button initially
+    expect(screen.queryByLabelText("Clear tag filter")).toBeNull();
+
+    // Activate filter
+    await act(async () => {
+      fireEvent.click(screen.getByText(/Food \(1\)/));
+    });
+
+    // Clear button appears
+    expect(screen.getByLabelText("Clear tag filter")).toBeTruthy();
+
+    // Click clear
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Clear tag filter"));
+    });
+
+    // Both transactions visible again
+    expect(screen.getByText("Food TX")).toBeTruthy();
+    expect(screen.getByText("Other TX")).toBeTruthy();
+  });
+
+  it("shows filtered empty state message", async () => {
+    const tx1 = insertTx({ title: "Tagged" });
+    const tag1 = addTag(db, "Food");
+    addTagToTransaction(db, tx1.id, tag1.id);
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    // Click Untagged (no untagged transactions exist)
+    await act(async () => {
+      fireEvent.click(screen.getByText("Untagged"));
+    });
+
+    expect(screen.getByTestId("empty-state")).toBeTruthy();
+    expect(screen.getByTestId("empty-state").textContent).toContain("No transactions match");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test Notification button removed
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — test button removed", () => {
+  it("does not render a Test Notification button", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    expect(screen.queryByRole("button", { name: /test notification/i })).toBeNull();
   });
 });

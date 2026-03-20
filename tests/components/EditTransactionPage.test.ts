@@ -593,3 +593,38 @@ describe("no db prop", () => {
     expect(screen.getByTestId("no-db-message")).toBeTruthy();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Split Transaction
+// ---------------------------------------------------------------------------
+
+describe("split transaction", () => {
+  it("shows Split Transaction button when amount is set", async () => {
+    const id = insertTx({ amount: 5000, currency: "HUF" });
+    renderPage(id);
+    await waitFor(() =>
+      expect(screen.getByTestId("btn-split")).toBeTruthy()
+    );
+  });
+
+  it("does not show Split Transaction button when amount is null", async () => {
+    const id = insertTx({ amount: null });
+    renderPage(id);
+    await waitFor(() =>
+      expect(screen.getByTestId("btn-save")).toBeTruthy()
+    );
+    expect(screen.queryByTestId("btn-split")).toBeNull();
+  });
+
+  it("opens SplitTransactionModal when Split button is clicked", async () => {
+    const id = insertTx({ amount: 3000, currency: "HUF" });
+    renderPage(id);
+    await waitFor(() =>
+      expect(screen.getByTestId("btn-split")).toBeTruthy()
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("btn-split"));
+    });
+    expect(screen.getByRole("dialog", { name: /split transaction/i })).toBeTruthy();
+  });
+});
