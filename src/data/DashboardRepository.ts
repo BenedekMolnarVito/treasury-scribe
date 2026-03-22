@@ -109,15 +109,15 @@ function buildDateRangeClause(
 // ---------------------------------------------------------------------------
 
 interface TagFilterClause {
-  joinSql: string;
+  whereSql: string;
   params: number[];
 }
 
 function buildTagFilterClause(tagIds?: number[]): TagFilterClause {
-  if (!tagIds || tagIds.length === 0) return { joinSql: "", params: [] };
+  if (!tagIds || tagIds.length === 0) return { whereSql: "", params: [] };
   const placeholders = tagIds.map(() => "?").join(",");
   return {
-    joinSql: ` JOIN TransactionTags tt_filter ON tt_filter.TransactionId = t.Id AND tt_filter.TagId IN (${placeholders})`,
+    whereSql: ` AND EXISTS (SELECT 1 FROM TransactionTags WHERE TransactionId = t.Id AND TagId IN (${placeholders}))`,
     params: [...tagIds],
   };
 }
@@ -152,11 +152,11 @@ export function getSpendingByTag(
             COUNT(t.Id)   AS count
      FROM Transactions t
      JOIN TransactionTags tt ON tt.TransactionId = t.Id
-     JOIN Tags tg ON tg.Id = tt.TagId${tagFilter.joinSql}
-     WHERE ${EXPENSE_FILTER}${dateRange.sql}
+     JOIN Tags tg ON tg.Id = tt.TagId
+     WHERE ${EXPENSE_FILTER}${dateRange.sql}${tagFilter.whereSql}
      GROUP BY tg.Name
      ORDER BY total DESC`,
-    [...tagFilter.params, ...dateRange.params]
+    [...dateRange.params, ...tagFilter.params]
   );
 
   // Untagged transactions
@@ -209,12 +209,12 @@ export function getSpendingByMonth(
     `SELECT strftime('%Y-%m', t.ReceivedAt) AS month,
             SUM(t.Amount) AS total,
             COUNT(t.Id)   AS count
-     FROM Transactions t${tagFilter.joinSql}
+     FROM Transactions t
      WHERE ${EXPENSE_FILTER}
-       AND t.ReceivedAt >= date('now', '-' || ? || ' months')
+       AND t.ReceivedAt >= date('now', '-' || ? || ' months')${tagFilter.whereSql}
      GROUP BY strftime('%Y-%m', t.ReceivedAt)
      ORDER BY month ASC`,
-    [...tagFilter.params, months]
+    [months, ...tagFilter.params]
   );
 }
 
@@ -243,12 +243,12 @@ export function getSpendingByVendor(
     `SELECT COALESCE(t.NotificationTitle, 'Unknown') AS vendor,
             SUM(t.Amount) AS total,
             COUNT(t.Id)   AS count
-     FROM Transactions t${tagFilter.joinSql}
-     WHERE ${EXPENSE_FILTER}${dateRange.sql}
+     FROM Transactions t
+     WHERE ${EXPENSE_FILTER}${dateRange.sql}${tagFilter.whereSql}
      GROUP BY t.NotificationTitle
      ORDER BY total DESC
      LIMIT ?`,
-    [...tagFilter.params, ...dateRange.params, limit]
+    [...dateRange.params, ...tagFilter.params, limit]
   );
 }
 
@@ -273,9 +273,9 @@ export function getSpendingSummary(
     db,
     `SELECT SUM(t.Amount)  AS total,
             COUNT(t.Id)    AS count
-     FROM Transactions t${tagFilter.joinSql}
-     WHERE ${EXPENSE_FILTER}${dateRange.sql}`,
-    [...tagFilter.params, ...dateRange.params]
+     FROM Transactions t
+     WHERE ${EXPENSE_FILTER}${dateRange.sql}${tagFilter.whereSql}`,
+    [...dateRange.params, ...tagFilter.params]
   );
 
   const row = rows[0];
@@ -305,9 +305,9 @@ export function getIncomeSummary(
   const rows = queryRows<{ total: number | null; count: number }>(
     db,
     `SELECT SUM(t.Amount) AS total, COUNT(t.Id) AS count
-     FROM Transactions t${tagFilter.joinSql}
-     WHERE t.IsDeleted = 0 AND t.IsIncome = 1 AND t.Amount IS NOT NULL${dateRange.sql}`,
-    [...tagFilter.params, ...dateRange.params]
+     FROM Transactions t
+     WHERE t.IsDeleted = 0 AND t.IsIncome = 1 AND t.Amount IS NOT NULL${dateRange.sql}${tagFilter.whereSql}`,
+    [...dateRange.params, ...tagFilter.params]
   );
   const row = rows[0];
   return { total: row?.total ?? 0, count: row?.count ?? 0 };
@@ -331,12 +331,12 @@ export function getIncomeByMonth(
     `SELECT strftime('%Y-%m', t.ReceivedAt) AS month,
             SUM(t.Amount) AS total,
             COUNT(t.Id)   AS count
-     FROM Transactions t${tagFilter.joinSql}
+     FROM Transactions t
      WHERE t.IsDeleted = 0 AND t.IsIncome = 1 AND t.Amount IS NOT NULL
-       AND t.ReceivedAt >= date('now', '-' || ? || ' months')
+       AND t.ReceivedAt >= date('now', '-' || ? || ' months')${tagFilter.whereSql}
      GROUP BY strftime('%Y-%m', t.ReceivedAt)
      ORDER BY month ASC`,
-    [...tagFilter.params, months]
+    [months, ...tagFilter.params]
   );
 }
 

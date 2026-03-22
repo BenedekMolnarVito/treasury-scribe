@@ -232,6 +232,56 @@ describe("getSpendingByTag", () => {
     const results = getSpendingByTag(db, undefined, undefined, [foodTag]);
     expect(results.find((r) => r.tagName === "Untagged")).toBeUndefined();
   });
+
+  it("does not double-count a transaction that matches multiple selected tags", () => {
+    const foodTag = insertTag("food");
+    const travelTag = insertTag("travel");
+
+    // tx1 has BOTH food and travel tags — filtering by both should still count it once per tag group
+    const tx1 = insertTransaction({ amount: 50 });
+    linkTag(tx1, foodTag);
+    linkTag(tx1, travelTag);
+
+    // Without tag filter: food=50, travel=50 (each tag gets its own group)
+    const allResults = getSpendingByTag(db);
+    const foodResult = allResults.find((r) => r.tagName === "food");
+    const travelResult = allResults.find((r) => r.tagName === "travel");
+    expect(foodResult?.total).toBe(50);
+    expect(foodResult?.count).toBe(1);
+    expect(travelResult?.total).toBe(50);
+    expect(travelResult?.count).toBe(1);
+
+    // With tag filter [food, travel]: tx1 appears in both groups but must not be inflated
+    const filteredResults = getSpendingByTag(db, undefined, undefined, [foodTag, travelTag]);
+    const filteredFood = filteredResults.find((r) => r.tagName === "food");
+    const filteredTravel = filteredResults.find((r) => r.tagName === "travel");
+    expect(filteredFood?.total).toBe(50);
+    expect(filteredFood?.count).toBe(1);
+    expect(filteredTravel?.total).toBe(50);
+    expect(filteredTravel?.count).toBe(1);
+  });
+
+  it("does not double-count when multiple transactions have overlapping tags", () => {
+    const foodTag = insertTag("food");
+    const travelTag = insertTag("travel");
+
+    const tx1 = insertTransaction({ amount: 50 }); // both tags
+    const tx2 = insertTransaction({ amount: 30 }); // food only
+    const tx3 = insertTransaction({ amount: 20 }); // travel only
+    linkTag(tx1, foodTag);
+    linkTag(tx1, travelTag);
+    linkTag(tx2, foodTag);
+    linkTag(tx3, travelTag);
+
+    // Filter by [food, travel]: food group = tx1+tx2 = 80, travel group = tx1+tx3 = 70
+    const results = getSpendingByTag(db, undefined, undefined, [foodTag, travelTag]);
+    const food = results.find((r) => r.tagName === "food");
+    const travel = results.find((r) => r.tagName === "travel");
+    expect(food?.total).toBe(80);
+    expect(food?.count).toBe(2);
+    expect(travel?.total).toBe(70);
+    expect(travel?.count).toBe(2);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -495,6 +545,40 @@ describe("getSpendingSummary", () => {
     const summary = getSpendingSummary(db, undefined, undefined, [foodTag]);
     expect(summary.total).toBe(50);
     expect(summary.count).toBe(1);
+  });
+
+  it("does not double-count a transaction that matches multiple selected tags", () => {
+    const foodTag = insertTag("food");
+    const travelTag = insertTag("travel");
+
+    const tx1 = insertTransaction({ amount: 100 });
+    linkTag(tx1, foodTag);
+    linkTag(tx1, travelTag);
+
+    // Filtering by both tags: tx1 must only be counted once
+    const summary = getSpendingSummary(db, undefined, undefined, [foodTag, travelTag]);
+    expect(summary.total).toBe(100);
+    expect(summary.count).toBe(1);
+    expect(summary.avgPerTransaction).toBe(100);
+  });
+
+  it("does not double-count when multiple transactions have overlapping tags", () => {
+    const foodTag = insertTag("food");
+    const travelTag = insertTag("travel");
+
+    const tx1 = insertTransaction({ amount: 100 }); // both tags
+    const tx2 = insertTransaction({ amount: 40 });  // food only
+    const tx3 = insertTransaction({ amount: 60 });  // travel only
+    linkTag(tx1, foodTag);
+    linkTag(tx1, travelTag);
+    linkTag(tx2, foodTag);
+    linkTag(tx3, travelTag);
+
+    // All three match [food OR travel], each counted once → total=200, count=3
+    const summary = getSpendingSummary(db, undefined, undefined, [foodTag, travelTag]);
+    expect(summary.total).toBe(200);
+    expect(summary.count).toBe(3);
+    expect(summary.avgPerTransaction).toBeCloseTo(200 / 3);
   });
 });
 
