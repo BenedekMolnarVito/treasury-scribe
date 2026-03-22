@@ -41,9 +41,9 @@ import ToggleSwitch from "./ToggleSwitch";
 // Style constants
 // ---------------------------------------------------------------------------
 
-const BG_UNTAGGED = "#2A2A1A";
-const BG_TAGGED = "#1A2A1A";
-const COLOR_EXPENSE = "#FF6B6B";
+const BG_UNTAGGED = "#ff99009c";
+const BG_TAGGED = "#03356e";
+const COLOR_EXPENSE = "#f90e0e";
 const COLOR_INCOME = "#4CAF50";
 const COLOR_IMPORTED = "#4CAF50";
 const COLOR_SKIPPED = "#888";
@@ -73,9 +73,12 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   onDelete,
   onClick,
 }) => {
-  const [swiped, setSwiped] = useState(false);
+  const SWIPE_OPEN = 80;
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const touchStartX = useRef<number>(0);
   const touchStartY = useRef<number>(0);
+  const baseOffset = useRef<number>(0);
 
   const tagCount = transaction.transactionTags.length;
   const background = tagCount === 0 ? BG_UNTAGGED : BG_TAGGED;
@@ -101,24 +104,36 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
 
   const handleTouchStart = (e: React.TouchEvent): void => {
     const touch = e.touches[0];
-    if (touch) {
-      touchStartX.current = touch.clientX;
-      touchStartY.current = touch.clientY;
-    }
+    if (!touch) return;
+    touchStartX.current = touch.clientX;
+    touchStartY.current = touch.clientY;
+    baseOffset.current = swipeOffset;
+    setIsDragging(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent): void => {
+    const touch = e.touches[0];
+    if (!touch) return;
+    const dx = touch.clientX - touchStartX.current;
+    const dy = Math.abs(touch.clientY - touchStartY.current);
+    // Ignore if predominantly vertical (allow page scroll)
+    if (dy > Math.abs(dx) && dy > 10) return;
+    const next = Math.max(0, Math.min(SWIPE_OPEN, baseOffset.current + dx));
+    setSwipeOffset(next);
   };
 
   const handleTouchEnd = (e: React.TouchEvent): void => {
     const touch = e.changedTouches[0];
     if (!touch) return;
+    setIsDragging(false);
     const dx = touch.clientX - touchStartX.current;
     const dy = Math.abs(touch.clientY - touchStartY.current);
-    if (dx > 50 && dy < 30) {
-      // Swipe right — reveal Delete button.
-      setSwiped(true);
-    } else if (dx < -20) {
-      // Swipe left — hide Delete button.
-      setSwiped(false);
-    }
+    // Compute live offset (covers the case where touchMove events weren't fired, e.g. tests)
+    const liveOffset = dy > 80
+      ? baseOffset.current
+      : Math.max(0, Math.min(SWIPE_OPEN, baseOffset.current + dx));
+    // Snap: past midpoint → open; at or before midpoint → closed
+    setSwipeOffset(liveOffset > SWIPE_OPEN / 2 ? SWIPE_OPEN : 0);
   };
 
   // -------------------------------------------------------------------------
@@ -132,7 +147,11 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   };
 
   const handleCardClick = (): void => {
-    if (!swiped) onClick(transaction.id);
+    if (swipeOffset > 0) {
+      setSwipeOffset(0);
+    } else {
+      onClick(transaction.id);
+    }
   };
 
   // -------------------------------------------------------------------------
@@ -150,14 +169,15 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
         tabIndex={0}
         aria-label={`Transaction: ${transaction.notificationTitle ?? ""}`}
         style={{
-          transform: swiped ? "translateX(80px)" : "translateX(0)",
-          transition: "transform 0.2s ease",
+          transform: `translateX(${swipeOffset}px)`,
+          transition: isDragging ? "none" : "transform 0.15s ease",
           background,
           padding: "12px 16px",
           borderRadius: 8,
           cursor: "pointer",
         }}
         onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onClick={handleCardClick}
         onKeyDown={(e) => {
@@ -180,29 +200,36 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
         )}
 
         {/* Timestamp */}
-        <div style={{ fontSize: "0.85em", color: "#555" }}>
-          {transaction.receivedAt}
+        <div style={{ fontSize: "0.85em" }}>
+          {new Date(transaction.receivedAt).toLocaleString('hu-HU', {
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          })}
         </div>
 
         {/* Tags line */}
         <div style={{ fontSize: "0.85em" }}>{tagLine}</div>
       </div>
 
-      {/* Swipe-right Delete button (revealed after swipe) */}
-      {swiped && (
+      {/* Swipe-right Delete button (revealed progressively during swipe) */}
+      {swipeOffset > 0 && (
         <button
           style={{
             position: "absolute",
             left: 0,
             top: 0,
             bottom: 0,
-            width: 80,
+            width: SWIPE_OPEN,
             background: "red",
             color: "white",
             border: "none",
             fontWeight: "bold",
             cursor: "pointer",
             borderRadius: "8px 0 0 8px",
+            opacity: swipeOffset / SWIPE_OPEN,
           }}
           onClick={handleDeleteClick}
           aria-label="Delete transaction"
@@ -316,7 +343,6 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           placeholder="Description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          required
           aria-label="Description"
           style={{ background: "#2A2A2A", color: "#E0E0E0", border: "1px solid #444", borderRadius: 6, padding: "8px 12px" }}
         />

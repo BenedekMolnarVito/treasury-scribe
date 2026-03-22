@@ -1,4 +1,4 @@
-﻿Típus,Termék,Kezdés dátuma,Teljesítés dátuma,Leírás,Összeg,Díj,Pénznem,State,Egyenleg
+Típus,Termék,Kezdés dátuma,Teljesítés dátuma,Leírás,Összeg,Díj,Pénznem,State,Egyenleg
 Kártyás fizetés,Folyószámla,2026-01-31 12:21:56,2026-02-01 14:53:26,Shell,-200.00,0.00,HUF,ELVÉGEZVE,78226.50
 Kártyás fizetés,Folyószámla,2026-01-31 20:07:31,2026-02-01 14:54:12,Lidl,-3669.00,0.00,HUF,ELVÉGEZVE,74557.50
 Feltöltés,Folyószámla,2026-02-02 12:54:51,2026-02-02 12:54:52,*0874-os feltöltés,40000.00,0.00,HUF,ELVÉGEZVE,114557.50
@@ -92,5 +92,8 @@ Kártyás fizetés,Folyószámla,2026-03-16 12:11:38,2026-03-17 13:55:49,House o
 Kártyás fizetés,Folyószámla,2026-03-16 14:00:18,2026-03-17 14:26:53,Szimpatika Gyógyszertár,-3945.00,0.00,HUF,ELVÉGEZVE,67095.32
 Kártyás fizetés,Folyószámla,2026-03-16 11:56:51,2026-03-17 14:37:43,Brilliant,-33040.32,0.00,HUF,ELVÉGEZVE,34055.00
 Kártyás fizetés,Folyószámla,2026-03-17 21:10:38,2026-03-18 15:04:21,Hadik Kávéház,-3471.00,0.00,HUF,ELVÉGEZVE,30584.00
-Kártyás fizetés,Folyószámla,2026-03-19 10:57:45,,Booking.com,-4350.00,0.00,HUF,FÜGGŐBEN LÉVŐ,
-Kártyás fizetés,Folyószámla,2026-03-19 12:47:01,,Mákos Guba gyorsétkezde,-2090.00,0.00,HUF,FÜGGŐBEN LÉVŐ,
+Kártyás fizetés,Folyószámla,2026-03-19 12:47:01,2026-03-20 15:30:46,Mákos Guba gyorsétkezde,-2090.00,0.00,HUF,ELVÉGEZVE,28494.00
+Kártyás fizetés,Folyószámla,2026-03-19 10:57:45,2026-03-20 15:30:59,Booking.com,-4350.00,0.00,HUF,ELVÉGEZVE,24144.00
+Feltöltés,Folyószámla,2026-03-20 16:54:58,2026-03-20 16:55:00,*0874-os feltöltés,40000.00,0.00,HUF,ELVÉGEZVE,64144.00
+Kártyás fizetés,Folyószámla,2026-03-20 16:54:57,2026-03-21 15:01:40,Lidl,-18136.00,0.00,HUF,ELVÉGEZVE,46008.00
+Kártyás fizetés,Folyószámla,2026-03-21 17:39:39,2026-03-22 14:13:50,Spar,-15620.00,0.00,HUF,ELVÉGEZVE,30388.00
