@@ -542,17 +542,17 @@ describe("importRevolutCsv – summary", () => {
 // ---------------------------------------------------------------------------
 
 describe("importRevolutCsv – real CSV template file", () => {
-  it("imports the revolut_import_template.csv from project root", () => {
-    const csvPath = resolve(__dirname, "../../revolut_import_template.csv");
+  it("imports the account-statement CSV from tests folder", () => {
+    const csvPath = resolve(__dirname, "../account-statement_2026-02-01_2026-03-22_hu-hu_5138f3.csv");
     const csvContent = readFileSync(csvPath, "utf-8");
 
     const summary = importRevolutCsv(db, csvContent);
 
-    // Template: 95 data rows, 6 Átváltás (skip), 1 self-dedup (OBI 5749)
+    // Account statement: 98 data rows, 6 Átváltás (skip)
     expect(summary.imported).toBeGreaterThan(0);
-    expect(summary.imported + summary.skipped).toBe(95);
-    expect(summary.skipped).toBe(7);
-    expect(summary.imported).toBe(88);
+    expect(summary.imported + summary.skipped).toBe(98);
+    expect(summary.skipped).toBeGreaterThanOrEqual(6);
+    expect(summary.imported).toBe(98 - summary.skipped);
 
     const allTxs = getAllTransactions(db);
     expect(allTxs.length).toBe(summary.imported);

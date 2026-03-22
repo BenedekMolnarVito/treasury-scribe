@@ -389,7 +389,7 @@ describe("TransactionsPage — transaction cards", () => {
 // ---------------------------------------------------------------------------
 
 describe("TransactionsPage — card backgrounds", () => {
-  it("applies #2A2A1A (dark) background for untagged cards", async () => {
+  it("applies #ff99009c (orange with opacity) background for untagged cards", async () => {
     insertTx({ title: "Untagged Card" });
 
     await act(async () => {
@@ -400,11 +400,11 @@ describe("TransactionsPage — card backgrounds", () => {
     const cardFace = screen.getByRole("button", {
       name: /Transaction: Untagged Card/,
     }) as HTMLElement;
-    // jsdom converts hex colours to rgb in computed style.
-    expect(cardFace.style.background).toMatch(/rgb\(42,\s*42,\s*26\)|#2A2A1A/i);
+    // jsdom converts hex colours to rgba in computed style.
+    expect(cardFace.style.background).toMatch(/rgba\(255,\s*153,\s*0,\s*0\.61\)|#ff99009c/i);
   });
 
-  it("applies #1A2A1A (dark green) background for tagged cards", async () => {
+  it("applies #03356e (dark blue) background for tagged cards", async () => {
     const tx = insertTx({ title: "Tagged Card" });
     const tag = addTag(db, "tagged");
     addTagToTransaction(db, tx.id, tag.id);
@@ -416,7 +416,7 @@ describe("TransactionsPage — card backgrounds", () => {
     const cardFace = screen.getByRole("button", {
       name: /Transaction: Tagged Card/,
     }) as HTMLElement;
-    expect(cardFace.style.background).toMatch(/rgb\(26,\s*42,\s*26\)|#1A2A1A/i);
+    expect(cardFace.style.background).toMatch(/rgb\(3,\s*53,\s*110\)|#03356e/i);
   });
 });
 
@@ -425,7 +425,7 @@ describe("TransactionsPage — card backgrounds", () => {
 // ---------------------------------------------------------------------------
 
 describe("TransactionsPage — amount colours", () => {
-  it("renders expense amount in #FF6B6B", async () => {
+  it("renders expense amount in #f90e0e", async () => {
     insertTx({ amount: 100, currency: "EUR", isIncome: false });
 
     await act(async () => {
@@ -433,8 +433,8 @@ describe("TransactionsPage — amount colours", () => {
     });
 
     const amountEl = screen.getByText("100 EUR") as HTMLElement;
-    // jsdom converts #FF6B6B to rgb(255, 107, 107).
-    expect(amountEl.style.color).toMatch(/rgb\(255,\s*107,\s*107\)|#FF6B6B/i);
+    // jsdom converts #f90e0e to rgb(249, 14, 14).
+    expect(amountEl.style.color).toMatch(/rgb\(249,\s*14,\s*14\)|#f90e0e/i);
   });
 
   it("renders income amount in #4CAF50", async () => {
