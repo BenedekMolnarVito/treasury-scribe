@@ -105,6 +105,24 @@ function buildDateRangeClause(
 }
 
 // ---------------------------------------------------------------------------
+// Tag-filter helper
+// ---------------------------------------------------------------------------
+
+interface TagFilterClause {
+  joinSql: string;
+  params: number[];
+}
+
+function buildTagFilterClause(tagIds?: number[]): TagFilterClause {
+  if (!tagIds || tagIds.length === 0) return { joinSql: "", params: [] };
+  const placeholders = tagIds.map(() => "?").join(",");
+  return {
+    joinSql: ` JOIN TransactionTags tt_filter ON tt_filter.TransactionId = t.Id AND tt_filter.TagId IN (${placeholders})`,
+    params: [...tagIds],
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -115,13 +133,16 @@ function buildDateRangeClause(
  * @param db - sql.js Database instance.
  * @param startDate - Optional inclusive lower bound for ReceivedAt.
  * @param endDate - Optional inclusive upper bound for ReceivedAt.
+ * @param tagIds - Optional tag IDs to restrict results to.
  */
 export function getSpendingByTag(
   db: Database,
   startDate?: string,
-  endDate?: string
+  endDate?: string,
+  tagIds?: number[]
 ): SpendingByTag[] {
   const dateRange = buildDateRangeClause(startDate, endDate);
+  const tagFilter = buildTagFilterClause(tagIds);
 
   // Tagged transactions grouped by tag name
   const taggedRows = queryRows<{ tagName: string; total: number; count: number }>(
@@ -131,11 +152,11 @@ export function getSpendingByTag(
             COUNT(t.Id)   AS count
      FROM Transactions t
      JOIN TransactionTags tt ON tt.TransactionId = t.Id
-     JOIN Tags tg ON tg.Id = tt.TagId
+     JOIN Tags tg ON tg.Id = tt.TagId${tagFilter.joinSql}
      WHERE ${EXPENSE_FILTER}${dateRange.sql}
      GROUP BY tg.Name
      ORDER BY total DESC`,
-    dateRange.params
+    [...tagFilter.params, ...dateRange.params]
   );
 
   // Untagged transactions
@@ -155,13 +176,16 @@ export function getSpendingByTag(
     count: row.count,
   }));
 
-  const untagged = untaggedRows[0];
-  if (untagged && untagged.count > 0) {
-    results.push({
-      tagName: "Untagged",
-      total: untagged.total,
-      count: untagged.count,
-    });
+  // Only show Untagged when no tag filter is active
+  if (!tagIds || tagIds.length === 0) {
+    const untagged = untaggedRows[0];
+    if (untagged && untagged.count > 0) {
+      results.push({
+        tagName: "Untagged",
+        total: untagged.total,
+        count: untagged.count,
+      });
+    }
   }
 
   return results;
@@ -172,22 +196,25 @@ export function getSpendingByTag(
  *
  * @param db - sql.js Database instance.
  * @param months - Number of most-recent months to include (default 6).
+ * @param tagIds - Optional tag IDs to restrict results to.
  */
 export function getSpendingByMonth(
   db: Database,
-  months: number = 6
+  months: number = 6,
+  tagIds?: number[]
 ): SpendingByMonth[] {
+  const tagFilter = buildTagFilterClause(tagIds);
   return queryRows<SpendingByMonth>(
     db,
     `SELECT strftime('%Y-%m', t.ReceivedAt) AS month,
             SUM(t.Amount) AS total,
             COUNT(t.Id)   AS count
-     FROM Transactions t
+     FROM Transactions t${tagFilter.joinSql}
      WHERE ${EXPENSE_FILTER}
        AND t.ReceivedAt >= date('now', '-' || ? || ' months')
      GROUP BY strftime('%Y-%m', t.ReceivedAt)
      ORDER BY month ASC`,
-    [months]
+    [...tagFilter.params, months]
   );
 }
 
@@ -199,26 +226,29 @@ export function getSpendingByMonth(
  * @param limit - Maximum number of vendors to return (default 10).
  * @param startDate - Optional inclusive lower bound for ReceivedAt.
  * @param endDate - Optional inclusive upper bound for ReceivedAt.
+ * @param tagIds - Optional tag IDs to restrict results to.
  */
 export function getSpendingByVendor(
   db: Database,
   limit: number = 10,
   startDate?: string,
-  endDate?: string
+  endDate?: string,
+  tagIds?: number[]
 ): SpendingByVendor[] {
   const dateRange = buildDateRangeClause(startDate, endDate);
+  const tagFilter = buildTagFilterClause(tagIds);
 
   return queryRows<SpendingByVendor>(
     db,
     `SELECT COALESCE(t.NotificationTitle, 'Unknown') AS vendor,
             SUM(t.Amount) AS total,
             COUNT(t.Id)   AS count
-     FROM Transactions t
+     FROM Transactions t${tagFilter.joinSql}
      WHERE ${EXPENSE_FILTER}${dateRange.sql}
      GROUP BY t.NotificationTitle
      ORDER BY total DESC
      LIMIT ?`,
-    [...dateRange.params, limit]
+    [...tagFilter.params, ...dateRange.params, limit]
   );
 }
 
@@ -228,21 +258,24 @@ export function getSpendingByVendor(
  * @param db - sql.js Database instance.
  * @param startDate - Optional inclusive lower bound for ReceivedAt.
  * @param endDate - Optional inclusive upper bound for ReceivedAt.
+ * @param tagIds - Optional tag IDs to restrict results to.
  */
 export function getSpendingSummary(
   db: Database,
   startDate?: string,
-  endDate?: string
+  endDate?: string,
+  tagIds?: number[]
 ): SpendingSummary {
   const dateRange = buildDateRangeClause(startDate, endDate);
+  const tagFilter = buildTagFilterClause(tagIds);
 
   const rows = queryRows<{ total: number | null; count: number }>(
     db,
     `SELECT SUM(t.Amount)  AS total,
             COUNT(t.Id)    AS count
-     FROM Transactions t
+     FROM Transactions t${tagFilter.joinSql}
      WHERE ${EXPENSE_FILTER}${dateRange.sql}`,
-    dateRange.params
+    [...tagFilter.params, ...dateRange.params]
   );
 
   const row = rows[0];
@@ -251,6 +284,60 @@ export function getSpendingSummary(
   const avgPerTransaction = count > 0 ? total / count : 0;
 
   return { total, count, avgPerTransaction };
+}
+
+/**
+ * Returns an income summary (total and count of income transactions).
+ *
+ * @param db - sql.js Database instance.
+ * @param startDate - Optional inclusive lower bound for ReceivedAt.
+ * @param endDate - Optional inclusive upper bound for ReceivedAt.
+ * @param tagIds - Optional tag IDs to restrict results to.
+ */
+export function getIncomeSummary(
+  db: Database,
+  startDate?: string,
+  endDate?: string,
+  tagIds?: number[]
+): { total: number; count: number } {
+  const dateRange = buildDateRangeClause(startDate, endDate);
+  const tagFilter = buildTagFilterClause(tagIds);
+  const rows = queryRows<{ total: number | null; count: number }>(
+    db,
+    `SELECT SUM(t.Amount) AS total, COUNT(t.Id) AS count
+     FROM Transactions t${tagFilter.joinSql}
+     WHERE t.IsDeleted = 0 AND t.IsIncome = 1 AND t.Amount IS NOT NULL${dateRange.sql}`,
+    [...tagFilter.params, ...dateRange.params]
+  );
+  const row = rows[0];
+  return { total: row?.total ?? 0, count: row?.count ?? 0 };
+}
+
+/**
+ * Returns income grouped by calendar month, ordered chronologically.
+ *
+ * @param db - sql.js Database instance.
+ * @param months - Number of most-recent months to include (default 6).
+ * @param tagIds - Optional tag IDs to restrict results to.
+ */
+export function getIncomeByMonth(
+  db: Database,
+  months: number = 6,
+  tagIds?: number[]
+): SpendingByMonth[] {
+  const tagFilter = buildTagFilterClause(tagIds);
+  return queryRows<SpendingByMonth>(
+    db,
+    `SELECT strftime('%Y-%m', t.ReceivedAt) AS month,
+            SUM(t.Amount) AS total,
+            COUNT(t.Id)   AS count
+     FROM Transactions t${tagFilter.joinSql}
+     WHERE t.IsDeleted = 0 AND t.IsIncome = 1 AND t.Amount IS NOT NULL
+       AND t.ReceivedAt >= date('now', '-' || ? || ' months')
+     GROUP BY strftime('%Y-%m', t.ReceivedAt)
+     ORDER BY month ASC`,
+    [...tagFilter.params, months]
+  );
 }
 
 /**

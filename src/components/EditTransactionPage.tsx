@@ -23,6 +23,7 @@ import { useEditTransaction } from "../hooks/useEditTransaction";
 import SplitTransactionModal from "./SplitTransactionModal";
 import { splitTransaction } from "../services/SplitTransactionService";
 import type { SplitSpec } from "../services/SplitTransactionService";
+import ToggleSwitch from "./ToggleSwitch";
 
 // ---------------------------------------------------------------------------
 // Style constants (dark theme)
@@ -283,6 +284,7 @@ const EditTransactionPageContent: React.FC<
   };
 
   const handleSplit = (spec: SplitSpec): void => {
+    save();
     splitTransaction(db, transactionId, spec);
     if (onDatabaseChanged) onDatabaseChanged(db);
     void navigate("/");
@@ -357,30 +359,22 @@ const EditTransactionPageContent: React.FC<
       />
 
       {/* Cash Transaction toggle */}
-      <label style={STYLE.toggleRow}>
-        <input
-          type="checkbox"
-          role="switch"
-          checked={isCash}
-          onChange={(e) => setIsCash(e.target.checked)}
-          aria-label="Cash Transaction"
-          data-testid="toggle-cash"
-        />
-        Cash Transaction
-      </label>
+      <ToggleSwitch
+        checked={isCash}
+        onChange={setIsCash}
+        label="Cash Transaction"
+        ariaLabel="Cash Transaction"
+        testId="toggle-cash"
+      />
 
       {/* Income toggle */}
-      <label style={STYLE.toggleRow}>
-        <input
-          type="checkbox"
-          role="switch"
-          checked={isIncome}
-          onChange={(e) => setIsIncome(e.target.checked)}
-          aria-label="Income"
-          data-testid="toggle-income"
-        />
-        Income
-      </label>
+      <ToggleSwitch
+        checked={isIncome}
+        onChange={setIsIncome}
+        label="Income"
+        ariaLabel="Income"
+        testId="toggle-income"
+      />
 
       {/* Current tags */}
       <p style={STYLE.sectionTitle}>Current Tags</p>

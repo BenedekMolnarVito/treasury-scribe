@@ -17,6 +17,8 @@ import {
   getSpendingByVendor,
   getSpendingSummary,
   getUntaggedTransactionCount,
+  getIncomeSummary,
+  getIncomeByMonth,
 } from "../../src/data/DashboardRepository";
 
 // ---------------------------------------------------------------------------
@@ -205,6 +207,31 @@ describe("getSpendingByTag", () => {
     expect(results).toHaveLength(1);
     expect(results[0].total).toBe(10);
   });
+
+  it("filters by tagIds when provided", () => {
+    const foodTag = insertTag("food");
+    const travelTag = insertTag("travel");
+
+    const tx1 = insertTransaction({ amount: 50 });
+    const tx2 = insertTransaction({ amount: 30 });
+    linkTag(tx1, foodTag);
+    linkTag(tx2, travelTag);
+
+    const results = getSpendingByTag(db, undefined, undefined, [foodTag]);
+    expect(results).toHaveLength(1);
+    expect(results[0].tagName).toBe("food");
+    expect(results[0].total).toBe(50);
+  });
+
+  it("does not include Untagged when tagIds filter is active", () => {
+    const foodTag = insertTag("food");
+    const tx1 = insertTransaction({ amount: 25 });
+    linkTag(tx1, foodTag);
+    insertTransaction({ amount: 15 }); // untagged
+
+    const results = getSpendingByTag(db, undefined, undefined, [foodTag]);
+    expect(results.find((r) => r.tagName === "Untagged")).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -283,6 +310,18 @@ describe("getSpendingByMonth", () => {
     const results = getSpendingByMonth(db, 1);
     const total = results.reduce((sum, r) => sum + r.total, 0);
     expect(total).toBe(30);
+  });
+
+  it("filters by tagIds when provided", () => {
+    const now = new Date().toISOString();
+    const foodTag = insertTag("food");
+    const tx1 = insertTransaction({ amount: 50, receivedAt: now });
+    insertTransaction({ amount: 30, receivedAt: now }); // untagged
+    linkTag(tx1, foodTag);
+
+    const results = getSpendingByMonth(db, 1, [foodTag]);
+    const total = results.reduce((sum, r) => sum + r.total, 0);
+    expect(total).toBe(50);
   });
 });
 
@@ -376,6 +415,18 @@ describe("getSpendingByVendor", () => {
     const results = getSpendingByVendor(db);
     expect(results[0].vendor).toBe("Unknown");
   });
+
+  it("filters by tagIds when provided", () => {
+    const foodTag = insertTag("food");
+    const tx1 = insertTransaction({ amount: 50, notificationTitle: "Lidl" });
+    insertTransaction({ amount: 30, notificationTitle: "Aldi" }); // untagged
+    linkTag(tx1, foodTag);
+
+    const results = getSpendingByVendor(db, 10, undefined, undefined, [foodTag]);
+    expect(results).toHaveLength(1);
+    expect(results[0].vendor).toBe("Lidl");
+    expect(results[0].total).toBe(50);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -433,6 +484,141 @@ describe("getSpendingSummary", () => {
     const summary = getSpendingSummary(db);
     expect(summary.total).toBe(25);
     expect(summary.count).toBe(1);
+  });
+
+  it("filters by tagIds when provided", () => {
+    const foodTag = insertTag("food");
+    const tx1 = insertTransaction({ amount: 50 });
+    insertTransaction({ amount: 30 }); // untagged
+    linkTag(tx1, foodTag);
+
+    const summary = getSpendingSummary(db, undefined, undefined, [foodTag]);
+    expect(summary.total).toBe(50);
+    expect(summary.count).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getIncomeSummary
+// ---------------------------------------------------------------------------
+
+describe("getIncomeSummary", () => {
+  it("returns zeroes on an empty database", () => {
+    const result = getIncomeSummary(db);
+    expect(result.total).toBe(0);
+    expect(result.count).toBe(0);
+  });
+
+  it("sums only income transactions", () => {
+    insertTransaction({ amount: 5000, isIncome: true });
+    insertTransaction({ amount: 3000, isIncome: true });
+    insertTransaction({ amount: 100 }); // expense — excluded
+
+    const result = getIncomeSummary(db);
+    expect(result.total).toBe(8000);
+    expect(result.count).toBe(2);
+  });
+
+  it("respects startDate filter", () => {
+    insertTransaction({
+      amount: 5000,
+      isIncome: true,
+      receivedAt: "2024-01-01T10:00:00.000Z",
+    });
+    insertTransaction({
+      amount: 3000,
+      isIncome: true,
+      receivedAt: "2024-06-15T10:00:00.000Z",
+    });
+
+    const result = getIncomeSummary(db, "2024-06-01T00:00:00.000Z");
+    expect(result.total).toBe(3000);
+    expect(result.count).toBe(1);
+  });
+
+  it("excludes deleted income transactions", () => {
+    insertTransaction({ amount: 5000, isIncome: true });
+    insertTransaction({ amount: 3000, isIncome: true, isDeleted: true });
+
+    const result = getIncomeSummary(db);
+    expect(result.total).toBe(5000);
+    expect(result.count).toBe(1);
+  });
+
+  it("filters by tagIds when provided", () => {
+    const salaryTag = insertTag("salary");
+    const tx1 = insertTransaction({ amount: 5000, isIncome: true });
+    insertTransaction({ amount: 3000, isIncome: true }); // untagged income
+    linkTag(tx1, salaryTag);
+
+    const result = getIncomeSummary(db, undefined, undefined, [salaryTag]);
+    expect(result.total).toBe(5000);
+    expect(result.count).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getIncomeByMonth
+// ---------------------------------------------------------------------------
+
+describe("getIncomeByMonth", () => {
+  it("returns empty array on an empty database", () => {
+    expect(getIncomeByMonth(db)).toEqual([]);
+  });
+
+  it("groups income by YYYY-MM in chronological order", () => {
+    insertTransaction({
+      amount: 5000,
+      isIncome: true,
+      receivedAt: "2024-01-15T10:00:00.000Z",
+    });
+    insertTransaction({
+      amount: 3000,
+      isIncome: true,
+      receivedAt: "2024-03-10T10:00:00.000Z",
+    });
+
+    const results = getIncomeByMonth(db, 120);
+    expect(results.length).toBeGreaterThanOrEqual(2);
+
+    const jan = results.find((r) => r.month === "2024-01");
+    const mar = results.find((r) => r.month === "2024-03");
+    expect(jan).toBeDefined();
+    expect(jan!.total).toBe(5000);
+    expect(mar).toBeDefined();
+    expect(mar!.total).toBe(3000);
+  });
+
+  it("excludes expense transactions", () => {
+    const now = new Date().toISOString();
+    insertTransaction({ amount: 5000, isIncome: true, receivedAt: now });
+    insertTransaction({ amount: 100, receivedAt: now }); // expense
+
+    const results = getIncomeByMonth(db, 1);
+    const total = results.reduce((sum, r) => sum + r.total, 0);
+    expect(total).toBe(5000);
+  });
+
+  it("excludes deleted income transactions", () => {
+    const now = new Date().toISOString();
+    insertTransaction({ amount: 5000, isIncome: true, receivedAt: now });
+    insertTransaction({ amount: 3000, isIncome: true, isDeleted: true, receivedAt: now });
+
+    const results = getIncomeByMonth(db, 1);
+    const total = results.reduce((sum, r) => sum + r.total, 0);
+    expect(total).toBe(5000);
+  });
+
+  it("filters by tagIds when provided", () => {
+    const now = new Date().toISOString();
+    const salaryTag = insertTag("salary");
+    const tx1 = insertTransaction({ amount: 5000, isIncome: true, receivedAt: now });
+    insertTransaction({ amount: 3000, isIncome: true, receivedAt: now }); // untagged
+    linkTag(tx1, salaryTag);
+
+    const results = getIncomeByMonth(db, 1, [salaryTag]);
+    const total = results.reduce((sum, r) => sum + r.total, 0);
+    expect(total).toBe(5000);
   });
 });
 

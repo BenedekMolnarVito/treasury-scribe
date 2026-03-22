@@ -2,18 +2,20 @@
  * DashboardPage.tsx
  *
  * Full-featured spending insights dashboard.  Mobile-first card-stack layout
- * with hero summary, horizontal bar chart (spending by tag), vertical bar
- * chart (monthly trend), top-vendors list, and untagged-transaction badge.
+ * with hero summary (income + expenses + net balance), doughnut chart
+ * (spending by tag), line chart (monthly trend for expenses & income),
+ * top-vendors list, tag filter chips, and untagged-transaction badge.
  *
  * All charts are lightweight inline SVG - no external charting library.
  */
 
-import React, { useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Database } from "sql.js";
 import type { SpendingByTag, SpendingByMonth, SpendingByVendor } from "../data/DashboardRepository";
 import { useDashboard } from "../hooks/useDashboard";
 import type { DashboardPeriod } from "../hooks/useDashboard";
+import type { TagWithCount } from "../data/TransactionRepository";
 
 // ---------------------------------------------------------------------------
 // Style constants (dark theme)
@@ -56,18 +58,6 @@ const STYLE = {
     borderRadius: "8px",
     padding: "16px",
     marginBottom: "12px",
-  } as React.CSSProperties,
-
-  heroTotal: {
-    fontSize: "2em",
-    fontWeight: "bold" as const,
-    color: "#FFFFFF",
-  } as React.CSSProperties,
-
-  heroSub: {
-    color: "#B0B0B0",
-    fontSize: "0.9em",
-    marginTop: "4px",
   } as React.CSSProperties,
 
   cardTitle: {
@@ -126,8 +116,6 @@ const STYLE = {
 // ---------------------------------------------------------------------------
 
 const TAG_COLORS = ["#1565C0", "#2E7D32", "#FF6B6B", "#FFB300", "#7B1FA2"];
-const CURRENT_MONTH_COLOR = "#1565C0";
-const OTHER_MONTH_COLOR = "#555555";
 
 // ---------------------------------------------------------------------------
 // Period labels
@@ -139,12 +127,37 @@ const PERIOD_OPTIONS: { value: DashboardPeriod; label: string }[] = [
   { value: "6months", label: "6 Mo" },
 ];
 
+const PERIOD_LABELS: Record<DashboardPeriod, string> = {
+  month: "This Month",
+  "3months": "Last 3 Months",
+  "6months": "Last 6 Months",
+};
+
+// ---------------------------------------------------------------------------
+// Month name lookup
+// ---------------------------------------------------------------------------
+
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function formatAmount(amount: number): string {
   return Math.round(amount).toLocaleString();
+}
+
+function computeAvgPerDay(expenseTotal: number, period: DashboardPeriod): number {
+  const now = new Date();
+  if (period === "month") {
+    const dayOfMonth = now.getDate();
+    return dayOfMonth > 0 ? expenseTotal / dayOfMonth : 0;
+  }
+  const monthsBack = period === "3months" ? 3 : 6;
+  const periodStart = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
+  const diffMs = now.getTime() - periodStart.getTime();
+  const totalDays = Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+  return expenseTotal / totalDays;
 }
 
 // ---------------------------------------------------------------------------
@@ -171,127 +184,284 @@ const PeriodPills: React.FC<PeriodPillsProps> = ({ current, onChange }) => (
   </div>
 );
 
+// -- Hero Card ---------------------------------------------------------------
+
 interface HeroCardProps {
-  total: number;
-  count: number;
-  avgPerTransaction: number;
+  expenseTotal: number;
+  incomeTotal: number;
+  avgPerDay: number;
+  periodLabel: string;
 }
 
-const HeroCard: React.FC<HeroCardProps> = ({ total, count, avgPerTransaction }) => (
-  <div style={STYLE.card} data-testid="hero-card">
-    <div style={{ color: "#B0B0B0", fontSize: "0.85em", marginBottom: "4px" }}>
-      THIS MONTH
-    </div>
-    <div style={STYLE.heroTotal} data-testid="hero-total">
-      {"\u25bc"} {formatAmount(total)} HUF
-    </div>
-    <div style={STYLE.heroSub}>
-      Avg: {formatAmount(avgPerTransaction)}/txn
-    </div>
-    <div style={STYLE.heroSub}>
-      {count} transactions
-    </div>
-  </div>
-);
+const HeroCard: React.FC<HeroCardProps> = ({ expenseTotal, incomeTotal, avgPerDay, periodLabel }) => {
+  const netBalance = incomeTotal - expenseTotal;
+  const netColor = netBalance >= 0 ? "#4CAF50" : "#FF6B6B";
 
-interface TagBarChartProps {
+  return (
+    <div style={STYLE.card} data-testid="hero-card">
+      <div style={{ color: "#B0B0B0", fontSize: "0.85em", marginBottom: "8px" }}>
+        {periodLabel}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+        <div>
+          <div style={{ color: "#FF6B6B", fontSize: "0.85em" }}>Expenses</div>
+          <div style={{ color: "#FF6B6B", fontWeight: "bold", fontSize: "1.3em" }} data-testid="hero-expenses">
+            {"\u25bc"} {formatAmount(expenseTotal)} HUF
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ color: "#4CAF50", fontSize: "0.85em" }}>Income</div>
+          <div style={{ color: "#4CAF50", fontWeight: "bold", fontSize: "1.3em" }} data-testid="hero-income">
+            {"\u25b2"} {formatAmount(incomeTotal)} HUF
+          </div>
+        </div>
+      </div>
+      <div style={{ textAlign: "center", borderTop: "1px solid #333", paddingTop: "8px" }}>
+        <div style={{ color: netColor, fontWeight: "bold", fontSize: "1.5em" }} data-testid="hero-net">
+          Net: {netBalance >= 0 ? "+" : ""}{formatAmount(netBalance)} HUF
+        </div>
+      </div>
+      <div style={{ color: "#B0B0B0", fontSize: "0.85em", marginTop: "8px", textAlign: "center" }} data-testid="hero-avg-day">
+        Avg spent/day: {formatAmount(avgPerDay)} HUF
+      </div>
+    </div>
+  );
+};
+
+// -- Tag filter chips --------------------------------------------------------
+
+interface TagFilterChipsProps {
+  availableTags: TagWithCount[];
+  selectedTagIds: number[];
+  onChangeSelectedTagIds: (ids: number[]) => void;
+}
+
+const TagFilterChips: React.FC<TagFilterChipsProps> = ({
+  availableTags,
+  selectedTagIds,
+  onChangeSelectedTagIds,
+}) => {
+  if (availableTags.length === 0) return null;
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }} data-testid="tag-filter">
+      {availableTags.map((tag) => {
+        const selected = selectedTagIds.includes(tag.tagId);
+        return (
+          <button
+            key={tag.tagId}
+            type="button"
+            onClick={() => {
+              if (selected) {
+                onChangeSelectedTagIds(selectedTagIds.filter(id => id !== tag.tagId));
+              } else {
+                onChangeSelectedTagIds([...selectedTagIds, tag.tagId]);
+              }
+            }}
+            style={{
+              background: selected ? "#1565C0" : "#2A2A2A",
+              color: selected ? "#FFFFFF" : "#B0B0B0",
+              border: "1px solid " + (selected ? "#1565C0" : "#444"),
+              borderRadius: 16,
+              padding: "4px 12px",
+              fontSize: "0.85em",
+              cursor: "pointer",
+            }}
+          >
+            {tag.tagName} ({tag.count})
+          </button>
+        );
+      })}
+      {selectedTagIds.length > 0 && (
+        <button
+          type="button"
+          onClick={() => onChangeSelectedTagIds([])}
+          data-testid="tag-filter-clear"
+          style={{ background: "transparent", color: "#FF6B6B", border: "none", fontSize: "0.85em", cursor: "pointer" }}
+        >
+          {"\u2715"} Clear
+        </button>
+      )}
+    </div>
+  );
+};
+
+// -- Doughnut chart for tags -------------------------------------------------
+
+interface TagDoughnutChartProps {
   data: SpendingByTag[];
 }
 
-const TagBarChart: React.FC<TagBarChartProps> = ({ data }) => {
-  const maxTotal = data.length > 0 ? Math.max(...data.map((d) => d.total)) : 1;
-  const barHeight = 28;
-  const gap = 6;
-  const chartHeight = data.length * (barHeight + gap);
-  const chartWidth = 300;
+const TagDoughnutChart: React.FC<TagDoughnutChartProps> = ({ data }) => {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const grandTotal = data.reduce((s, d) => s + d.total, 0);
+
+  if (data.length === 0) {
+    return (
+      <div style={STYLE.card} data-testid="tag-chart">
+        <div style={STYLE.cardTitle}>Spending by Tag</div>
+        <div style={{ color: "#888" }}>No data</div>
+      </div>
+    );
+  }
+
+  const size = 200;
+  const cx = size / 2;
+  const cy = size / 2;
+  const outerR = 85;
+  const innerR = 50;
+
+  let startAngle = -Math.PI / 2;
+  const segments = data.map((entry, i) => {
+    const pct = grandTotal > 0 ? entry.total / grandTotal : 0;
+    const angle = pct * 2 * Math.PI;
+    const endAngle = startAngle + angle;
+    const largeArc = angle > Math.PI ? 1 : 0;
+
+    const x1outer = cx + outerR * Math.cos(startAngle);
+    const y1outer = cy + outerR * Math.sin(startAngle);
+    const x2outer = cx + outerR * Math.cos(endAngle);
+    const y2outer = cy + outerR * Math.sin(endAngle);
+    const x1inner = cx + innerR * Math.cos(endAngle);
+    const y1inner = cy + innerR * Math.sin(endAngle);
+    const x2inner = cx + innerR * Math.cos(startAngle);
+    const y2inner = cy + innerR * Math.sin(startAngle);
+
+    const path = [
+      `M ${x1outer} ${y1outer}`,
+      `A ${outerR} ${outerR} 0 ${largeArc} 1 ${x2outer} ${y2outer}`,
+      `L ${x1inner} ${y1inner}`,
+      `A ${innerR} ${innerR} 0 ${largeArc} 0 ${x2inner} ${y2inner}`,
+      "Z",
+    ].join(" ");
+
+    const seg = { path, pct, entry, index: i };
+    startAngle = endAngle;
+    return seg;
+  });
 
   return (
     <div style={STYLE.card} data-testid="tag-chart">
       <div style={STYLE.cardTitle}>Spending by Tag</div>
-      {data.length === 0 ? (
-        <div style={{ color: "#888" }}>No data</div>
-      ) : (
-        <svg
-          width="100%"
-          height={chartHeight}
-          viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-          role="img"
-          aria-label="Spending by tag chart"
-        >
-          {data.map((entry, i) => {
-            const barWidth = (entry.total / maxTotal) * (chartWidth - 120);
-            const y = i * (barHeight + gap);
-            const color = TAG_COLORS[i % TAG_COLORS.length];
-            const grandTotal = data.reduce((s, d) => s + d.total, 0);
-            const pct = grandTotal > 0 ? Math.round((entry.total / grandTotal) * 100) : 0;
-            return (
-              <g key={entry.tagName}>
-                <rect x={0} y={y} width={Math.max(barWidth, 2)} height={barHeight} rx={4} fill={color} />
-                <text x={Math.max(barWidth, 2) + 6} y={y + barHeight / 2 + 5} fill="#E0E0E0" fontSize="12">
-                  {entry.tagName} {pct}%
-                </text>
-              </g>
-            );
-          })}
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Spending by tag doughnut chart">
+          {segments.map((seg, i) => (
+            <path
+              key={seg.entry.tagName}
+              d={seg.path}
+              fill={TAG_COLORS[i % TAG_COLORS.length]}
+              stroke="#1E1E1E"
+              strokeWidth="1"
+              style={{ cursor: "pointer", opacity: activeIndex !== null && activeIndex !== i ? 0.5 : 1 }}
+              onClick={() => setActiveIndex(activeIndex === i ? null : i)}
+            />
+          ))}
+          {activeIndex !== null && (
+            <>
+              <text x={cx} y={cy - 6} textAnchor="middle" fill="#FFFFFF" fontSize="14" fontWeight="bold">
+                {formatAmount(data[activeIndex].total)}
+              </text>
+              <text x={cx} y={cy + 12} textAnchor="middle" fill="#B0B0B0" fontSize="11">
+                {Math.round(segments[activeIndex].pct * 100)}%
+              </text>
+            </>
+          )}
         </svg>
-      )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {data.map((entry, i) => (
+            <div key={entry.tagName} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.8em" }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: TAG_COLORS[i % TAG_COLORS.length], flexShrink: 0 }} />
+              <span style={{ color: "#E0E0E0" }}>{entry.tagName}</span>
+              <span style={{ color: "#888" }}>{Math.round((grandTotal > 0 ? entry.total / grandTotal : 0) * 100)}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };
 
+// -- Monthly trend line chart ------------------------------------------------
+
 interface MonthlyTrendChartProps {
-  data: SpendingByMonth[];
+  expenseData: SpendingByMonth[];
+  incomeData: SpendingByMonth[];
 }
 
-const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({ data }) => {
-  const maxTotal = data.length > 0 ? Math.max(...data.map((d) => d.total)) : 1;
-  const chartWidth = 300;
-  const chartHeight = 160;
-  const barAreaHeight = chartHeight - 24;
-  const barWidth = data.length > 0 ? Math.min(40, (chartWidth - 20) / data.length - 4) : 40;
+const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({ expenseData, incomeData }) => {
+  const allMonths = [...new Set([...expenseData.map(d => d.month), ...incomeData.map(d => d.month)])].sort();
 
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  if (allMonths.length === 0) {
+    return (
+      <div style={STYLE.card} data-testid="monthly-chart">
+        <div style={STYLE.cardTitle}>Monthly Trend</div>
+        <div style={{ color: "#888" }}>No data</div>
+      </div>
+    );
+  }
+
+  const expenseMap = new Map(expenseData.map(d => [d.month, d.total]));
+  const incomeMap = new Map(incomeData.map(d => [d.month, d.total]));
+
+  const expenseValues = allMonths.map(m => expenseMap.get(m) ?? 0);
+  const incomeValues = allMonths.map(m => incomeMap.get(m) ?? 0);
+  const maxVal = Math.max(...expenseValues, ...incomeValues, 1);
+
+  const chartWidth = 300;
+  const chartHeight = 180;
+  const padLeft = 10;
+  const padRight = 10;
+  const padTop = 10;
+  const padBottom = 30;
+  const plotWidth = chartWidth - padLeft - padRight;
+  const plotHeight = chartHeight - padTop - padBottom;
+
+  const getX = (i: number) => padLeft + (allMonths.length > 1 ? (i / (allMonths.length - 1)) * plotWidth : plotWidth / 2);
+  const getY = (val: number) => padTop + plotHeight - (val / maxVal) * plotHeight;
+
+  const buildLine = (values: number[]) => {
+    if (values.length === 0) return "";
+    return values.map((v, i) => `${i === 0 ? "M" : "L"} ${getX(i)} ${getY(v)}`).join(" ");
+  };
+
+  const formatMonthLabel = (month: string) => {
+    const monthNum = parseInt(month.slice(5), 10);
+    return MONTH_NAMES[monthNum - 1] ?? month.slice(5);
+  };
 
   return (
     <div style={STYLE.card} data-testid="monthly-chart">
       <div style={STYLE.cardTitle}>Monthly Trend</div>
-      {data.length === 0 ? (
-        <div style={{ color: "#888" }}>No data</div>
-      ) : (
-        <svg
-          width="100%"
-          height={chartHeight}
-          viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-          role="img"
-          aria-label="Monthly trend chart"
-        >
-          {data.map((entry, i) => {
-            const barH = maxTotal > 0 ? (entry.total / maxTotal) * barAreaHeight : 0;
-            const x = 10 + i * ((chartWidth - 20) / data.length) + 2;
-            const y = barAreaHeight - barH;
-            const fill = entry.month === currentMonth ? CURRENT_MONTH_COLOR : OTHER_MONTH_COLOR;
-            const shortLabel = entry.month.slice(5);
-            return (
-              <g key={entry.month}>
-                <rect x={x} y={y} width={barWidth} height={Math.max(barH, 2)} rx={3} fill={fill} />
-                <text
-                  x={x + barWidth / 2}
-                  y={chartHeight - 4}
-                  fill="#B0B0B0"
-                  fontSize="10"
-                  textAnchor="middle"
-                >
-                  {shortLabel}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      )}
+      <svg width="100%" height={chartHeight} viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="Monthly trend chart">
+        <path d={buildLine(expenseValues)} fill="none" stroke="#FF6B6B" strokeWidth="2" />
+        <path d={buildLine(incomeValues)} fill="none" stroke="#4CAF50" strokeWidth="2" />
+        {expenseValues.map((v, i) => (
+          <circle key={`exp-${i}`} cx={getX(i)} cy={getY(v)} r={3} fill="#FF6B6B" />
+        ))}
+        {incomeValues.map((v, i) => (
+          <circle key={`inc-${i}`} cx={getX(i)} cy={getY(v)} r={3} fill="#4CAF50" />
+        ))}
+        {allMonths.map((month, i) => (
+          <text key={month} x={getX(i)} y={chartHeight - 4} fill="#B0B0B0" fontSize="10" textAnchor="middle">
+            {formatMonthLabel(month)}
+          </text>
+        ))}
+      </svg>
+      <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.8em" }}>
+          <span style={{ width: 12, height: 3, background: "#FF6B6B", borderRadius: 1 }} />
+          <span style={{ color: "#B0B0B0" }}>Expenses</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.8em" }}>
+          <span style={{ width: 12, height: 3, background: "#4CAF50", borderRadius: 1 }} />
+          <span style={{ color: "#B0B0B0" }}>Income</span>
+        </div>
+      </div>
     </div>
   );
 };
+
+// -- Top vendors card --------------------------------------------------------
 
 interface TopVendorsCardProps {
   data: SpendingByVendor[];
@@ -312,6 +482,8 @@ const TopVendorsCard: React.FC<TopVendorsCardProps> = ({ data }) => (
     )}
   </div>
 );
+
+// -- Untagged badge ----------------------------------------------------------
 
 interface UntaggedBadgeProps {
   count: number;
@@ -344,14 +516,19 @@ const DashboardPageContent: React.FC<DashboardPageContentProps> = ({ db }) => {
   const navigate = useNavigate();
   const {
     summary,
+    incomeSummary,
     byTag,
     byMonth,
+    incomeByMonth,
     byVendor,
     untaggedCount,
     period,
     setPeriod,
     loading,
     refresh,
+    availableTags,
+    selectedTagIds,
+    setSelectedTagIds,
   } = useDashboard(db);
 
   useEffect(() => {
@@ -366,6 +543,8 @@ const DashboardPageContent: React.FC<DashboardPageContentProps> = ({ db }) => {
       </div>
     );
   }
+
+  const avgPerDay = computeAvgPerDay(summary.total, period);
 
   return (
     <>
@@ -382,15 +561,22 @@ const DashboardPageContent: React.FC<DashboardPageContentProps> = ({ db }) => {
       </div>
 
       <HeroCard
-        total={summary.total}
-        count={summary.count}
-        avgPerTransaction={summary.avgPerTransaction}
+        expenseTotal={summary.total}
+        incomeTotal={incomeSummary.total}
+        avgPerDay={avgPerDay}
+        periodLabel={PERIOD_LABELS[period]}
       />
 
       <PeriodPills current={period} onChange={setPeriod} />
 
-      <TagBarChart data={byTag} />
-      <MonthlyTrendChart data={byMonth} />
+      <TagFilterChips
+        availableTags={availableTags}
+        selectedTagIds={selectedTagIds}
+        onChangeSelectedTagIds={setSelectedTagIds}
+      />
+
+      <TagDoughnutChart data={byTag} />
+      <MonthlyTrendChart expenseData={byMonth} incomeData={incomeByMonth} />
       <TopVendorsCard data={byVendor} />
       <UntaggedBadge count={untaggedCount} onClassify={() => navigate("/?filter=untagged")} />
     </>

@@ -10,7 +10,7 @@
  * - Transaction cards with bold title, body, amount+currency (red expense /
  *   green income), timestamp, and tags line.
  * - Card backgrounds: #2A2A1A (untagged) / #1A2A1A (tagged).
- * - Swipe-left on a card reveals a red Delete button → confirmation → soft-delete.
+ * - Swipe-right on a card reveals a red Delete button → confirmation → soft-delete.
  * - Tapping a card navigates to /edit/:id.
  * - Loading spinner while data loads.
  * - Empty-state message when no transactions exist.
@@ -35,6 +35,7 @@ import {
   getTransactionsByTagFilter,
 } from "../data/TransactionRepository";
 import type { TagWithCount } from "../data/TransactionRepository";
+import ToggleSwitch from "./ToggleSwitch";
 
 // ---------------------------------------------------------------------------
 // Style constants
@@ -64,8 +65,8 @@ interface TransactionCardProps {
 /**
  * A single transaction list item.
  *
- * Swipe left (>50 px horizontal, <30 px vertical) to reveal the Delete
- * button; swipe right to dismiss it.
+ * Swipe right (>50 px horizontal, <30 px vertical) to reveal the Delete
+ * button; swipe left to dismiss it.
  */
 const TransactionCard: React.FC<TransactionCardProps> = ({
   transaction,
@@ -111,11 +112,11 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
     if (!touch) return;
     const dx = touch.clientX - touchStartX.current;
     const dy = Math.abs(touch.clientY - touchStartY.current);
-    if (dx < -50 && dy < 30) {
-      // Swipe left — reveal Delete button.
+    if (dx > 50 && dy < 30) {
+      // Swipe right — reveal Delete button.
       setSwiped(true);
-    } else if (dx > 20) {
-      // Swipe right — hide Delete button.
+    } else if (dx < -20) {
+      // Swipe left — hide Delete button.
       setSwiped(false);
     }
   };
@@ -149,7 +150,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
         tabIndex={0}
         aria-label={`Transaction: ${transaction.notificationTitle ?? ""}`}
         style={{
-          transform: swiped ? "translateX(-80px)" : "translateX(0)",
+          transform: swiped ? "translateX(80px)" : "translateX(0)",
           transition: "transform 0.2s ease",
           background,
           padding: "12px 16px",
@@ -187,12 +188,12 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
         <div style={{ fontSize: "0.85em" }}>{tagLine}</div>
       </div>
 
-      {/* Swipe-left Delete button (revealed after swipe) */}
+      {/* Swipe-right Delete button (revealed after swipe) */}
       {swiped && (
         <button
           style={{
             position: "absolute",
-            right: 0,
+            left: 0,
             top: 0,
             bottom: 0,
             width: 80,
@@ -201,7 +202,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
             border: "none",
             fontWeight: "bold",
             cursor: "pointer",
-            borderRadius: "0 8px 8px 0",
+            borderRadius: "8px 0 0 8px",
           }}
           onClick={handleDeleteClick}
           aria-label="Delete transaction"
@@ -227,7 +228,8 @@ interface AddTransactionModalProps {
     description: string,
     amount?: number,
     currency?: string,
-    isCash?: boolean
+    isCash?: boolean,
+    isIncome?: boolean
   ) => Promise<void>;
   /** Called when the modal should close (Cancel or backdrop click). */
   onClose: () => void;
@@ -245,6 +247,7 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("");
   const [isCash, setIsCash] = useState(false);
+  const [isIncome, setIsIncome] = useState(false);
 
   const handleSubmit = async (
     e: React.FormEvent<HTMLFormElement>
@@ -258,7 +261,8 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         ? numericAmount
         : undefined,
       currency !== "" ? currency : undefined,
-      isCash
+      isCash,
+      isIncome
     );
     onClose();
   };
@@ -331,14 +335,20 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           aria-label="Currency"
           style={{ background: "#2A2A2A", color: "#E0E0E0", border: "1px solid #444", borderRadius: 6, padding: "8px 12px" }}
         />
-        <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#B0B0B0" }}>
-          <input
-            type="checkbox"
-            checked={isCash}
-            onChange={(e) => setIsCash(e.target.checked)}
-          />
-          Cash transaction
-        </label>
+        <ToggleSwitch
+          checked={isCash}
+          onChange={setIsCash}
+          label="Cash transaction"
+          ariaLabel="Cash transaction"
+          testId="toggle-add-cash"
+        />
+        <ToggleSwitch
+          checked={isIncome}
+          onChange={setIsIncome}
+          label="Income"
+          ariaLabel="Income"
+          testId="toggle-add-income"
+        />
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button type="button" onClick={onClose} style={{ background: "#333", color: "#E0E0E0", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer" }}>
@@ -483,7 +493,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ db, onImported, onClose }) =>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".json,.csv"
+            accept=".json,.csv,application/json,text/csv,text/comma-separated-values,text/plain"
             onChange={handleFileChange}
             style={{ display: "none" }}
             data-testid="import-file-input"
@@ -671,7 +681,7 @@ const RevolutImportModal: React.FC<RevolutImportModalProps> = ({ db, onImported,
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv"
+            accept=".csv,text/csv,text/comma-separated-values,text/plain"
             onChange={handleFileChange}
             style={{ display: "none" }}
             data-testid="revolut-file-input"
@@ -1112,23 +1122,15 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
       )}
 
       {/* Show deleted toggle */}
-      <label
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 12,
-        }}
-      >
-        <input
-          type="checkbox"
-          role="switch"
+      <div style={{ marginBottom: 12 }}>
+        <ToggleSwitch
           checked={showDeleted}
-          onChange={(e) => setShowDeleted(e.target.checked)}
-          aria-label="Show deleted entries"
+          onChange={setShowDeleted}
+          label="Show deleted entries"
+          ariaLabel="Show deleted entries"
+          testId="toggle-show-deleted"
         />
-        Show deleted entries
-      </label>
+      </div>
 
       {/* Loading spinner */}
       {loading && (

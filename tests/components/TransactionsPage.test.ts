@@ -256,8 +256,8 @@ describe("TransactionsPage — show deleted toggle", () => {
 
     const toggle = screen.getByRole("switch", {
       name: /show deleted entries/i,
-    }) as HTMLInputElement;
-    expect(toggle.checked).toBe(false);
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
   });
 
   it("can be toggled on", async () => {
@@ -267,13 +267,13 @@ describe("TransactionsPage — show deleted toggle", () => {
 
     const toggle = screen.getByRole("switch", {
       name: /show deleted entries/i,
-    }) as HTMLInputElement;
+    });
 
     await act(async () => {
       fireEvent.click(toggle);
     });
 
-    expect(toggle.checked).toBe(true);
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
   });
 });
 
@@ -454,8 +454,8 @@ describe("TransactionsPage — amount colours", () => {
 // Swipe to delete
 // ---------------------------------------------------------------------------
 
-describe("TransactionsPage — swipe-left delete", () => {
-  it("reveals Delete button after swipe-left gesture", async () => {
+describe("TransactionsPage — swipe-right delete", () => {
+  it("reveals Delete button after swipe-right gesture", async () => {
     insertTx({ title: "Swipe Me" });
 
     await act(async () => {
@@ -470,13 +470,13 @@ describe("TransactionsPage — swipe-left delete", () => {
       name: /Transaction: Swipe Me/,
     });
 
-    // Simulate swipe-left: touchstart at x=200, touchend at x=100.
+    // Simulate swipe-right: touchstart at x=100, touchend at x=200.
     act(() => {
       fireEvent.touchStart(cardFace, {
-        touches: [{ clientX: 200, clientY: 10 }],
+        touches: [{ clientX: 100, clientY: 10 }],
       });
       fireEvent.touchEnd(cardFace, {
-        changedTouches: [{ clientX: 100, clientY: 10 }],
+        changedTouches: [{ clientX: 200, clientY: 10 }],
       });
     });
 
@@ -505,10 +505,10 @@ describe("TransactionsPage — swipe-left delete", () => {
 
     act(() => {
       fireEvent.touchStart(cardFace, {
-        touches: [{ clientX: 200, clientY: 10 }],
+        touches: [{ clientX: 100, clientY: 10 }],
       });
       fireEvent.touchEnd(cardFace, {
-        changedTouches: [{ clientX: 100, clientY: 10 }],
+        changedTouches: [{ clientX: 200, clientY: 10 }],
       });
     });
 
@@ -844,5 +844,191 @@ describe("TransactionsPage — test button removed", () => {
     });
 
     expect(screen.queryByRole("button", { name: /test notification/i })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug 4: Swipe delete direction — right-to-reveal, left-to-dismiss
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — swipe direction correctness", () => {
+  it("does NOT reveal Delete on swipe-left (dx < -50)", async () => {
+    insertTx({ title: "No Left Reveal" });
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    const cardFace = screen.getByRole("button", {
+      name: /Transaction: No Left Reveal/,
+    });
+
+    // Simulate swipe-left: touchstart at x=200, touchend at x=100 (dx = -100).
+    act(() => {
+      fireEvent.touchStart(cardFace, {
+        touches: [{ clientX: 200, clientY: 10 }],
+      });
+      fireEvent.touchEnd(cardFace, {
+        changedTouches: [{ clientX: 100, clientY: 10 }],
+      });
+    });
+
+    // Delete button should NOT appear.
+    expect(
+      screen.queryByRole("button", { name: /delete transaction/i })
+    ).toBeNull();
+  });
+
+  it("dismisses Delete on swipe-left after swiping right to reveal", async () => {
+    insertTx({ title: "Dismiss Left" });
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    const cardFace = screen.getByRole("button", {
+      name: /Transaction: Dismiss Left/,
+    });
+
+    // Swipe right to reveal.
+    act(() => {
+      fireEvent.touchStart(cardFace, {
+        touches: [{ clientX: 100, clientY: 10 }],
+      });
+      fireEvent.touchEnd(cardFace, {
+        changedTouches: [{ clientX: 200, clientY: 10 }],
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: /delete transaction/i })
+      ).toBeTruthy();
+    });
+
+    // Swipe left to dismiss (dx = -30, below -20 threshold).
+    act(() => {
+      fireEvent.touchStart(cardFace, {
+        touches: [{ clientX: 200, clientY: 10 }],
+      });
+      fireEvent.touchEnd(cardFace, {
+        changedTouches: [{ clientX: 160, clientY: 10 }],
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: /delete transaction/i })
+      ).toBeNull();
+    });
+  });
+
+  it("slides card rightward (translateX 80px) when swiped", async () => {
+    insertTx({ title: "Slide Right" });
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    const cardFace = screen.getByRole("button", {
+      name: /Transaction: Slide Right/,
+    }) as HTMLElement;
+
+    // Swipe right to reveal.
+    act(() => {
+      fireEvent.touchStart(cardFace, {
+        touches: [{ clientX: 50, clientY: 10 }],
+      });
+      fireEvent.touchEnd(cardFace, {
+        changedTouches: [{ clientX: 200, clientY: 10 }],
+      });
+    });
+
+    await waitFor(() => {
+      expect(cardFace.style.transform).toBe("translateX(80px)");
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug 5: JSON/CSV import accept attribute includes MIME types
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — import file accept attribute", () => {
+  it("accepts JSON/CSV MIME types in addition to extensions", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^import$/i }));
+    });
+
+    const input = screen.getByTestId("import-file-input") as HTMLInputElement;
+    expect(input.accept).toContain(".json");
+    expect(input.accept).toContain(".csv");
+    expect(input.accept).toContain("application/json");
+    expect(input.accept).toContain("text/csv");
+    expect(input.accept).toContain("text/comma-separated-values");
+    expect(input.accept).toContain("text/plain");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug 6: Revolut CSV import accept attribute includes MIME types
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — Revolut import file accept attribute", () => {
+  it("accepts CSV MIME types in addition to .csv extension", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /revolut import/i }));
+    });
+
+    const input = screen.getByTestId("revolut-file-input") as HTMLInputElement;
+    expect(input.accept).toContain(".csv");
+    expect(input.accept).toContain("text/csv");
+    expect(input.accept).toContain("text/comma-separated-values");
+    expect(input.accept).toContain("text/plain");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug 7: Income toggle in Add Transaction modal
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — add transaction income toggle", () => {
+  it("renders an Income toggle in the Add Transaction modal", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    expect(screen.getByRole("dialog", { name: /add transaction/i })).toBeTruthy();
+    expect(screen.getByText("Income")).toBeTruthy();
+
+    // The dialog should contain at least 2 toggle switches (Cash + Income)
+    const toggles = screen.getByRole("dialog", { name: /add transaction/i })
+      .querySelectorAll('[role="switch"]');
+    expect(toggles.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("Income toggle is unchecked by default", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    const incomeToggle = screen.getByTestId("toggle-add-income");
+    expect(incomeToggle.getAttribute("aria-checked")).toBe("false");
   });
 });

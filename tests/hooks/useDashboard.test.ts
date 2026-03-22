@@ -79,6 +79,26 @@ function insertExpense(
   return tx.id;
 }
 
+function insertIncome(
+  database: Database,
+  overrides: Partial<{
+    title: string;
+    amount: number;
+    receivedAt: string;
+  }> = {}
+): number {
+  const tx = addTransaction(database, {
+    ...createTransaction({
+      receivedAt: overrides.receivedAt ?? new Date().toISOString(),
+    }),
+    notificationTitle: overrides.title ?? "Employer",
+    isIncome: true,
+    amount: overrides.amount ?? 5000,
+    currency: "HUF",
+  });
+  return tx.id;
+}
+
 // ---------------------------------------------------------------------------
 // Initial state
 // ---------------------------------------------------------------------------
@@ -96,6 +116,31 @@ describe("initial state", () => {
     const { result } = renderHook(() => useDashboard(db));
 
     expect(result.current.period).toBe("month");
+  });
+
+  it("starts with empty income summary", () => {
+    const { result } = renderHook(() => useDashboard(db));
+
+    expect(result.current.incomeSummary.total).toBe(0);
+    expect(result.current.incomeSummary.count).toBe(0);
+  });
+
+  it("starts with empty selectedTagIds", () => {
+    const { result } = renderHook(() => useDashboard(db));
+
+    expect(result.current.selectedTagIds).toEqual([]);
+  });
+
+  it("starts with empty availableTags", () => {
+    const { result } = renderHook(() => useDashboard(db));
+
+    expect(result.current.availableTags).toEqual([]);
+  });
+
+  it("starts with empty incomeByMonth", () => {
+    const { result } = renderHook(() => useDashboard(db));
+
+    expect(result.current.incomeByMonth).toEqual([]);
   });
 });
 
@@ -115,6 +160,18 @@ describe("refresh", () => {
     expect(result.current.loading).toBe(false);
     expect(result.current.summary.total).toBe(8000);
     expect(result.current.summary.count).toBe(2);
+  });
+
+  it("loads income summary after refresh", () => {
+    insertIncome(db, { amount: 10000 });
+    insertIncome(db, { amount: 5000 });
+
+    const { result } = renderHook(() => useDashboard(db));
+
+    act(() => result.current.refresh());
+
+    expect(result.current.incomeSummary.total).toBe(15000);
+    expect(result.current.incomeSummary.count).toBe(2);
   });
 
   it("loads spending by vendor", () => {
@@ -163,6 +220,29 @@ describe("refresh", () => {
 
     expect(result.current.byMonth.length).toBeGreaterThanOrEqual(0);
   });
+
+  it("loads income by month", () => {
+    insertIncome(db, { amount: 10000 });
+
+    const { result } = renderHook(() => useDashboard(db));
+
+    act(() => result.current.refresh());
+
+    expect(result.current.incomeByMonth.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it("loads available tags after refresh", () => {
+    const txId = insertExpense(db, { amount: 5000 });
+    const tag = addTag(db, "food");
+    addTagToTransaction(db, txId, tag.id);
+
+    const { result } = renderHook(() => useDashboard(db));
+
+    act(() => result.current.refresh());
+
+    expect(result.current.availableTags.length).toBe(1);
+    expect(result.current.availableTags[0].tagName).toBe("food");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -201,5 +281,53 @@ describe("setPeriod", () => {
 
     expect(result.current.period).toBe("month");
     expect(result.current.loading).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tag filter (Bug 10)
+// ---------------------------------------------------------------------------
+
+describe("setSelectedTagIds", () => {
+  it("updates selectedTagIds state", () => {
+    const { result } = renderHook(() => useDashboard(db));
+
+    act(() => result.current.setSelectedTagIds([1, 2]));
+
+    expect(result.current.selectedTagIds).toEqual([1, 2]);
+  });
+
+  it("reloads data when tag filter changes", () => {
+    const txId = insertExpense(db, { amount: 5000 });
+    const tag = addTag(db, "food");
+    addTagToTransaction(db, txId, tag.id);
+    insertExpense(db, { amount: 3000 }); // untagged
+
+    const { result } = renderHook(() => useDashboard(db));
+
+    act(() => result.current.refresh());
+    expect(result.current.summary.total).toBe(8000);
+
+    // Filter to only "food" tag
+    act(() => result.current.setSelectedTagIds([tag.id]));
+
+    expect(result.current.summary.total).toBe(5000);
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("clears tag filter and shows all data", () => {
+    const txId = insertExpense(db, { amount: 5000 });
+    const tag = addTag(db, "food");
+    addTagToTransaction(db, txId, tag.id);
+    insertExpense(db, { amount: 3000 });
+
+    const { result } = renderHook(() => useDashboard(db));
+
+    act(() => result.current.refresh());
+    act(() => result.current.setSelectedTagIds([tag.id]));
+    expect(result.current.summary.total).toBe(5000);
+
+    act(() => result.current.setSelectedTagIds([]));
+    expect(result.current.summary.total).toBe(8000);
   });
 });

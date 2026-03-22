@@ -113,6 +113,25 @@ function insertExpense(
   return tx.id;
 }
 
+function insertIncome(
+  overrides: Partial<{
+    title: string;
+    amount: number;
+    receivedAt: string;
+  }> = {}
+): number {
+  const tx = addTransaction(db, {
+    ...createTransaction({
+      receivedAt: overrides.receivedAt ?? new Date().toISOString(),
+    }),
+    notificationTitle: overrides.title ?? "Employer",
+    isIncome: true,
+    amount: overrides.amount ?? 5000,
+    currency: "HUF",
+  });
+  return tx.id;
+}
+
 // ---------------------------------------------------------------------------
 // Core UI elements
 // ---------------------------------------------------------------------------
@@ -140,11 +159,11 @@ describe("core UI elements", () => {
     );
   });
 
-  it("renders the hero total", async () => {
+  it("renders the hero expenses element", async () => {
     insertExpense({ amount: 5000 });
     renderPage();
     await waitFor(() =>
-      expect(screen.getByTestId("hero-total")).toBeTruthy()
+      expect(screen.getByTestId("hero-expenses")).toBeTruthy()
     );
   });
 
@@ -178,27 +197,54 @@ describe("core UI elements", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Summary card data
+// Hero card data (Bug 9)
 // ---------------------------------------------------------------------------
 
-describe("summary card", () => {
-  it("displays spending total", async () => {
+describe("hero card", () => {
+  it("displays expense total in hero-expenses", async () => {
     insertExpense({ amount: 5000 });
     insertExpense({ amount: 3000 });
     renderPage();
     await waitFor(() => {
-      const heroTotal = screen.getByTestId("hero-total");
-      expect(heroTotal.textContent).toContain("8");
+      const heroExpenses = screen.getByTestId("hero-expenses");
+      expect(heroExpenses.textContent).toContain("8");
     });
   });
 
-  it("displays transaction count", async () => {
-    insertExpense({ amount: 1000 });
-    insertExpense({ amount: 2000 });
+  it("displays income total in hero-income", async () => {
+    insertIncome({ amount: 10000 });
+    renderPage();
+    await waitFor(() => {
+      const heroIncome = screen.getByTestId("hero-income");
+      expect(heroIncome.textContent).toContain("10");
+    });
+  });
+
+  it("displays net balance in hero-net", async () => {
+    insertExpense({ amount: 3000 });
+    insertIncome({ amount: 5000 });
+    renderPage();
+    await waitFor(() => {
+      const heroNet = screen.getByTestId("hero-net");
+      expect(heroNet.textContent).toContain("Net:");
+      expect(heroNet.textContent).toContain("2");
+    });
+  });
+
+  it("displays avg spent/day in hero-avg-day", async () => {
+    insertExpense({ amount: 3000 });
+    renderPage();
+    await waitFor(() => {
+      const heroAvg = screen.getByTestId("hero-avg-day");
+      expect(heroAvg.textContent).toContain("Avg spent/day:");
+    });
+  });
+
+  it("displays the period label", async () => {
     renderPage();
     await waitFor(() => {
       const card = screen.getByTestId("hero-card");
-      expect(card.textContent).toContain("2 transactions");
+      expect(card.textContent).toContain("This Month");
     });
   });
 });
@@ -245,6 +291,86 @@ describe("period pills", () => {
 
     await waitFor(() =>
       expect(screen.getByTestId("hero-card")).toBeTruthy()
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tag filter (Bug 10)
+// ---------------------------------------------------------------------------
+
+describe("tag filter", () => {
+  it("shows tag filter chips when tags exist", async () => {
+    const txId = insertExpense({ amount: 5000 });
+    const tag = addTag(db, "groceries");
+    addTagToTransaction(db, txId, tag.id);
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-filter")).toBeTruthy()
+    );
+  });
+
+  it("does not show tag filter when no tags exist", async () => {
+    insertExpense({ amount: 5000 });
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByTestId("hero-card")).toBeTruthy()
+    );
+    expect(screen.queryByTestId("tag-filter")).toBeNull();
+  });
+
+  it("shows clear button when a tag is selected", async () => {
+    const txId = insertExpense({ amount: 5000 });
+    const tag = addTag(db, "groceries");
+    addTagToTransaction(db, txId, tag.id);
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-filter")).toBeTruthy()
+    );
+
+    // Click on the tag chip
+        // Click the tag chip within the tag-filter container
+    const tagFilterContainer = screen.getByTestId("tag-filter");
+    const chipButton = tagFilterContainer.querySelector("button");
+    act(() => {
+      fireEvent.click(chipButton!);
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-filter-clear")).toBeTruthy()
+    );
+  });
+
+  it("clears tag selection when clear button is clicked", async () => {
+    const txId = insertExpense({ amount: 5000 });
+    const tag = addTag(db, "groceries");
+    addTagToTransaction(db, txId, tag.id);
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-filter")).toBeTruthy()
+    );
+
+    // Select a tag
+        // Click the tag chip within the tag-filter container
+    const tagFilterContainer = screen.getByTestId("tag-filter");
+    const chipButton = tagFilterContainer.querySelector("button");
+    act(() => {
+      fireEvent.click(chipButton!);
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-filter-clear")).toBeTruthy()
+    );
+
+    // Clear selection
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-filter-clear"));
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("tag-filter-clear")).toBeNull()
     );
   });
 });
@@ -323,7 +449,7 @@ describe("no db prop", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Spending by tag chart
+// Spending by tag chart (Bug 11 - doughnut)
 // ---------------------------------------------------------------------------
 
 describe("tag chart", () => {
@@ -355,3 +481,4 @@ describe("vendors card", () => {
     });
   });
 });
+

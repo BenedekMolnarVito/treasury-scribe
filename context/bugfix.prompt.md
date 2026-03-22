@@ -1,0 +1,23 @@
+# Bugs to fix
+
+- White border on dark background. The app's dark mode has a white border around the edges of the screen, which is visually jarring and inconsistent with the overall design. This issue needs to be addressed to improve the user experience in dark mode. See screenshot for reference: ![white-border](context\white-border.png)
+- Split result calculates from the original amount, and NOT the updated amount
+-> 1. 100 updated to 1000 2. then split 1/2 --> 3. result = 50 and 50 INSTEAD of 500 and 500.
+Make sure that the split result is calculated from the updated amount, not the original amount. 
+- Home Screen icon design is NOT changed to the new one! The app's home screen icon has not been updated to the new design. This issue needs to be resolved to ensure consistency across the app and improve brand recognition. See image for reference: ![home-screen-icon](context\home-screen-icon.png) 
+- Deleting swipe modify: From left to right! Currently, the swipe to delete functionality is only available from right to left. This issue needs to be fixed to allow users to delete items by swiping from left to right INSTEAD the current behavior.
+- JSON import from previously exported data: cannot select from google drive, it is greyed out. I exported a JSON file, and when I try to import it back into the app, the option to select the file from Google Drive is greyed out. 
+- Revolut CSV import greyed out in Google Drive too. Similar to the JSON import issue, when trying to import the Revolut CSV file from Google Drive, the option is also greyed out. This needs to be fixed to allow users to import their data from Google Drive seamlessly. The template is still the same as before, but the import functionality is not working as expected. See CSV for reference: ![revolut_import_template](context\revolut_import_template.csv)
+- When adding a transaction manually, the "Income" toggle is not shown.
+- ALL toggle buttons should be modern swipe-toggles instead of the current checkboxes. Check all screens for toggle buttons and replace them with swipe-toggles to improve the user interface and provide a more intuitive experience. 
+- **Dashboard**:
+  1. At the top, I want to see the total amount of expenses and income for the selected month, with a clear distinction between the two (e.g., different colors or icons), and the net balance (income minus expenses) displayed prominently. I net balance should be shown in green if it's positive and red if it's negative. The current dashboard only shows the total amount of expenses.
+  2. Avg: 198032 / txn and tranaction count fields are NOT needed, delete them. I want to see an avg spent / day instead, which is calculated by dividing the total expenses by the number of days in the selected month. If the current month is not complete, use the number of days that have passed so far.
+  3. I want to select tags to filter the transactions shown in the dashboard, and the total expenses, income, and avg spent/day should update accordingly based on the selected tags.
+  4. Spending by tag: I want a doughnut chart instead of a bar chart to visualize the distribution of expenses by tag. The chart should show the percentage of total expenses that each tag represents, and tapping over a segment should display the exact amount and percentage for that tag.
+  5. Monthly trend: Right now it shows Q3 instead of the actual months. I want to see a line chart that shows the total expenses and income for each month in the selected year. The x-axis should be labeled with the month names, and the y-axis should show the amount. Different colors should be used for expenses and income, and a legend should be included to differentiate between them.
+
+## UI Behaviour Testing
+- Do VISUAL testing for all screens and flows to ensure that the UI behaves as expected and there are no visual glitches or inconsistencies. This includes checking for proper alignment, spacing, font sizes, colors, and overall aesthetics across different devices and screen sizes. Pay special attention to the dark mode to ensure that all elements are displayed correctly without any issues like the white border mentioned earlier.
+- Use *mobile-mcp* to automate the visual testing process and catch any regressions in the UI after making changes or updates to the app. This will help maintain a high-quality user experience and ensure that all visual aspects of the app are functioning correctly.
+- Do debugging-fix-recheck iterations during the visual testing process to ensure that any identified issues are properly addressed and resolved.

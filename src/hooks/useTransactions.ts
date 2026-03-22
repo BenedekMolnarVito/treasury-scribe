@@ -75,7 +75,8 @@ export interface UseTransactionsResult {
     description: string,
     amount?: number,
     currency?: string,
-    isCash?: boolean
+    isCash?: boolean,
+    isIncome?: boolean
   ) => Promise<void>;
   /**
    * Serialize non-deleted transactions and share them.
@@ -359,7 +360,8 @@ export function useTransactions(
       description: string,
       amount?: number,
       currency?: string,
-      isCash?: boolean
+      isCash?: boolean,
+      isIncome?: boolean
     ): Promise<void> => {
       const now = new Date().toISOString();
 
@@ -371,6 +373,7 @@ export function useTransactions(
           amount: amount ?? null,
           currency: currency ?? null,
           isCash: isCash ?? false,
+          isIncome: isIncome ?? false,
           receivedAt: now,
         }),
       });

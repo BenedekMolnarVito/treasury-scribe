@@ -227,8 +227,8 @@ describe("pre-populated values", () => {
     const id = insertTx({ isCash: true });
     renderPage(id);
     await waitFor(() => {
-      const cb = screen.getByTestId("toggle-cash") as HTMLInputElement;
-      expect(cb.checked).toBe(true);
+      const cb = screen.getByTestId("toggle-cash");
+      expect(cb.getAttribute("aria-checked")).toBe("true");
     });
   });
 
@@ -236,8 +236,8 @@ describe("pre-populated values", () => {
     const id = insertTx({ isIncome: true });
     renderPage(id);
     await waitFor(() => {
-      const cb = screen.getByTestId("toggle-income") as HTMLInputElement;
-      expect(cb.checked).toBe(true);
+      const cb = screen.getByTestId("toggle-income");
+      expect(cb.getAttribute("aria-checked")).toBe("true");
     });
   });
 
