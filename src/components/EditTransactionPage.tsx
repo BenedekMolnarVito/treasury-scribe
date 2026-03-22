@@ -15,11 +15,15 @@
  * - Dark-theme styling throughout.
  */
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { Database } from "sql.js";
 import type { Tag } from "../models/Tag";
 import { useEditTransaction } from "../hooks/useEditTransaction";
+import SplitTransactionModal from "./SplitTransactionModal";
+import { splitTransaction } from "../services/SplitTransactionService";
+import type { SplitSpec } from "../services/SplitTransactionService";
+import ToggleSwitch from "./ToggleSwitch";
 
 // ---------------------------------------------------------------------------
 // Style constants (dark theme)
@@ -216,6 +220,7 @@ const EditTransactionPageContent: React.FC<
   EditTransactionPageContentProps
 > = ({ db, transactionId, onDatabaseChanged }) => {
   const navigate = useNavigate();
+  const [showSplitModal, setShowSplitModal] = useState(false);
 
   const {
     title,
@@ -275,6 +280,13 @@ const EditTransactionPageContent: React.FC<
 
   const handleSave = (): void => {
     save();
+    void navigate("/");
+  };
+
+  const handleSplit = (spec: SplitSpec): void => {
+    save();
+    splitTransaction(db, transactionId, spec);
+    if (onDatabaseChanged) onDatabaseChanged(db);
     void navigate("/");
   };
 
@@ -347,30 +359,22 @@ const EditTransactionPageContent: React.FC<
       />
 
       {/* Cash Transaction toggle */}
-      <label style={STYLE.toggleRow}>
-        <input
-          type="checkbox"
-          role="switch"
-          checked={isCash}
-          onChange={(e) => setIsCash(e.target.checked)}
-          aria-label="Cash Transaction"
-          data-testid="toggle-cash"
-        />
-        Cash Transaction
-      </label>
+      <ToggleSwitch
+        checked={isCash}
+        onChange={setIsCash}
+        label="Cash Transaction"
+        ariaLabel="Cash Transaction"
+        testId="toggle-cash"
+      />
 
       {/* Income toggle */}
-      <label style={STYLE.toggleRow}>
-        <input
-          type="checkbox"
-          role="switch"
-          checked={isIncome}
-          onChange={(e) => setIsIncome(e.target.checked)}
-          aria-label="Income"
-          data-testid="toggle-income"
-        />
-        Income
-      </label>
+      <ToggleSwitch
+        checked={isIncome}
+        onChange={setIsIncome}
+        label="Income"
+        ariaLabel="Income"
+        testId="toggle-income"
+      />
 
       {/* Current tags */}
       <p style={STYLE.sectionTitle}>Current Tags</p>
@@ -445,6 +449,32 @@ const EditTransactionPageContent: React.FC<
       >
         Add Tag
       </button>
+
+      {/* Split Transaction button */}
+      {amount != null && amount > 0 && (
+        <button
+          style={{
+            ...STYLE.actionBtn,
+            background: "#7B1FA2",
+            marginTop: "8px",
+          }}
+          onClick={() => setShowSplitModal(true)}
+          aria-label="Split Transaction"
+          data-testid="btn-split"
+        >
+          Split Transaction
+        </button>
+      )}
+
+      {/* Split Transaction Modal */}
+      {showSplitModal && amount != null && (
+        <SplitTransactionModal
+          parentAmount={amount}
+          currency={currency}
+          onSplit={handleSplit}
+          onClose={() => setShowSplitModal(false)}
+        />
+      )}
 
       {/* Save Changes button */}
       <button

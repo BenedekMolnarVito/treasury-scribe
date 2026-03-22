@@ -12,6 +12,10 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { Database } from "sql.js";
 import { initDatabase } from "../../src/data/DatabaseService";
 import {
+  addTag,
+  addTagToTransaction,
+} from "../../src/data/TagRepository";
+import {
   getAllTransactions,
   getAllTransactionsIncludingDeleted,
   getTransactionById,
@@ -23,6 +27,8 @@ import {
   existsDuplicate,
   findSoftDeletedMatch,
   findLastTransactionByTitle,
+  getActiveTagsWithCounts,
+  getTransactionsByTagFilter,
 } from "../../src/data/TransactionRepository";
 
 // ---------------------------------------------------------------------------
@@ -468,5 +474,138 @@ describe("findLastTransactionByTitle", () => {
 
     const found = findLastTransactionByTitle(db, "Revolut");
     expect(found!.id).toBe(active.id);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getActiveTagsWithCounts
+// ---------------------------------------------------------------------------
+
+describe("getActiveTagsWithCounts", () => {
+  it("returns empty array when no tags exist", () => {
+    expect(getActiveTagsWithCounts(db)).toEqual([]);
+  });
+
+  it("returns empty when tags exist but no non-deleted transactions have them", () => {
+    const tx = addTransaction(db, makeTransaction({ isDeleted: true }));
+    const tag = addTag(db, "Orphan");
+    addTagToTransaction(db, tx.id, tag.id);
+    expect(getActiveTagsWithCounts(db)).toEqual([]);
+  });
+
+  it("returns tags with correct counts", () => {
+    const tx1 = addTransaction(db, makeTransaction({ notificationTitle: "A" }));
+    const tx2 = addTransaction(db, makeTransaction({ notificationTitle: "B" }));
+    const tx3 = addTransaction(db, makeTransaction({ notificationTitle: "C" }));
+    const food = addTag(db, "Food");
+    const transport = addTag(db, "Transport");
+    addTagToTransaction(db, tx1.id, food.id);
+    addTagToTransaction(db, tx2.id, food.id);
+    addTagToTransaction(db, tx3.id, transport.id);
+
+    const result = getActiveTagsWithCounts(db);
+    expect(result).toHaveLength(2);
+    expect(result[0]!.tagName).toBe("Food");
+    expect(result[0]!.count).toBe(2);
+    expect(result[1]!.tagName).toBe("Transport");
+    expect(result[1]!.count).toBe(1);
+  });
+
+  it("excludes tags only on soft-deleted transactions", () => {
+    const tx1 = addTransaction(db, makeTransaction({ notificationTitle: "Active" }));
+    const tx2 = addTransaction(db, makeTransaction({ notificationTitle: "Deleted", isDeleted: true }));
+    const tag = addTag(db, "Food");
+    addTagToTransaction(db, tx1.id, tag.id);
+    addTagToTransaction(db, tx2.id, tag.id);
+
+    const result = getActiveTagsWithCounts(db);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.count).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getTransactionsByTagFilter
+// ---------------------------------------------------------------------------
+
+describe("getTransactionsByTagFilter", () => {
+  it("returns all non-deleted transactions when no filter is set (empty tagIds + includeUntagged)", () => {
+    addTransaction(db, makeTransaction({ notificationTitle: "A" }));
+    addTransaction(db, makeTransaction({ notificationTitle: "B" }));
+    // Both are untagged, so both match the untagged filter
+    const result = getTransactionsByTagFilter(db, [], true);
+    expect(result).toHaveLength(2);
+  });
+
+  it("returns empty when no tags selected and includeUntagged is false", () => {
+    addTransaction(db, makeTransaction({ notificationTitle: "A" }));
+    const result = getTransactionsByTagFilter(db, [], false);
+    expect(result).toHaveLength(0);
+  });
+
+  it("filters by specific tag", () => {
+    const tx1 = addTransaction(db, makeTransaction({ notificationTitle: "Food TX" }));
+    addTransaction(db, makeTransaction({ notificationTitle: "No Tag TX" }));
+    const food = addTag(db, "Food");
+    addTagToTransaction(db, tx1.id, food.id);
+
+    const result = getTransactionsByTagFilter(db, [food.id], false);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.notificationTitle).toBe("Food TX");
+  });
+
+  it("returns only untagged when includeUntagged is true and no tags selected", () => {
+    const tx1 = addTransaction(db, makeTransaction({ notificationTitle: "Tagged" }));
+    addTransaction(db, makeTransaction({ notificationTitle: "Untagged" }));
+    const food = addTag(db, "Food");
+    addTagToTransaction(db, tx1.id, food.id);
+
+    const result = getTransactionsByTagFilter(db, [], true);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.notificationTitle).toBe("Untagged");
+  });
+
+  it("combines tag filter with includeUntagged", () => {
+    const tx1 = addTransaction(db, makeTransaction({ notificationTitle: "Food TX" }));
+    addTransaction(db, makeTransaction({ notificationTitle: "Untagged TX" }));
+    const tx3 = addTransaction(db, makeTransaction({ notificationTitle: "Transport TX" }));
+    const food = addTag(db, "Food");
+    const transport = addTag(db, "Transport");
+    addTagToTransaction(db, tx1.id, food.id);
+    addTagToTransaction(db, tx3.id, transport.id);
+
+    // Filter to Food + untagged
+    const result = getTransactionsByTagFilter(db, [food.id], true);
+    expect(result).toHaveLength(2);
+    const titles = result.map((t) => t.notificationTitle);
+    expect(titles).toContain("Food TX");
+    expect(titles).toContain("Untagged TX");
+    expect(titles).not.toContain("Transport TX");
+  });
+
+  it("excludes soft-deleted transactions", () => {
+    const tx1 = addTransaction(db, makeTransaction({ notificationTitle: "Active", isDeleted: false }));
+    addTransaction(db, makeTransaction({ notificationTitle: "Deleted", isDeleted: true }));
+    const food = addTag(db, "Food");
+    addTagToTransaction(db, tx1.id, food.id);
+
+    const result = getTransactionsByTagFilter(db, [food.id], true);
+    expect(result.every((t) => !t.isDeleted)).toBe(true);
+  });
+
+  it("supports multi-tag filter", () => {
+    const tx1 = addTransaction(db, makeTransaction({ notificationTitle: "Food TX" }));
+    const tx2 = addTransaction(db, makeTransaction({ notificationTitle: "Transport TX" }));
+    addTransaction(db, makeTransaction({ notificationTitle: "Other TX" }));
+    const food = addTag(db, "Food");
+    const transport = addTag(db, "Transport");
+    addTagToTransaction(db, tx1.id, food.id);
+    addTagToTransaction(db, tx2.id, transport.id);
+
+    const result = getTransactionsByTagFilter(db, [food.id, transport.id], false);
+    expect(result).toHaveLength(2);
+    const titles = result.map((t) => t.notificationTitle);
+    expect(titles).toContain("Food TX");
+    expect(titles).toContain("Transport TX");
   });
 });

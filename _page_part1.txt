@@ -1,0 +1,31 @@
+/**
+ * TransactionsPage
+ *
+ * Root view that lists all transactions.
+ * Rendered at route '/'.
+ *
+ * Features:
+ * - Header buttons: Add Transaction, Refresh, Export, Clear All.
+ * - "Show deleted entries" toggle switch.
+ * - Collapsible tag filter section with tag chips and "Untagged" toggle.
+ * - Transaction cards with bold title, body, amount+currency (red expense /
+ *   green income), timestamp, and tags line.
+ * - Card backgrounds: #2A2A1A (untagged) / #1A2A1A (tagged).
+ * - Swipe-left on a card reveals a red Delete button → confirmation → soft-delete.
+ * - Tapping a card navigates to /edit/:id.
+ * - Loading spinner while data loads.
+ * - Empty-state message when no transactions exist.
+ * - Dark theme throughout, consistent with EditTransactionPage.
+ */
+
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+} from "react";
+import { useNavigate } from "react-router-dom";
+import type { Database } from "sql.js";
+import type { Transaction } from "../models/Transaction";
+import { useTransactions } from "../hooks/useTransactions";
+import type { ActiveTagCount } from "../hooks/useTransactions";

@@ -5,12 +5,12 @@
  * Rendered at route '/'.
  *
  * Features:
- * - Header buttons: Add Transaction, Refresh, Export, Clear All.
+ * - Header buttons: Add Transaction, Refresh, Export, Import, Clear All.
  * - "Show deleted entries" toggle switch.
  * - Transaction cards with bold title, body, amount+currency (red expense /
- *   dark-green income), timestamp, and tags line.
- * - Card backgrounds: #FFFACD (untagged) / #90EE90 (tagged).
- * - Swipe-left on a card reveals a red Delete button → confirmation → soft-delete.
+ *   green income), timestamp, and tags line.
+ * - Card backgrounds: #2A2A1A (untagged) / #1A2A1A (tagged).
+ * - Swipe-right on a card reveals a red Delete button → confirmation → soft-delete.
  * - Tapping a card navigates to /edit/:id.
  * - Loading spinner while data loads.
  * - Empty-state message when no transactions exist.
@@ -22,20 +22,32 @@ import React, {
   useRef,
   useCallback,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { Database } from "sql.js";
 import type { Transaction } from "../models/Transaction";
 import { useTransactions } from "../hooks/useTransactions";
+import { importTransactions } from "../services/ImportService";
+import type { ImportResult } from "../services/ImportService";
+import { importRevolutCsv } from "../services/RevolutImportService";
+import type { RevolutImportSummary } from "../services/RevolutImportService";
+import {
+  getActiveTagsWithCounts,
+  getTransactionsByTagFilter,
+} from "../data/TransactionRepository";
+import type { TagWithCount } from "../data/TransactionRepository";
+import ToggleSwitch from "./ToggleSwitch";
 
 // ---------------------------------------------------------------------------
 // Style constants
 // ---------------------------------------------------------------------------
 
-const BG_UNTAGGED = "#FFFACD";
-const BG_TAGGED = "#90EE90";
-const COLOR_EXPENSE = "red";
-/** Dark green for income amounts. */
-const COLOR_INCOME = "#006400";
+const BG_UNTAGGED = "#ff99009c";
+const BG_TAGGED = "#03356e";
+const COLOR_EXPENSE = "#f90e0e";
+const COLOR_INCOME = "#4CAF50";
+const COLOR_IMPORTED = "#4CAF50";
+const COLOR_SKIPPED = "#888";
+const COLOR_ERRORS = "#FFB300";
 
 // ---------------------------------------------------------------------------
 // TransactionCard
@@ -53,17 +65,20 @@ interface TransactionCardProps {
 /**
  * A single transaction list item.
  *
- * Swipe left (>50 px horizontal, <30 px vertical) to reveal the Delete
- * button; swipe right to dismiss it.
+ * Swipe right (>50 px horizontal, <30 px vertical) to reveal the Delete
+ * button; swipe left to dismiss it.
  */
 const TransactionCard: React.FC<TransactionCardProps> = ({
   transaction,
   onDelete,
   onClick,
 }) => {
-  const [swiped, setSwiped] = useState(false);
+  const SWIPE_OPEN = 80;
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const touchStartX = useRef<number>(0);
   const touchStartY = useRef<number>(0);
+  const baseOffset = useRef<number>(0);
 
   const tagCount = transaction.transactionTags.length;
   const background = tagCount === 0 ? BG_UNTAGGED : BG_TAGGED;
@@ -89,24 +104,36 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
 
   const handleTouchStart = (e: React.TouchEvent): void => {
     const touch = e.touches[0];
-    if (touch) {
-      touchStartX.current = touch.clientX;
-      touchStartY.current = touch.clientY;
-    }
+    if (!touch) return;
+    touchStartX.current = touch.clientX;
+    touchStartY.current = touch.clientY;
+    baseOffset.current = swipeOffset;
+    setIsDragging(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent): void => {
+    const touch = e.touches[0];
+    if (!touch) return;
+    const dx = touch.clientX - touchStartX.current;
+    const dy = Math.abs(touch.clientY - touchStartY.current);
+    // Ignore if predominantly vertical (allow page scroll)
+    if (dy > Math.abs(dx) && dy > 10) return;
+    const next = Math.max(0, Math.min(SWIPE_OPEN, baseOffset.current + dx));
+    setSwipeOffset(next);
   };
 
   const handleTouchEnd = (e: React.TouchEvent): void => {
     const touch = e.changedTouches[0];
     if (!touch) return;
+    setIsDragging(false);
     const dx = touch.clientX - touchStartX.current;
     const dy = Math.abs(touch.clientY - touchStartY.current);
-    if (dx < -50 && dy < 30) {
-      // Swipe left — reveal Delete button.
-      setSwiped(true);
-    } else if (dx > 20) {
-      // Swipe right — hide Delete button.
-      setSwiped(false);
-    }
+    // Compute live offset (covers the case where touchMove events weren't fired, e.g. tests)
+    const liveOffset = dy > 80
+      ? baseOffset.current
+      : Math.max(0, Math.min(SWIPE_OPEN, baseOffset.current + dx));
+    // Snap: past midpoint → open; at or before midpoint → closed
+    setSwipeOffset(liveOffset > SWIPE_OPEN / 2 ? SWIPE_OPEN : 0);
   };
 
   // -------------------------------------------------------------------------
@@ -120,7 +147,11 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   };
 
   const handleCardClick = (): void => {
-    if (!swiped) onClick(transaction.id);
+    if (swipeOffset > 0) {
+      setSwipeOffset(0);
+    } else {
+      onClick(transaction.id);
+    }
   };
 
   // -------------------------------------------------------------------------
@@ -138,14 +169,15 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
         tabIndex={0}
         aria-label={`Transaction: ${transaction.notificationTitle ?? ""}`}
         style={{
-          transform: swiped ? "translateX(-80px)" : "translateX(0)",
-          transition: "transform 0.2s ease",
+          transform: `translateX(${swipeOffset}px)`,
+          transition: isDragging ? "none" : "transform 0.15s ease",
           background,
           padding: "12px 16px",
           borderRadius: 8,
           cursor: "pointer",
         }}
         onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onClick={handleCardClick}
         onKeyDown={(e) => {
@@ -168,29 +200,36 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
         )}
 
         {/* Timestamp */}
-        <div style={{ fontSize: "0.85em", color: "#555" }}>
-          {transaction.receivedAt}
+        <div style={{ fontSize: "0.85em" }}>
+          {new Date(transaction.receivedAt).toLocaleString('hu-HU', {
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          })}
         </div>
 
         {/* Tags line */}
         <div style={{ fontSize: "0.85em" }}>{tagLine}</div>
       </div>
 
-      {/* Swipe-left Delete button (revealed after swipe) */}
-      {swiped && (
+      {/* Swipe-right Delete button (revealed progressively during swipe) */}
+      {swipeOffset > 0 && (
         <button
           style={{
             position: "absolute",
-            right: 0,
+            left: 0,
             top: 0,
             bottom: 0,
-            width: 80,
+            width: SWIPE_OPEN,
             background: "red",
             color: "white",
             border: "none",
             fontWeight: "bold",
             cursor: "pointer",
-            borderRadius: "0 8px 8px 0",
+            borderRadius: "8px 0 0 8px",
+            opacity: swipeOffset / SWIPE_OPEN,
           }}
           onClick={handleDeleteClick}
           aria-label="Delete transaction"
@@ -216,7 +255,8 @@ interface AddTransactionModalProps {
     description: string,
     amount?: number,
     currency?: string,
-    isCash?: boolean
+    isCash?: boolean,
+    isIncome?: boolean
   ) => Promise<void>;
   /** Called when the modal should close (Cancel or backdrop click). */
   onClose: () => void;
@@ -234,6 +274,7 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("");
   const [isCash, setIsCash] = useState(false);
+  const [isIncome, setIsIncome] = useState(false);
 
   const handleSubmit = async (
     e: React.FormEvent<HTMLFormElement>
@@ -247,7 +288,8 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         ? numericAmount
         : undefined,
       currency !== "" ? currency : undefined,
-      isCash
+      isCash,
+      isIncome
     );
     onClose();
   };
@@ -276,7 +318,8 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     >
       <form
         style={{
-          background: "white",
+          background: "#1E1E1E",
+          color: "#E0E0E0",
           padding: 24,
           borderRadius: 12,
           minWidth: 300,
@@ -286,7 +329,7 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         }}
         onSubmit={(e) => void handleSubmit(e)}
       >
-        <h2 style={{ margin: 0 }}>Add Transaction</h2>
+        <h2 style={{ margin: 0, color: "#FFFFFF" }}>Add Transaction</h2>
 
         <input
           placeholder="Title"
@@ -294,13 +337,14 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           onChange={(e) => setTitle(e.target.value)}
           required
           aria-label="Title"
+          style={{ background: "#2A2A2A", color: "#E0E0E0", border: "1px solid #444", borderRadius: 6, padding: "8px 12px" }}
         />
         <textarea
           placeholder="Description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          required
           aria-label="Description"
+          style={{ background: "#2A2A2A", color: "#E0E0E0", border: "1px solid #444", borderRadius: 6, padding: "8px 12px" }}
         />
         <input
           type="number"
@@ -308,27 +352,35 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           aria-label="Amount"
+          style={{ background: "#2A2A2A", color: "#E0E0E0", border: "1px solid #444", borderRadius: 6, padding: "8px 12px" }}
         />
         <input
           placeholder="Currency (e.g. EUR)"
           value={currency}
           onChange={(e) => setCurrency(e.target.value)}
           aria-label="Currency"
+          style={{ background: "#2A2A2A", color: "#E0E0E0", border: "1px solid #444", borderRadius: 6, padding: "8px 12px" }}
         />
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <input
-            type="checkbox"
-            checked={isCash}
-            onChange={(e) => setIsCash(e.target.checked)}
-          />
-          Cash transaction
-        </label>
+        <ToggleSwitch
+          checked={isCash}
+          onChange={setIsCash}
+          label="Cash transaction"
+          ariaLabel="Cash transaction"
+          testId="toggle-add-cash"
+        />
+        <ToggleSwitch
+          checked={isIncome}
+          onChange={setIsIncome}
+          label="Income"
+          ariaLabel="Income"
+          testId="toggle-add-income"
+        />
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button type="button" onClick={onClose}>
+          <button type="button" onClick={onClose} style={{ background: "#333", color: "#E0E0E0", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer" }}>
             Cancel
           </button>
-          <button type="submit">Add</button>
+          <button type="submit" style={{ background: "#1565C0", color: "#FFFFFF", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer" }}>Add</button>
         </div>
       </form>
     </div>
@@ -359,7 +411,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ onSelect, onClose }) => {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.5)",
+        background: "rgba(0,0,0,0.7)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -369,7 +421,8 @@ const ExportModal: React.FC<ExportModalProps> = ({ onSelect, onClose }) => {
     >
       <div
         style={{
-          background: "white",
+          background: "#1E1E1E",
+          color: "#E0E0E0",
           padding: 24,
           borderRadius: 12,
           minWidth: 280,
@@ -378,11 +431,480 @@ const ExportModal: React.FC<ExportModalProps> = ({ onSelect, onClose }) => {
           gap: 12,
         }}
       >
-        <h2 style={{ margin: 0 }}>Export Transactions</h2>
-        <button type="button" onClick={() => onSelect("json")}>JSON</button>
-        <button type="button" onClick={() => onSelect("csv")}>CSV</button>
-        <button type="button" onClick={onClose}>Cancel</button>
+        <h2 style={{ margin: 0, color: "#FFFFFF" }}>Export Transactions</h2>
+        <button type="button" onClick={() => onSelect("json")} style={{ background: "#1565C0", color: "#FFFFFF", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer" }}>JSON</button>
+        <button type="button" onClick={() => onSelect("csv")} style={{ background: "#1565C0", color: "#FFFFFF", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer" }}>CSV</button>
+        <button type="button" onClick={onClose} style={{ background: "#333", color: "#E0E0E0", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer" }}>Cancel</button>
       </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// ImportModal
+// ---------------------------------------------------------------------------
+
+interface ImportModalProps {
+  db: Database;
+  onImported: (result: ImportResult) => void;
+  onClose: () => void;
+}
+
+const ImportModal: React.FC<ImportModalProps> = ({ db, onImported, onClose }) => {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = e.target.files?.[0] ?? null;
+    setSelectedFile(file);
+  };
+
+  const handleImport = (): void => {
+    if (!selectedFile) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const fileContent = reader.result as string;
+        const result = importTransactions(db, fileContent);
+        onImported(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        window.alert("Import failed: " + message);
+      }
+    };
+    reader.onerror = () => {
+      window.alert("Failed to read file.");
+    };
+    reader.readAsText(selectedFile);
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Import transactions"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.7)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+      }}
+      onClick={handleBackdropClick}
+    >
+      <div
+        style={{
+          background: "#1E1E1E",
+          color: "#E0E0E0",
+          padding: 24,
+          borderRadius: 12,
+          minWidth: 280,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        <h2 style={{ margin: 0, color: "#FFFFFF" }}>Import Transactions</h2>
+        <p style={{ margin: 0, color: "#B0B0B0" }}>
+          Import from a previously exported JSON or CSV file.
+        </p>
+        <div style={{ background: "#2A2A2A", border: "1px solid #444", borderRadius: "6px", padding: 12 }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,.csv,application/json,text/csv,text/comma-separated-values,text/plain"
+            onChange={handleFileChange}
+            style={{ display: "none" }}
+            data-testid="import-file-input"
+          />
+          <button
+            type="button"
+            style={{ background: "#1565C0", color: "#FFFFFF", border: "none", borderRadius: "6px", padding: "8px 14px", fontSize: "0.9em", cursor: "pointer" }}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Choose File
+          </button>
+          {selectedFile && (
+            <span style={{ marginLeft: 8, color: "#E0E0E0" }}>
+              {selectedFile.name}
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button
+            type="button"
+            style={{ background: "#333", color: "#E0E0E0", border: "none", borderRadius: "6px", padding: "8px 14px", fontSize: "0.9em", cursor: "pointer" }}
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            style={{ background: "#1565C0", color: "#FFFFFF", border: "none", borderRadius: "6px", padding: "8px 14px", fontSize: "0.9em", cursor: "pointer" }}
+            onClick={handleImport}
+            disabled={!selectedFile}
+            aria-label="Import"
+          >
+            Import
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// ImportResultModal
+// ---------------------------------------------------------------------------
+
+interface ImportResultModalProps {
+  result: ImportResult;
+  onClose: () => void;
+}
+
+const ImportResultModal: React.FC<ImportResultModalProps> = ({
+  result,
+  onClose,
+}) => {
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Import complete"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.7)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+      }}
+      onClick={handleBackdropClick}
+    >
+      <div
+        style={{
+          background: "#1E1E1E",
+          color: "#E0E0E0",
+          padding: 24,
+          borderRadius: 12,
+          minWidth: 280,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        <h2 style={{ margin: 0, color: "#FFFFFF" }}>Import Complete ✓</h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span style={{ color: COLOR_IMPORTED }}>
+            ✅ {result.imported} transactions imported
+          </span>
+          <span style={{ color: COLOR_SKIPPED }}>
+            ⏭️ {result.skipped} duplicates skipped
+          </span>
+          {result.errors.length > 0 && (
+            <span style={{ color: COLOR_ERRORS }}>
+              ⚠️ {result.errors.length} errors
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+          <button
+            type="button"
+            style={{ background: "#1565C0", color: "#FFFFFF", border: "none", borderRadius: "6px", padding: "8px 14px", fontSize: "0.9em", cursor: "pointer" }}
+            onClick={onClose}
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// RevolutImportModal
+// ---------------------------------------------------------------------------
+
+interface RevolutImportModalProps {
+  db: Database;
+  onImported: (result: RevolutImportSummary) => void;
+  onClose: () => void;
+}
+
+const RevolutImportModal: React.FC<RevolutImportModalProps> = ({ db, onImported, onClose }) => {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    setSelectedFile(e.target.files?.[0] ?? null);
+  };
+
+  const handleImport = (): void => {
+    if (!selectedFile) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const result = importRevolutCsv(db, reader.result as string);
+        onImported(result);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        window.alert("Revolut import failed: " + message);
+      }
+    };
+    reader.onerror = () => window.alert("Failed to read file.");
+    reader.readAsText(selectedFile);
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Import Revolut data"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.7)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+      }}
+      onClick={handleBackdropClick}
+    >
+      <div
+        style={{
+          background: "#1E1E1E",
+          color: "#E0E0E0",
+          padding: 24,
+          borderRadius: 12,
+          minWidth: 280,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        <h2 style={{ margin: 0, color: "#FFFFFF" }}>Revolut Backfill Import</h2>
+        <p style={{ margin: 0, color: "#B0B0B0" }}>
+          Import a Revolut CSV export to backfill missing transactions.
+        </p>
+        <div style={{ background: "#2A2A2A", border: "1px solid #444", borderRadius: 6, padding: 12 }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv,text/comma-separated-values,text/plain"
+            onChange={handleFileChange}
+            style={{ display: "none" }}
+            data-testid="revolut-file-input"
+          />
+          <button
+            type="button"
+            style={{ background: "#1565C0", color: "#FFFFFF", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: "0.9em", cursor: "pointer" }}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Choose CSV File
+          </button>
+          {selectedFile && (
+            <span style={{ marginLeft: 8, color: "#E0E0E0" }}>{selectedFile.name}</span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button
+            type="button"
+            style={{ background: "#333", color: "#E0E0E0", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer" }}
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            style={{ background: "#FF9800", color: "#FFFFFF", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer" }}
+            onClick={handleImport}
+            disabled={!selectedFile}
+            aria-label="Import Revolut"
+          >
+            Import
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// RevolutImportResultModal
+// ---------------------------------------------------------------------------
+
+interface RevolutImportResultModalProps {
+  result: RevolutImportSummary;
+  onClose: () => void;
+}
+
+const RevolutImportResultModal: React.FC<RevolutImportResultModalProps> = ({ result, onClose }) => {
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Revolut import complete"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.7)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+      }}
+      onClick={handleBackdropClick}
+    >
+      <div
+        style={{
+          background: "#1E1E1E",
+          color: "#E0E0E0",
+          padding: 24,
+          borderRadius: 12,
+          minWidth: 280,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        <h2 style={{ margin: 0, color: "#FFFFFF" }}>Revolut Import Complete ✓</h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span style={{ color: COLOR_IMPORTED }}>
+            ✅ {result.imported} transactions imported
+          </span>
+          <span style={{ color: COLOR_SKIPPED }}>
+            ⏭️ {result.skipped} duplicates skipped
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+          <button
+            type="button"
+            style={{ background: "#1565C0", color: "#FFFFFF", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer" }}
+            onClick={onClose}
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// TagFilterChips
+// ---------------------------------------------------------------------------
+
+interface TagFilterChipsProps {
+  tags: TagWithCount[];
+  selectedTagIds: Set<number>;
+  includeUntagged: boolean;
+  onToggleTag: (tagId: number) => void;
+  onToggleUntagged: () => void;
+  onClearFilter: () => void;
+}
+
+const TagFilterChips: React.FC<TagFilterChipsProps> = ({
+  tags,
+  selectedTagIds,
+  includeUntagged,
+  onToggleTag,
+  onToggleUntagged,
+  onClearFilter,
+}) => {
+  const hasAnyFilter = selectedTagIds.size > 0 || includeUntagged;
+
+  return (
+    <div
+      aria-label="Tag filter"
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 6,
+        marginBottom: 12,
+        alignItems: "center",
+      }}
+    >
+      {/* Untagged chip */}
+      <button
+        type="button"
+        onClick={onToggleUntagged}
+        aria-pressed={includeUntagged}
+        style={{
+          background: includeUntagged ? "#FF9800" : "#2A2A2A",
+          color: includeUntagged ? "#FFFFFF" : "#B0B0B0",
+          border: "1px solid " + (includeUntagged ? "#FF9800" : "#444"),
+          borderRadius: 16,
+          padding: "4px 12px",
+          fontSize: "0.85em",
+          cursor: "pointer",
+        }}
+      >
+        Untagged
+      </button>
+
+      {/* Tag chips */}
+      {tags.map((tag) => {
+        const selected = selectedTagIds.has(tag.tagId);
+        return (
+          <button
+            key={tag.tagId}
+            type="button"
+            onClick={() => onToggleTag(tag.tagId)}
+            aria-pressed={selected}
+            style={{
+              background: selected ? "#1565C0" : "#2A2A2A",
+              color: selected ? "#FFFFFF" : "#B0B0B0",
+              border: "1px solid " + (selected ? "#1565C0" : "#444"),
+              borderRadius: 16,
+              padding: "4px 12px",
+              fontSize: "0.85em",
+              cursor: "pointer",
+            }}
+          >
+            {tag.tagName} ({tag.count})
+          </button>
+        );
+      })}
+
+      {/* Clear filter */}
+      {hasAnyFilter && (
+        <button
+          type="button"
+          onClick={onClearFilter}
+          aria-label="Clear tag filter"
+          style={{
+            background: "transparent",
+            color: "#FF6B6B",
+            border: "none",
+            fontSize: "0.85em",
+            cursor: "pointer",
+            padding: "4px 8px",
+          }}
+        >
+          ✕ Clear
+        </button>
+      )}
     </div>
   );
 };
@@ -411,8 +933,27 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
   refreshActiveNotifications,
 }) => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showModal, setShowModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showRevolutImportModal, setShowRevolutImportModal] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [revolutImportResult, setRevolutImportResult] = useState<RevolutImportSummary | null>(null);
+
+  // Tag filter state
+  const [availableTags, setAvailableTags] = useState<TagWithCount[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
+  const [includeUntagged, setIncludeUntagged] = useState(false);
+  const isFilterActive = selectedTagIds.size > 0 || includeUntagged;
+
+  // Respond to ?filter=untagged from dashboard navigation
+  useEffect(() => {
+    if (searchParams.get("filter") === "untagged") {
+      setIncludeUntagged(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const {
     transactions,
@@ -424,14 +965,37 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
     softDeleteAllTransactions,
     addManualTransaction,
     exportTransactions,
-    ingestNotification,
   } = useTransactions(db, undefined, onDatabaseChanged);
+
+  // Filtered transactions when tag filter is active
+  const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
+
+  const displayedTransactions = isFilterActive ? filteredTransactions : transactions;
 
   // Load transactions on mount and whenever showDeleted changes.
   useEffect(() => {
     void loadTransactions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showDeleted, dbVersion]);
+
+  // Load available tags whenever transactions change
+  useEffect(() => {
+    setAvailableTags(getActiveTagsWithCounts(db));
+  }, [db, dbVersion, transactions]);
+
+  // Apply tag filter when selections change
+  useEffect(() => {
+    if (!isFilterActive) {
+      setFilteredTransactions([]);
+      return;
+    }
+    const filtered = getTransactionsByTagFilter(
+      db,
+      Array.from(selectedTagIds),
+      includeUntagged
+    );
+    setFilteredTransactions(filtered);
+  }, [db, selectedTagIds, includeUntagged, isFilterActive, dbVersion, transactions]);
 
   // -------------------------------------------------------------------------
   // Header button handlers
@@ -461,37 +1025,49 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
     [exportTransactions]
   );
 
+  const handleImported = useCallback(
+    (result: ImportResult): void => {
+      setShowImportModal(false);
+      setImportResult(result);
+      if (onDatabaseChanged) onDatabaseChanged(db);
+      void loadTransactions();
+    },
+    [db, loadTransactions, onDatabaseChanged]
+  );
+
+  const handleRevolutImported = useCallback(
+    (result: RevolutImportSummary): void => {
+      setShowRevolutImportModal(false);
+      setRevolutImportResult(result);
+      if (onDatabaseChanged) onDatabaseChanged(db);
+      void loadTransactions();
+    },
+    [db, loadTransactions, onDatabaseChanged]
+  );
+
   const handleClearAll = useCallback((): void => {
     if (window.confirm("Delete all transactions? This cannot be undone.")) {
       void softDeleteAllTransactions();
     }
   }, [softDeleteAllTransactions]);
 
-  const handleTestNotification = useCallback((): void => {
-    void (async () => {
-      // Generate a test Revolut notification with a random EUR amount between 1-50
-      const amount = (Math.random() * 49 + 1).toFixed(2);
-      const title = "Payment sent";
-      const body = `${amount} EUR to Test Vendor`;
-      
-      const result = await ingestNotification(title, body, "com.revolut.revolut");
-      await loadTransactions();
-      
-      if (result) {
-        window.alert(
-          `✓ Test notification received!\n\n` +
-          `Title: ${title}\n` +
-          `Body: ${body}\n` +
-          `Amount: ${result.parsedAmount} ${result.parsedCurrency}`
-        );
-      } else {
-        window.alert(
-          "⚠ Test notification was a duplicate and was skipped (within 5-second window).\n\n" +
-          "Try again in a few seconds."
-        );
-      }
-    })();
-  }, [ingestNotification, loadTransactions]);
+  const handleToggleTag = useCallback((tagId: number): void => {
+    setSelectedTagIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tagId)) next.delete(tagId);
+      else next.add(tagId);
+      return next;
+    });
+  }, []);
+
+  const handleToggleUntagged = useCallback((): void => {
+    setIncludeUntagged((prev) => !prev);
+  }, []);
+
+  const handleClearFilter = useCallback((): void => {
+    setSelectedTagIds(new Set());
+    setIncludeUntagged(false);
+  }, []);
 
   // -------------------------------------------------------------------------
   // Card handlers
@@ -522,6 +1098,13 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
         style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}
       >
         <button
+          onClick={() => navigate("/dashboard")}
+          aria-label="Dashboard"
+          style={{ background: "#1565C0", color: "#FFFFFF", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: "0.9em", cursor: "pointer" }}
+        >
+          📊 Dashboard
+        </button>
+        <button
           onClick={() => setShowModal(true)}
           aria-label="Add Transaction"
         >
@@ -533,38 +1116,47 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
         <button onClick={handleExport} aria-label="Export">
           Export
         </button>
-        {import.meta.env.DEV && (
-          <button
-            onClick={handleTestNotification}
-            aria-label="Send Test Notification"
-            style={{ backgroundColor: "#4CAF50", color: "white" }}
-          >
-            Test Notification
-          </button>
-        )}
+        <button
+          onClick={() => setShowImportModal(true)}
+          aria-label="Import"
+          style={{ background: "#1565C0", color: "#FFFFFF", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: "0.9em", cursor: "pointer" }}
+        >
+          Import
+        </button>
+        <button
+          onClick={() => setShowRevolutImportModal(true)}
+          aria-label="Revolut Import"
+          style={{ background: "#FF9800", color: "#FFFFFF", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: "0.9em", cursor: "pointer" }}
+        >
+          Revolut Import
+        </button>
         <button onClick={handleClearAll} aria-label="Clear All">
           Clear All
         </button>
       </div>
 
-      {/* Show deleted toggle */}
-      <label
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 12,
-        }}
-      >
-        <input
-          type="checkbox"
-          role="switch"
-          checked={showDeleted}
-          onChange={(e) => setShowDeleted(e.target.checked)}
-          aria-label="Show deleted entries"
+      {/* Tag filter chips */}
+      {availableTags.length > 0 && (
+        <TagFilterChips
+          tags={availableTags}
+          selectedTagIds={selectedTagIds}
+          includeUntagged={includeUntagged}
+          onToggleTag={handleToggleTag}
+          onToggleUntagged={handleToggleUntagged}
+          onClearFilter={handleClearFilter}
         />
-        Show deleted entries
-      </label>
+      )}
+
+      {/* Show deleted toggle */}
+      <div style={{ marginBottom: 12 }}>
+        <ToggleSwitch
+          checked={showDeleted}
+          onChange={setShowDeleted}
+          label="Show deleted entries"
+          ariaLabel="Show deleted entries"
+          testId="toggle-show-deleted"
+        />
+      </div>
 
       {/* Loading spinner */}
       {loading && (
@@ -578,16 +1170,18 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
       )}
 
       {/* Empty state */}
-      {!loading && transactions.length === 0 && (
+      {!loading && displayedTransactions.length === 0 && (
         <p data-testid="empty-state">
-          No transactions yet — Revolut notifications will appear here.
+          {isFilterActive
+            ? "No transactions match the selected filters."
+            : "No transactions yet — Revolut notifications will appear here."}
         </p>
       )}
 
       {/* Transaction list */}
-      {!loading && transactions.length > 0 && (
+      {!loading && displayedTransactions.length > 0 && (
         <div aria-label="Transaction list">
-          {transactions.map((tx: Transaction) => (
+          {displayedTransactions.map((tx: Transaction) => (
             <TransactionCard
               key={tx.id}
               transaction={tx}
@@ -610,6 +1204,36 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
         <ExportModal
           onSelect={handleExportSelection}
           onClose={() => setShowExportModal(false)}
+        />
+      )}
+
+      {showImportModal && (
+        <ImportModal
+          db={db}
+          onImported={handleImported}
+          onClose={() => setShowImportModal(false)}
+        />
+      )}
+
+      {importResult && (
+        <ImportResultModal
+          result={importResult}
+          onClose={() => setImportResult(null)}
+        />
+      )}
+
+      {showRevolutImportModal && (
+        <RevolutImportModal
+          db={db}
+          onImported={handleRevolutImported}
+          onClose={() => setShowRevolutImportModal(false)}
+        />
+      )}
+
+      {revolutImportResult && (
+        <RevolutImportResultModal
+          result={revolutImportResult}
+          onClose={() => setRevolutImportResult(null)}
         />
       )}
     </>
@@ -647,9 +1271,9 @@ const TransactionsPage: React.FC<TransactionsPageProps> = ({
   refreshActiveNotifications,
 }) => {
   return (
-    <main style={{ padding: 16 }}>
+    <main style={{ padding: 16, background: "#121212", color: "#E0E0E0", minHeight: "100vh" }}>
       {/* Page title — always rendered so routing tests can find the heading */}
-      <h1>Transactions</h1>
+      <h1 style={{ color: "#FFFFFF" }}>Transactions</h1>
 
       {db ? (
         <TransactionsPageContent

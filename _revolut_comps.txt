@@ -1,0 +1,201 @@
+// ---------------------------------------------------------------------------
+// RevolutImportModal
+// ---------------------------------------------------------------------------
+
+interface RevolutImportModalProps {
+  db: Database;
+  onImported: (result: { imported: number; skipped: number }) => void;
+  onClose: () => void;
+}
+
+const RevolutImportModal: React.FC<RevolutImportModalProps> = ({
+  db,
+  onImported,
+  onClose,
+}) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = e.target.files?.[0] ?? null;
+    setSelectedFile(file);
+  };
+
+  const handleImport = (): void => {
+    if (!selectedFile) return;
+    setImporting(true);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const csvContent = e.target?.result as string;
+      try {
+        const result = importRevolutCsv(db, csvContent);
+        onImported(result);
+      } catch (err) {
+        window.alert(
+          "Import failed: " +
+            (err instanceof Error ? err.message : String(err))
+        );
+        setImporting(false);
+      }
+    };
+    reader.onerror = () => {
+      window.alert("Failed to read file.");
+      setImporting(false);
+    };
+    reader.readAsText(selectedFile, "utf-8");
+  };
+
+  const handleBackdropClick = (
+    e: React.MouseEvent<HTMLDivElement>
+  ): void => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Import Revolut Data"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+      }}
+      onClick={handleBackdropClick}
+    >
+      <div
+        style={{
+          background: "white",
+          padding: 24,
+          borderRadius: 12,
+          minWidth: 300,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Import Revolut Data</h2>
+        <p style={{ margin: 0, color: "#666" }}>
+          Import transactions from a Revolut CSV export file.
+        </p>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv"
+          style={{ display: "none" }}
+          onChange={handleFileChange}
+          data-testid="revolut-file-input"
+        />
+
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          aria-label="Choose CSV File"
+        >
+          Choose CSV File
+        </button>
+
+        {selectedFile && (
+          <div style={{ fontSize: "0.9em" }}>
+            Selected: {selectedFile.name}
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            style={{
+              background: "#FF5722",
+              color: "#FFFFFF",
+              border: "none",
+              borderRadius: "6px",
+              padding: "8px 12px",
+              cursor: "pointer",
+              fontWeight: "bold",
+              opacity: !selectedFile || importing ? 0.5 : 1,
+            }}
+            disabled={!selectedFile || importing}
+            onClick={handleImport}
+            aria-label="Import"
+          >
+            {importing ? "Importing…" : "Import"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// ImportResultModal
+// ---------------------------------------------------------------------------
+
+interface ImportResultModalProps {
+  result: { imported: number; skipped: number };
+  onClose: () => void;
+}
+
+const ImportResultModal: React.FC<ImportResultModalProps> = ({
+  result,
+  onClose,
+}) => {
+  const handleBackdropClick = (
+    e: React.MouseEvent<HTMLDivElement>
+  ): void => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Import Complete"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+      }}
+      onClick={handleBackdropClick}
+    >
+      <div
+        style={{
+          background: "white",
+          padding: 24,
+          borderRadius: 12,
+          minWidth: 300,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Import Complete ✓</h2>
+        <p style={{ margin: 0 }}>
+          ✅ {result.imported} transactions imported
+        </p>
+        <p style={{ margin: 0 }}>
+          ⏭️ {result.skipped} duplicates skipped
+        </p>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+          <button type="button" onClick={onClose} aria-label="OK">
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+

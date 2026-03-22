@@ -433,3 +433,73 @@ export function findLastTransactionByTitle(
   if (matchId === undefined) return null;
   return getTransactionById(db, matchId);
 }
+
+// ---------------------------------------------------------------------------
+// Tag filter queries
+// ---------------------------------------------------------------------------
+
+export interface TagWithCount {
+  tagId: number;
+  tagName: string;
+  count: number;
+}
+
+/**
+ * Returns all tags that are attached to at least one non-deleted transaction,
+ * together with the count of non-deleted transactions for each tag.
+ * Ordered by count DESC, then tagName ASC.
+ */
+export function getActiveTagsWithCounts(db: Database): TagWithCount[] {
+  return queryRows<TagWithCount>(
+    db,
+    `SELECT tg.Id AS tagId, tg.Name AS tagName, COUNT(DISTINCT t.Id) AS count
+     FROM Tags tg
+     JOIN TransactionTags tt ON tt.TagId = tg.Id
+     JOIN Transactions t ON t.Id = tt.TransactionId
+     WHERE t.IsDeleted = 0
+     GROUP BY tg.Id, tg.Name
+     ORDER BY count DESC, tg.Name ASC`
+  );
+}
+
+/**
+ * Returns non-deleted transactions that match the given tag filter.
+ *
+ * @param tagIds - Tag IDs to include. When empty, all transactions are returned
+ *   (subject to the `includeUntagged` flag).
+ * @param includeUntagged - When true, transactions with no tags are included.
+ */
+export function getTransactionsByTagFilter(
+  db: Database,
+  tagIds: number[],
+  includeUntagged: boolean
+): Transaction[] {
+  const conditions: string[] = ["t.IsDeleted = 0"];
+  const params: (string | number | null)[] = [];
+  const orClauses: string[] = [];
+
+  if (tagIds.length > 0) {
+    const placeholders = tagIds.map(() => "?").join(",");
+    orClauses.push(
+      `t.Id IN (SELECT TransactionId FROM TransactionTags WHERE TagId IN (${placeholders}))`
+    );
+    params.push(...tagIds);
+  }
+
+  if (includeUntagged) {
+    orClauses.push(
+      `t.Id NOT IN (SELECT TransactionId FROM TransactionTags)`
+    );
+  }
+
+  if (orClauses.length > 0) {
+    conditions.push(`(${orClauses.join(" OR ")})`);
+  } else {
+    // No tags selected, no untagged — return nothing
+    return [];
+  }
+
+  const sql = `${SELECT_WITH_TAGS} WHERE ${conditions.join(" AND ")} ORDER BY t.ReceivedAt DESC`;
+  const rows = queryRows<TransactionRow>(db, sql, params);
+  return groupTransactionRows(rows);
+}

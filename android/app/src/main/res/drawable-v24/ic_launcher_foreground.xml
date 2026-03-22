@@ -4,6 +4,46 @@
     android:height="108dp"
     android:viewportHeight="108"
     android:viewportWidth="108">
+
+    <!-- Coin circle -->
+    <path
+        android:fillColor="#FFFFD700"
+        android:pathData="M54,30C67.25,30 78,40.75 78,54C78,67.25 67.25,78 54,78C40.75,78 30,67.25 30,54C30,40.75 40.75,30 54,30Z" />
+
+    <!-- Inner coin ring -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#DAA520"
+        android:strokeWidth="1.5"
+        android:pathData="M54,34C65.05,34 74,42.95 74,54C74,65.05 65.05,74 54,74C42.95,74 34,65.05 34,54C34,42.95 42.95,34 54,34Z" />
+
+    <!-- Quill pen -->
+    <path
+        android:pathData="M60,38L68,46L50,64L42,56Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="60"
+                android:startY="38"
+                android:endX="50"
+                android:endY="64"
+                android:type="linear">
+                <item android:color="#FFFFD700" android:offset="0.0" />
+                <item android:color="#FFFFFFFF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Quill nib -->
+    <path
+        android:fillColor="#1B5E20"
+        android:pathData="M42,56L38,68L50,64Z" />
+
+    <!-- Dollar sign on coin -->
+    <path
+        android:fillColor="#1B5E20"
+        android:pathData="M53,44L55,44L55,46C57.5,46.5 59,48 59,50L57,50C57,48.9 56.1,48 55,48L53,48C51.9,48 51,48.9 51,50C51,51.1 51.9,52 53,52L55,52C57.2,52 59,53.8 59,56C59,58 57.5,59.5 55,60L55,62L53,62L53,60C50.5,59.5 49,58 49,56L51,56C51,57.1 51.9,58 53,58L55,58C56.1,58 57,57.1 57,56C57,54.9 56.1,54 55,54L53,54C50.8,54 49,52.2 49,50C49,48 50.5,46.5 53,46Z" />
+
+    <!-- Shadow for depth -->
     <path
         android:fillType="evenOdd"
         android:pathData="M32,64C32,64 38.39,52.99 44.13,50.95C51.37,48.37 70.14,49.57 70.14,49.57L108.26,87.69L108,109.01L75.97,107.97L32,64Z"
@@ -16,19 +56,9 @@
                 android:startX="48.7653"
                 android:startY="61.0927"
                 android:type="linear">
-                <item
-                    android:color="#44000000"
-                    android:offset="0.0" />
-                <item
-                    android:color="#00000000"
-                    android:offset="1.0" />
+                <item android:color="#44000000" android:offset="0.0" />
+                <item android:color="#00000000" android:offset="1.0" />
             </gradient>
         </aapt:attr>
     </path>
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillType="nonZero"
-        android:pathData="M66.94,46.02L66.94,46.02C72.44,50.07 76,56.61 76,64L32,64C32,56.61 35.56,50.11 40.98,46.06L36.18,41.19C35.45,40.45 35.45,39.3 36.18,38.56C36.91,37.81 38.05,37.81 38.78,38.56L44.25,44.05C47.18,42.57 50.48,41.71 54,41.71C57.48,41.71 60.78,42.57 63.68,44.05L69.11,38.56C69.84,37.81 70.98,37.81 71.71,38.56C72.44,39.3 72.44,40.45 71.71,41.19L66.94,46.02ZM62.94,56.92C64.08,56.92 65,56.01 65,54.88C65,53.76 64.08,52.85 62.94,52.85C61.8,52.85 60.88,53.76 60.88,54.88C60.88,56.01 61.8,56.92 62.94,56.92ZM45.06,56.92C46.2,56.92 47.13,56.01 47.13,54.88C47.13,53.76 46.2,52.85 45.06,52.85C43.92,52.85 43,53.76 43,54.88C43,56.01 43.92,56.92 45.06,56.92Z"
-        android:strokeColor="#00000000"
-        android:strokeWidth="1" />
 </vector>

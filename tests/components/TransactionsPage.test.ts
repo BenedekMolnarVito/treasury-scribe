@@ -256,8 +256,8 @@ describe("TransactionsPage — show deleted toggle", () => {
 
     const toggle = screen.getByRole("switch", {
       name: /show deleted entries/i,
-    }) as HTMLInputElement;
-    expect(toggle.checked).toBe(false);
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
   });
 
   it("can be toggled on", async () => {
@@ -267,13 +267,13 @@ describe("TransactionsPage — show deleted toggle", () => {
 
     const toggle = screen.getByRole("switch", {
       name: /show deleted entries/i,
-    }) as HTMLInputElement;
+    });
 
     await act(async () => {
       fireEvent.click(toggle);
     });
 
-    expect(toggle.checked).toBe(true);
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
   });
 });
 
@@ -389,7 +389,7 @@ describe("TransactionsPage — transaction cards", () => {
 // ---------------------------------------------------------------------------
 
 describe("TransactionsPage — card backgrounds", () => {
-  it("applies #FFFACD (light yellow) background for untagged cards", async () => {
+  it("applies #ff99009c (orange with opacity) background for untagged cards", async () => {
     insertTx({ title: "Untagged Card" });
 
     await act(async () => {
@@ -400,11 +400,11 @@ describe("TransactionsPage — card backgrounds", () => {
     const cardFace = screen.getByRole("button", {
       name: /Transaction: Untagged Card/,
     }) as HTMLElement;
-    // jsdom converts hex colours to rgb in computed style.
-    expect(cardFace.style.background).toMatch(/rgb\(255,\s*250,\s*205\)|#FFFACD/i);
+    // jsdom converts hex colours to rgba in computed style.
+    expect(cardFace.style.background).toMatch(/rgba\(255,\s*153,\s*0,\s*0\.61\)|#ff99009c/i);
   });
 
-  it("applies #90EE90 (light green) background for tagged cards", async () => {
+  it("applies #03356e (dark blue) background for tagged cards", async () => {
     const tx = insertTx({ title: "Tagged Card" });
     const tag = addTag(db, "tagged");
     addTagToTransaction(db, tx.id, tag.id);
@@ -416,7 +416,7 @@ describe("TransactionsPage — card backgrounds", () => {
     const cardFace = screen.getByRole("button", {
       name: /Transaction: Tagged Card/,
     }) as HTMLElement;
-    expect(cardFace.style.background).toMatch(/rgb\(144,\s*238,\s*144\)|#90EE90/i);
+    expect(cardFace.style.background).toMatch(/rgb\(3,\s*53,\s*110\)|#03356e/i);
   });
 });
 
@@ -425,7 +425,7 @@ describe("TransactionsPage — card backgrounds", () => {
 // ---------------------------------------------------------------------------
 
 describe("TransactionsPage — amount colours", () => {
-  it("renders expense amount in red", async () => {
+  it("renders expense amount in #f90e0e", async () => {
     insertTx({ amount: 100, currency: "EUR", isIncome: false });
 
     await act(async () => {
@@ -433,11 +433,11 @@ describe("TransactionsPage — amount colours", () => {
     });
 
     const amountEl = screen.getByText("100 EUR") as HTMLElement;
-    // jsdom may preserve "red" or convert to rgb(255,0,0).
-    expect(amountEl.style.color).toMatch(/^red$|rgb\(255,\s*0,\s*0\)/);
+    // jsdom converts #f90e0e to rgb(249, 14, 14).
+    expect(amountEl.style.color).toMatch(/rgb\(249,\s*14,\s*14\)|#f90e0e/i);
   });
 
-  it("renders income amount in dark green (#006400)", async () => {
+  it("renders income amount in #4CAF50", async () => {
     insertTx({ amount: 200, currency: "HUF", isIncome: true });
 
     await act(async () => {
@@ -445,8 +445,8 @@ describe("TransactionsPage — amount colours", () => {
     });
 
     const amountEl = screen.getByText("200 HUF") as HTMLElement;
-    // jsdom converts #006400 to rgb(0, 100, 0).
-    expect(amountEl.style.color).toMatch(/rgb\(0,\s*100,\s*0\)|#006400/i);
+    // jsdom converts #4CAF50 to rgb(76, 175, 80).
+    expect(amountEl.style.color).toMatch(/rgb\(76,\s*175,\s*80\)|#4CAF50/i);
   });
 });
 
@@ -454,8 +454,8 @@ describe("TransactionsPage — amount colours", () => {
 // Swipe to delete
 // ---------------------------------------------------------------------------
 
-describe("TransactionsPage — swipe-left delete", () => {
-  it("reveals Delete button after swipe-left gesture", async () => {
+describe("TransactionsPage — swipe-right delete", () => {
+  it("reveals Delete button after swipe-right gesture", async () => {
     insertTx({ title: "Swipe Me" });
 
     await act(async () => {
@@ -470,13 +470,13 @@ describe("TransactionsPage — swipe-left delete", () => {
       name: /Transaction: Swipe Me/,
     });
 
-    // Simulate swipe-left: touchstart at x=200, touchend at x=100.
+    // Simulate swipe-right: touchstart at x=100, touchend at x=200.
     act(() => {
       fireEvent.touchStart(cardFace, {
-        touches: [{ clientX: 200, clientY: 10 }],
+        touches: [{ clientX: 100, clientY: 10 }],
       });
       fireEvent.touchEnd(cardFace, {
-        changedTouches: [{ clientX: 100, clientY: 10 }],
+        changedTouches: [{ clientX: 200, clientY: 10 }],
       });
     });
 
@@ -505,10 +505,10 @@ describe("TransactionsPage — swipe-left delete", () => {
 
     act(() => {
       fireEvent.touchStart(cardFace, {
-        touches: [{ clientX: 200, clientY: 10 }],
+        touches: [{ clientX: 100, clientY: 10 }],
       });
       fireEvent.touchEnd(cardFace, {
-        changedTouches: [{ clientX: 100, clientY: 10 }],
+        changedTouches: [{ clientX: 200, clientY: 10 }],
       });
     });
 
@@ -585,5 +585,450 @@ describe("TransactionsPage — loading state", () => {
 
     // After act() the loading promise has resolved.
     expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dashboard button
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — dashboard navigation", () => {
+  it("renders a Dashboard button", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    expect(screen.getByRole("button", { name: /dashboard/i })).toBeTruthy();
+  });
+
+  it("Dashboard button has blue background", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    const btn = screen.getByRole("button", { name: /dashboard/i }) as HTMLElement;
+    expect(btn.style.background).toMatch(/rgb\(21,\s*101,\s*192\)|#1565C0/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Revolut Import button
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — Revolut import", () => {
+  it("renders a Revolut Import button", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    expect(screen.getByRole("button", { name: /revolut import/i })).toBeTruthy();
+  });
+
+  it("opens Revolut import modal when clicked", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /revolut import/i }));
+    });
+
+    expect(screen.getByRole("dialog", { name: /import revolut/i })).toBeTruthy();
+  });
+
+  it("Revolut import modal has file input and buttons", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /revolut import/i }));
+    });
+
+    expect(screen.getByTestId("revolut-file-input")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /import revolut/i })).toBeTruthy();
+  });
+
+  it("closes Revolut import modal on Cancel", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /revolut import/i }));
+    });
+
+    expect(screen.getByRole("dialog", { name: /import revolut/i })).toBeTruthy();
+
+    await act(async () => {
+      // Find Cancel inside the modal
+      const cancelBtns = screen.getAllByRole("button").filter(
+        (btn) => btn.textContent === "Cancel"
+      );
+      fireEvent.click(cancelBtns[cancelBtns.length - 1]!);
+    });
+
+    expect(screen.queryByRole("dialog", { name: /import revolut/i })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Import (CSV/JSON) button
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — import button", () => {
+  it("renders an Import button", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    expect(screen.getByRole("button", { name: /^import$/i })).toBeTruthy();
+  });
+
+  it("opens import modal when clicked", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^import$/i }));
+    });
+
+    expect(screen.getByRole("dialog", { name: /import transactions/i })).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tag filter chips
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — tag filter", () => {
+  it("does not show tag filter when no tags exist", async () => {
+    insertTx({ title: "No Tags" });
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    expect(screen.queryByLabelText("Tag filter")).toBeNull();
+  });
+
+  it("shows tag filter chips when transactions have tags", async () => {
+    const tx = insertTx({ title: "Tagged" });
+    const tag = addTag(db, "Food");
+    addTagToTransaction(db, tx.id, tag.id);
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    const filterArea = screen.getByLabelText("Tag filter");
+    expect(filterArea).toBeTruthy();
+    // Should show the tag name with count
+    expect(screen.getByText(/Food \(1\)/)).toBeTruthy();
+  });
+
+  it("shows Untagged chip", async () => {
+    const tx = insertTx({ title: "Tagged" });
+    const tag = addTag(db, "Food");
+    addTagToTransaction(db, tx.id, tag.id);
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    expect(screen.getByText("Untagged")).toBeTruthy();
+  });
+
+  it("filters transactions by selected tag", async () => {
+    const tx1 = insertTx({ title: "Food TX" });
+    const tag = addTag(db, "Food");
+    addTagToTransaction(db, tx1.id, tag.id);
+    insertTx({ title: "No Tag TX" });
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    // Both should be visible initially
+    expect(screen.getByText("Food TX")).toBeTruthy();
+    expect(screen.getByText("No Tag TX")).toBeTruthy();
+
+    // Click Food tag chip
+    await act(async () => {
+      fireEvent.click(screen.getByText(/Food \(1\)/));
+    });
+
+    // Only Food TX should remain
+    expect(screen.getByText("Food TX")).toBeTruthy();
+    expect(screen.queryByText("No Tag TX")).toBeNull();
+  });
+
+  it("filters to show only untagged transactions", async () => {
+    const tx1 = insertTx({ title: "Tagged TX" });
+    const tag = addTag(db, "Shopping");
+    addTagToTransaction(db, tx1.id, tag.id);
+    insertTx({ title: "Untagged TX" });
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    // Click Untagged chip
+    await act(async () => {
+      fireEvent.click(screen.getByText("Untagged"));
+    });
+
+    expect(screen.queryByText("Tagged TX")).toBeNull();
+    expect(screen.getByText("Untagged TX")).toBeTruthy();
+  });
+
+  it("shows Clear button when filter is active and clears on click", async () => {
+    const tx1 = insertTx({ title: "Food TX" });
+    const tag = addTag(db, "Food");
+    addTagToTransaction(db, tx1.id, tag.id);
+    insertTx({ title: "Other TX" });
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    // No clear button initially
+    expect(screen.queryByLabelText("Clear tag filter")).toBeNull();
+
+    // Activate filter
+    await act(async () => {
+      fireEvent.click(screen.getByText(/Food \(1\)/));
+    });
+
+    // Clear button appears
+    expect(screen.getByLabelText("Clear tag filter")).toBeTruthy();
+
+    // Click clear
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Clear tag filter"));
+    });
+
+    // Both transactions visible again
+    expect(screen.getByText("Food TX")).toBeTruthy();
+    expect(screen.getByText("Other TX")).toBeTruthy();
+  });
+
+  it("shows filtered empty state message", async () => {
+    const tx1 = insertTx({ title: "Tagged" });
+    const tag1 = addTag(db, "Food");
+    addTagToTransaction(db, tx1.id, tag1.id);
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    // Click Untagged (no untagged transactions exist)
+    await act(async () => {
+      fireEvent.click(screen.getByText("Untagged"));
+    });
+
+    expect(screen.getByTestId("empty-state")).toBeTruthy();
+    expect(screen.getByTestId("empty-state").textContent).toContain("No transactions match");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test Notification button removed
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — test button removed", () => {
+  it("does not render a Test Notification button", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    expect(screen.queryByRole("button", { name: /test notification/i })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug 4: Swipe delete direction — right-to-reveal, left-to-dismiss
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — swipe direction correctness", () => {
+  it("does NOT reveal Delete on swipe-left (dx < -50)", async () => {
+    insertTx({ title: "No Left Reveal" });
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    const cardFace = screen.getByRole("button", {
+      name: /Transaction: No Left Reveal/,
+    });
+
+    // Simulate swipe-left: touchstart at x=200, touchend at x=100 (dx = -100).
+    act(() => {
+      fireEvent.touchStart(cardFace, {
+        touches: [{ clientX: 200, clientY: 10 }],
+      });
+      fireEvent.touchEnd(cardFace, {
+        changedTouches: [{ clientX: 100, clientY: 10 }],
+      });
+    });
+
+    // Delete button should NOT appear.
+    expect(
+      screen.queryByRole("button", { name: /delete transaction/i })
+    ).toBeNull();
+  });
+
+  it("dismisses Delete on swipe-left after swiping right to reveal", async () => {
+    insertTx({ title: "Dismiss Left" });
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    const cardFace = screen.getByRole("button", {
+      name: /Transaction: Dismiss Left/,
+    });
+
+    // Swipe right to reveal.
+    act(() => {
+      fireEvent.touchStart(cardFace, {
+        touches: [{ clientX: 100, clientY: 10 }],
+      });
+      fireEvent.touchEnd(cardFace, {
+        changedTouches: [{ clientX: 200, clientY: 10 }],
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: /delete transaction/i })
+      ).toBeTruthy();
+    });
+
+    // Swipe left to dismiss (dx = -30, below -20 threshold).
+    act(() => {
+      fireEvent.touchStart(cardFace, {
+        touches: [{ clientX: 200, clientY: 10 }],
+      });
+      fireEvent.touchEnd(cardFace, {
+        changedTouches: [{ clientX: 160, clientY: 10 }],
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: /delete transaction/i })
+      ).toBeNull();
+    });
+  });
+
+  it("slides card rightward (translateX 80px) when swiped", async () => {
+    insertTx({ title: "Slide Right" });
+
+    await act(async () => {
+      renderPage(db);
+    });
+
+    const cardFace = screen.getByRole("button", {
+      name: /Transaction: Slide Right/,
+    }) as HTMLElement;
+
+    // Swipe right to reveal.
+    act(() => {
+      fireEvent.touchStart(cardFace, {
+        touches: [{ clientX: 50, clientY: 10 }],
+      });
+      fireEvent.touchEnd(cardFace, {
+        changedTouches: [{ clientX: 200, clientY: 10 }],
+      });
+    });
+
+    await waitFor(() => {
+      expect(cardFace.style.transform).toBe("translateX(80px)");
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug 5: JSON/CSV import accept attribute includes MIME types
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — import file accept attribute", () => {
+  it("accepts JSON/CSV MIME types in addition to extensions", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^import$/i }));
+    });
+
+    const input = screen.getByTestId("import-file-input") as HTMLInputElement;
+    expect(input.accept).toContain(".json");
+    expect(input.accept).toContain(".csv");
+    expect(input.accept).toContain("application/json");
+    expect(input.accept).toContain("text/csv");
+    expect(input.accept).toContain("text/comma-separated-values");
+    expect(input.accept).toContain("text/plain");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug 6: Revolut CSV import accept attribute includes MIME types
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — Revolut import file accept attribute", () => {
+  it("accepts CSV MIME types in addition to .csv extension", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /revolut import/i }));
+    });
+
+    const input = screen.getByTestId("revolut-file-input") as HTMLInputElement;
+    expect(input.accept).toContain(".csv");
+    expect(input.accept).toContain("text/csv");
+    expect(input.accept).toContain("text/comma-separated-values");
+    expect(input.accept).toContain("text/plain");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug 7: Income toggle in Add Transaction modal
+// ---------------------------------------------------------------------------
+
+describe("TransactionsPage — add transaction income toggle", () => {
+  it("renders an Income toggle in the Add Transaction modal", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    expect(screen.getByRole("dialog", { name: /add transaction/i })).toBeTruthy();
+    expect(screen.getByText("Income")).toBeTruthy();
+
+    // The dialog should contain at least 2 toggle switches (Cash + Income)
+    const toggles = screen.getByRole("dialog", { name: /add transaction/i })
+      .querySelectorAll('[role="switch"]');
+    expect(toggles.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("Income toggle is unchecked by default", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    const incomeToggle = screen.getByTestId("toggle-add-income");
+    expect(incomeToggle.getAttribute("aria-checked")).toBe("false");
   });
 });

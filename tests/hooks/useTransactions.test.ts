@@ -776,3 +776,52 @@ describe("ingestNotification", () => {
     expect(tx!.transactionTags).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Bug 7: addManualTransaction with isIncome parameter
+// ---------------------------------------------------------------------------
+
+describe("addManualTransaction with isIncome", () => {
+  it("persists isIncome=true when passed", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "Income tx", "salary", 5000, "EUR", false, true
+      );
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx?.isIncome).toBe(true);
+    expect(tx?.amount).toBe(5000);
+    expect(tx?.currency).toBe("EUR");
+    expect(tx?.isCash).toBe(false);
+  });
+
+  it("defaults isIncome to false when omitted", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction("Expense tx", "lunch", 15, "EUR");
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx?.isIncome).toBe(false);
+  });
+
+  it("defaults isIncome to false when explicitly passed undefined", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "Undef income", "body", 10, "HUF", false, undefined
+      );
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx?.isIncome).toBe(false);
+  });
+});
