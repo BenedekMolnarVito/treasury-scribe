@@ -96,13 +96,17 @@ vi.mock("../src/pages/EditTransactionPage", () => ({
   default: () => <div>Edit transaction page mock</div>,
 }));
 
+vi.mock("../src/pages/DashboardPage", () => ({
+  default: () => <div>Dashboard page mock</div>,
+}));
+
 beforeAll(async () => {
   wasmBinary = readFileSync(WASM_PATH).buffer as ArrayBuffer;
 });
 
 beforeEach(async () => {
   vi.clearAllMocks();
-  window.history.pushState({}, "", "/");
+  window.history.pushState({}, "", "/transactions");
 
   db = await initDatabase(wasmBinary);
   transactionsPagePropsStore.current = null;

@@ -1,6 +1,5 @@
-.github
-.qa
 node_modules/
 dist/
 .idea/
 *.iml
+.github/workflows/copilot-setup-steps.yml

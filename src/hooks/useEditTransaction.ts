@@ -55,6 +55,8 @@ export interface UseEditTransactionResult {
   amount: number | null;
   /** Editable copy of `currency`. */
   currency: string | null;
+  /** Editable ISO timestamp string for the transaction date/time. */
+  receivedAt: string;
   /** Controlled input value for the "add tag" text field. */
   newTagName: string;
   /** Tags currently linked to the transaction. */
@@ -74,6 +76,7 @@ export interface UseEditTransactionResult {
   setIsIncome: (value: boolean) => void;
   setAmount: (value: number | null) => void;
   setCurrency: (value: string | null) => void;
+  setReceivedAt: (value: string) => void;
   setNewTagName: (value: string) => void;
 
   // -------------------------------------------------------------------------
@@ -153,6 +156,7 @@ export function useEditTransaction(
   const [isIncome, setIsIncome] = useState<boolean>(false);
   const [amount, setAmount] = useState<number | null>(null);
   const [currency, setCurrency] = useState<string | null>(null);
+  const [receivedAt, setReceivedAt] = useState<string>("");
   const [newTagName, setNewTagName] = useState<string>("");
 
   // Tag collections
@@ -181,6 +185,7 @@ export function useEditTransaction(
       setIsIncome(tx.isIncome);
       setAmount(tx.amount);
       setCurrency(tx.currency ?? null);
+      setReceivedAt(tx.receivedAt ?? "");
       setNewTagName("");
 
       // Eagerly load the full Tag objects (name + metadata) for the current tags.
@@ -209,9 +214,10 @@ export function useEditTransaction(
       isIncome,
       amount,
       currency,
+      receivedAt: receivedAt || tx.receivedAt,
     });
     onDatabaseChanged(db);
-  }, [db, title, description, isCash, isIncome, amount, currency, onDatabaseChanged]);
+  }, [db, title, description, isCash, isIncome, amount, currency, receivedAt, onDatabaseChanged]);
 
   // -------------------------------------------------------------------------
   // addTag
@@ -292,6 +298,7 @@ export function useEditTransaction(
     isIncome,
     amount,
     currency,
+    receivedAt,
     newTagName,
     currentTags,
     recentTags,
@@ -303,6 +310,7 @@ export function useEditTransaction(
     setIsIncome,
     setAmount,
     setCurrency,
+    setReceivedAt,
     setNewTagName,
 
     loadTransaction,

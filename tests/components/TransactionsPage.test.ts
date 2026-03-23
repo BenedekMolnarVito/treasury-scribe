@@ -116,16 +116,17 @@ function insertTx(
 // ---------------------------------------------------------------------------
 
 describe("TransactionsPage — heading", () => {
-  it("always renders a Transactions heading", () => {
+  it("renders empty-state when no db is provided", () => {
     renderPage();
-    expect(screen.getByRole("heading", { name: /transactions/i })).toBeTruthy();
+    expect(screen.getByTestId("empty-state")).toBeTruthy();
   });
 
-  it("renders heading when db is provided", async () => {
+  it("renders content when db is provided", async () => {
     await act(async () => {
       renderPage(db);
     });
-    expect(screen.getByRole("heading", { name: /transactions/i })).toBeTruthy();
+    // With bottom nav in App.tsx, there is no heading. Check FAB is present.
+    expect(screen.getByTestId("fab-add")).toBeTruthy();
   });
 });
 
@@ -133,14 +134,47 @@ describe("TransactionsPage — heading", () => {
 // Header buttons
 // ---------------------------------------------------------------------------
 
+/**
+ * Simulates a downward pull-to-refresh gesture on the scroll container.
+ * Uses two separate act() phases:
+ * 1. touchstart + touchmove → React re-renders with updated pullDistance
+ * 2. touchend              → handlePullEnd sees the updated pullDistance
+ *
+ * The Object.defineProperty override is needed because jsdom's TouchEvent
+ * doesn't expose the Touch constructor as a global.
+ */
+async function simulatePullToRefresh(container: Element): Promise<void> {
+  const makeEvent = (type: string, clientY?: number): TouchEvent => {
+    const e = new TouchEvent(type, { bubbles: true, cancelable: true });
+    if (clientY !== undefined) {
+      Object.defineProperty(e, "touches", {
+        get: () => [{ clientX: 0, clientY, target: container }],
+        configurable: true,
+      });
+    }
+    return e;
+  };
+
+  // Phase 1: set isPulling and pull distance, then flush React state.
+  await act(async () => {
+    container.dispatchEvent(makeEvent("touchstart", 0));
+    container.dispatchEvent(makeEvent("touchmove", 100));
+  });
+
+  // Phase 2: fire touchend now that pullDistance is updated in state.
+  await act(async () => {
+    container.dispatchEvent(makeEvent("touchend"));
+  });
+}
+
 describe("TransactionsPage — header buttons", () => {
-  it("renders Add Transaction, Refresh, Export, and Clear All buttons", async () => {
+  it("renders Add Transaction, Filter, Export, Import, and Clear All buttons", async () => {
     await act(async () => {
       renderPage(db);
     });
 
     expect(screen.getByRole("button", { name: /add transaction/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /refresh/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^refresh$/i })).toBeNull();
     expect(screen.getByRole("button", { name: /export/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /clear all/i })).toBeTruthy();
   });
@@ -159,25 +193,21 @@ describe("TransactionsPage — header buttons", () => {
     expect(screen.getByRole("button", { name: "CSV" })).toBeTruthy();
   });
 
-  it("shows refresh feedback after checking notifications", async () => {
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+  it("shows 'Up to date' toast when pull-to-refresh finds no new notifications", async () => {
     const refreshActiveNotifications = vi.fn(async () => 0);
 
     await act(async () => {
       renderPage(db, { refreshActiveNotifications });
     });
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
-    });
+    const container = screen.getByTestId("transactions-scroll-container");
+    await simulatePullToRefresh(container);
 
     expect(refreshActiveNotifications).toHaveBeenCalledOnce();
-    expect(alertSpy).toHaveBeenCalledWith("No new notifications to process.");
-    alertSpy.mockRestore();
+    expect(await screen.findByText("Up to date")).toBeTruthy();
   });
 
-  it("reloads transactions from the database when Refresh is tapped", async () => {
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+  it("reloads transactions from the database after pull-to-refresh", async () => {
     const refreshActiveNotifications = vi.fn(async () => 0);
 
     await act(async () => {
@@ -190,21 +220,17 @@ describe("TransactionsPage — header buttons", () => {
       notificationBody: "Inserted outside the current UI state",
     });
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
-    });
+    const container = screen.getByTestId("transactions-scroll-container");
+    await simulatePullToRefresh(container);
 
     expect(refreshActiveNotifications).toHaveBeenCalledOnce();
     expect(await screen.findByText("Refresh Reloaded")).toBeTruthy();
     expect(
       await screen.findByText("Inserted outside the current UI state")
     ).toBeTruthy();
-    expect(alertSpy).toHaveBeenCalledWith("No new notifications to process.");
-    alertSpy.mockRestore();
   });
 
-  it("shows how many active notifications were added during refresh", async () => {
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+  it("shows captured notification count in pull-to-refresh toast", async () => {
     const refreshActiveNotifications = vi.fn(async () => {
       addTransaction(db, {
         ...createTransaction({ receivedAt: new Date().toISOString() }),
@@ -221,14 +247,12 @@ describe("TransactionsPage — header buttons", () => {
       renderPage(db, { refreshActiveNotifications });
     });
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
-    });
+    const container = screen.getByTestId("transactions-scroll-container");
+    await simulatePullToRefresh(container);
 
     expect(refreshActiveNotifications).toHaveBeenCalledOnce();
     expect(await screen.findByText("Refresh Vendor")).toBeTruthy();
-    expect(alertSpy).toHaveBeenCalledWith("1 new notifications added.");
-    alertSpy.mockRestore();
+    expect(await screen.findByText(/1 new notification/i)).toBeTruthy();
   });
 });
 
@@ -568,8 +592,8 @@ describe("TransactionsPage — navigation", () => {
       fireEvent.click(cardFace);
     });
 
-    // The page heading should still be mounted.
-    expect(screen.getByRole("heading", { name: /transactions/i })).toBeTruthy();
+    // The FAB should still be mounted (page didn't unmount).
+    expect(screen.getByTestId("fab-add")).toBeTruthy();
   });
 });
 
@@ -593,21 +617,12 @@ describe("TransactionsPage — loading state", () => {
 // ---------------------------------------------------------------------------
 
 describe("TransactionsPage — dashboard navigation", () => {
-  it("renders a Dashboard button", async () => {
+  it("does not render a Dashboard button (moved to bottom nav in App)", async () => {
     await act(async () => {
       renderPage(db);
     });
 
-    expect(screen.getByRole("button", { name: /dashboard/i })).toBeTruthy();
-  });
-
-  it("Dashboard button has blue background", async () => {
-    await act(async () => {
-      renderPage(db);
-    });
-
-    const btn = screen.getByRole("button", { name: /dashboard/i }) as HTMLElement;
-    expect(btn.style.background).toMatch(/rgb\(21,\s*101,\s*192\)|#1565C0/i);
+    expect(screen.queryByRole("button", { name: /^dashboard$/i })).toBeNull();
   });
 });
 
@@ -703,17 +718,17 @@ describe("TransactionsPage — import button", () => {
 // ---------------------------------------------------------------------------
 
 describe("TransactionsPage — tag filter", () => {
-  it("does not show tag filter when no tags exist", async () => {
+  it("does not show tag filter toggle when no tags exist", async () => {
     insertTx({ title: "No Tags" });
 
     await act(async () => {
       renderPage(db);
     });
 
-    expect(screen.queryByLabelText("Tag filter")).toBeNull();
+    expect(screen.queryByTestId("btn-toggle-tag-filter")).toBeNull();
   });
 
-  it("shows tag filter chips when transactions have tags", async () => {
+  it("shows tag filter chips when toggle is clicked", async () => {
     const tx = insertTx({ title: "Tagged" });
     const tag = addTag(db, "Food");
     addTagToTransaction(db, tx.id, tag.id);
@@ -722,9 +737,16 @@ describe("TransactionsPage — tag filter", () => {
       renderPage(db);
     });
 
+    // Filter toggle should exist
+    expect(screen.getByTestId("btn-toggle-tag-filter")).toBeTruthy();
+
+    // Click to reveal tags
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("btn-toggle-tag-filter"));
+    });
+
     const filterArea = screen.getByLabelText("Tag filter");
     expect(filterArea).toBeTruthy();
-    // Should show the tag name with count
     expect(screen.getByText(/Food \(1\)/)).toBeTruthy();
   });
 
@@ -735,6 +757,11 @@ describe("TransactionsPage — tag filter", () => {
 
     await act(async () => {
       renderPage(db);
+    });
+
+    // Click filter toggle to reveal tags
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("btn-toggle-tag-filter"));
     });
 
     expect(screen.getByText("Untagged")).toBeTruthy();
@@ -753,6 +780,11 @@ describe("TransactionsPage — tag filter", () => {
     // Both should be visible initially
     expect(screen.getByText("Food TX")).toBeTruthy();
     expect(screen.getByText("No Tag TX")).toBeTruthy();
+
+    // Click filter toggle to reveal tags
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("btn-toggle-tag-filter"));
+    });
 
     // Click Food tag chip
     await act(async () => {
@@ -774,6 +806,11 @@ describe("TransactionsPage — tag filter", () => {
       renderPage(db);
     });
 
+    // Click filter toggle to reveal tags
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("btn-toggle-tag-filter"));
+    });
+
     // Click Untagged chip
     await act(async () => {
       fireEvent.click(screen.getByText("Untagged"));
@@ -791,6 +828,11 @@ describe("TransactionsPage — tag filter", () => {
 
     await act(async () => {
       renderPage(db);
+    });
+
+    // Click filter toggle to reveal tags
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("btn-toggle-tag-filter"));
     });
 
     // No clear button initially
@@ -821,6 +863,11 @@ describe("TransactionsPage — tag filter", () => {
 
     await act(async () => {
       renderPage(db);
+    });
+
+    // Click filter toggle to reveal tags
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("btn-toggle-tag-filter"));
     });
 
     // Click Untagged (no untagged transactions exist)

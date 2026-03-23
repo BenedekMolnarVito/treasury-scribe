@@ -2,11 +2,14 @@
  * App
  *
  * Root application component. Sets up React Router v6 routes:
- *   '/'          → TransactionsPage
- *   '/edit/:id'  → EditTransactionPage
+ *   '/'              → DashboardPage (default)
+ *   '/transactions'  → TransactionsPage
+ *   '/edit/:id'      → EditTransactionPage
+ *
+ * Includes a fixed bottom navigation bar for Dashboard ↔ Transactions.
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import type { PluginListenerHandle } from "@capacitor/core";
 import type { Database } from "sql.js";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
@@ -41,6 +44,91 @@ function safeSetLocalStorage(key: string, value: string): void {
     // Silently ignore (e.g., private browsing, test environments)
   }
 }
+
+// ---------------------------------------------------------------------------
+// Bottom Navigation Bar
+// ---------------------------------------------------------------------------
+
+const NAV_STYLE = {
+  bar: {
+    position: "fixed",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    display: "flex",
+    justifyContent: "space-around",
+    alignItems: "center",
+    background: "#1A1A1A",
+    borderTop: "1px solid #333",
+    padding: "8px 0 12px",
+    zIndex: 900,
+  } as React.CSSProperties,
+  item: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 2,
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    padding: "4px 16px",
+    minWidth: 64,
+  } as React.CSSProperties,
+  icon: {
+    fontSize: "1.4em",
+    lineHeight: 1,
+  } as React.CSSProperties,
+  label: {
+    fontSize: "0.7em",
+    fontWeight: 500,
+  } as React.CSSProperties,
+};
+
+const BottomNavBar: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isDashboard = location.pathname === "/" || location.pathname === "/dashboard";
+  const isTransactions = location.pathname === "/transactions" || location.pathname.startsWith("/edit/");
+
+  return (
+    <nav style={NAV_STYLE.bar} aria-label="Main navigation" data-testid="bottom-nav">
+      <button
+        style={NAV_STYLE.item}
+        onClick={() => navigate("/")}
+        aria-label="Dashboard"
+        data-testid="nav-dashboard"
+      >
+        <span style={{ ...NAV_STYLE.icon, color: isDashboard ? "#1565C0" : "#888" }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+            <rect x="3" y="3" width="7" height="9" rx="1" />
+            <rect x="14" y="3" width="7" height="5" rx="1" />
+            <rect x="14" y="12" width="7" height="9" rx="1" />
+            <rect x="3" y="16" width="7" height="5" rx="1" />
+          </svg>
+        </span>
+        <span style={{ ...NAV_STYLE.label, color: isDashboard ? "#1565C0" : "#888" }}>Dashboard</span>
+      </button>
+      <button
+        style={NAV_STYLE.item}
+        onClick={() => navigate("/transactions")}
+        aria-label="Transactions"
+        data-testid="nav-transactions"
+      >
+        <span style={{ ...NAV_STYLE.icon, color: isTransactions ? "#1565C0" : "#888" }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6" />
+            <line x1="8" y1="12" x2="21" y2="12" />
+            <line x1="8" y1="18" x2="21" y2="18" />
+            <line x1="3" y1="6" x2="3.01" y2="6" />
+            <line x1="3" y1="12" x2="3.01" y2="12" />
+            <line x1="3" y1="18" x2="3.01" y2="18" />
+          </svg>
+        </span>
+        <span style={{ ...NAV_STYLE.label, color: isTransactions ? "#1565C0" : "#888" }}>Transactions</span>
+      </button>
+    </nav>
+  );
+};
 
 const App: React.FC = () => {
   const [db, setDb] = useState<Database | null>(null);
@@ -306,36 +394,49 @@ const App: React.FC = () => {
       <div style={{ padding: 16, paddingBottom: 0, color: "#888", background: "#121212" }}>
         <small>{startupMessage}</small>
       </div>
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <TransactionsPage
-              db={db}
-              onDatabaseChanged={handleDatabaseChanged}
-              dbVersion={dbVersion}
-              refreshActiveNotifications={refreshActiveNotifications}
-            />
-          }
-        />
-        <Route
-          path="/edit/:id"
-          element={
-            <EditTransactionPage
-              db={db}
-              onDatabaseChanged={handleDatabaseChanged}
-            />
-          }
-        />
-        <Route
-          path="/dashboard"
-          element={
-            <DashboardPage
-              db={db}
-            />
-          }
-        />
-      </Routes>
+      <div style={{ paddingBottom: 64 }}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <DashboardPage
+                db={db}
+                refreshActiveNotifications={refreshActiveNotifications}
+              />
+            }
+          />
+          <Route
+            path="/transactions"
+            element={
+              <TransactionsPage
+                db={db}
+                onDatabaseChanged={handleDatabaseChanged}
+                dbVersion={dbVersion}
+                refreshActiveNotifications={refreshActiveNotifications}
+              />
+            }
+          />
+          <Route
+            path="/edit/:id"
+            element={
+              <EditTransactionPage
+                db={db}
+                onDatabaseChanged={handleDatabaseChanged}
+              />
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <DashboardPage
+                db={db}
+                refreshActiveNotifications={refreshActiveNotifications}
+              />
+            }
+          />
+        </Routes>
+      </div>
+      <BottomNavBar />
     </BrowserRouter>
   );
 };

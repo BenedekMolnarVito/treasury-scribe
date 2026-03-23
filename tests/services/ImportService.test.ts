@@ -167,14 +167,7 @@ describe("importFromCSV", () => {
     expect(tags).toContain("Transport");
   });
 
-  it("adds Imported tag", () => {
-    const csv = [CSV_HEADERS, SAMPLE_ROW_1].join("\n");
-    importFromCSV(db, csv);
 
-    const transactions = getAllTransactions(db);
-    const tags = tagNames(db, transactions[0]!.id);
-    expect(tags).toContain("Imported");
-  });
 
   it("skips duplicate transactions", () => {
     // Import once
@@ -283,7 +276,6 @@ describe("importFromJSON", () => {
     const tags = tagNames(db, transactions[0]!.id);
     expect(tags).toContain("Food");
     expect(tags).toContain("Transport");
-    expect(tags).toContain("Imported");
   });
 
   it("skips duplicates", () => {

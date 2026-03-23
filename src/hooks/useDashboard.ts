@@ -31,7 +31,7 @@ import { getActiveTagsWithCounts } from "../data/TransactionRepository";
 // Public types
 // ---------------------------------------------------------------------------
 
-export type DashboardPeriod = "month" | "3months" | "6months";
+export type DashboardPeriod = "month" | "3months" | "6months" | "9months" | "12months";
 
 export interface IncomeSummary {
   total: number;
@@ -63,9 +63,11 @@ const EMPTY_SUMMARY: SpendingSummary = { total: 0, count: 0, avgPerTransaction: 
 const EMPTY_INCOME: IncomeSummary = { total: 0, count: 0 };
 
 const MONTHS_FOR_PERIOD: Record<DashboardPeriod, number> = {
-  month: 1,
+  month: 0,
   "3months": 3,
   "6months": 6,
+  "9months": 9,
+  "12months": 12,
 };
 
 const TOP_VENDORS_LIMIT = 10;
@@ -74,7 +76,7 @@ const TOP_VENDORS_LIMIT = 10;
 // Helpers
 // ---------------------------------------------------------------------------
 
-function periodStartDate(monthsBack: number): string {
+export function periodStartDate(monthsBack: number): string {
   const now = new Date();
   const target = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
   const yyyy = target.getFullYear();
@@ -111,8 +113,8 @@ export function useDashboard(db: Database): UseDashboardResult {
       setSummary(getSpendingSummary(db, startDate, undefined, activeTagIds));
       setIncomeSummary(getIncomeSummary(db, startDate, undefined, activeTagIds));
       setByTag(getSpendingByTag(db, startDate, undefined, activeTagIds));
-      setByMonth(getSpendingByMonth(db, months, activeTagIds));
-      setIncomeByMonth(getIncomeByMonth(db, months, activeTagIds));
+      setByMonth(getSpendingByMonth(db, startDate, activeTagIds));
+      setIncomeByMonth(getIncomeByMonth(db, startDate, activeTagIds));
       setByVendor(getSpendingByVendor(db, TOP_VENDORS_LIMIT, startDate, undefined, activeTagIds));
       setUntaggedCount(getUntaggedTransactionCount(db));
       setAvailableTags(getActiveTagsWithCounts(db));

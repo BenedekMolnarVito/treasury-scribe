@@ -18,25 +18,42 @@ A passive, **offline-first Android budgeting app** that captures Revolut push no
 - **Manual entry auto-tag** — manually added transactions are always tagged `AddedManually`
 
 ### Transaction Management
-- Add transactions manually (title, description, amount, currency, cash flag)
-- Edit title, description, mark as cash or income
+- Add transactions manually via floating **+** button (slide-up modal with title, description, amount, currency, date/time, cash/income toggles)
+- Edit title, description, amount, currency, date/time, mark as cash or income
 - Soft-delete individual transactions or clear all at once
 - Toggle visibility of soft-deleted transactions
 - Swipe left on a card to delete with a confirmation dialog
+- Split a transaction into fractional or fixed-amount parts
+
+### Navigation & Layout
+- **Bottom navigation bar** with Dashboard (default home) and Transactions tabs
+- **Dashboard** at `/` — hero card, doughnut chart, monthly trend line chart, top vendors
+- **Transactions** at `/transactions` — transaction list with compact icon toolbar
+- Compact SVG icon buttons for Refresh, Export, Import, Revolut Import, Clear All
 
 ### Tagging
 - Free-form tag creation and assignment per transaction
 - Tag search with debounced suggestions (300 ms, 2+ characters)
 - Quick-add word cloud showing the 5 most-used tags
 - Tags are shown as a comma-separated line on each transaction card
+- **Tag cloud filter** — hidden behind a filter icon; tap to reveal animated tag chips for real-time filtering
+
+### Dashboard
+- Period pills: This Month, 3 Months, 6 Months, 9 Months, 12 Months
+- Tag-filtered doughnut chart (spending by tag)
+- Monthly trend line chart with sum labels at data points
+- Top 10 vendors list
+- Untagged transaction badge with one-tap classify navigation
 
 ### Transaction List UI
 - Cards colour-coded: light yellow = untagged, light green = tagged
 - Amount shown in red (expense) or dark green (income)
 - Tap any card to open the edit screen
+- **Pull-to-refresh** with animated circular arrow indicator and toast notification
 
 ### Export
 - Export all non-deleted transactions as **JSON** or **CSV** via the Android Share sheet
+- Filenames include timestamp: `treasury-scribe-transactions_YYYYMMDD_HHMMSS.csv`
 - CSV columns: `Id, ReceivedAt, NotificationTitle, NotificationBody, PackageName, Amount, Currency, IsCash, Tags, IsDeleted`
 - Bundled Python script (`csv_transformer_service/transform_csv.py`) converts the exported CSV into a 5-column spreadsheet-ready format (`Nap, Megnevezés, Tag, Kiadás, Currency`)
 
@@ -134,10 +151,11 @@ All tests use a real in-memory sql.js database — no mocks for the data layer.
 ```
 src/
   models/          — Transaction, Tag, TransactionTag interfaces + factories
-  data/            — DatabaseService, TransactionRepository, TagRepository
-  services/        — NotificationService, IngestionService
-  hooks/           — useTransactions, useEditTransaction
-  components/      — TransactionsPage, EditTransactionPage
+  data/            — DatabaseService, TransactionRepository, TagRepository, DashboardRepository
+  services/        — NotificationService, IngestionService, ImportService, SplitTransactionService
+  hooks/           — useTransactions, useEditTransaction, useDashboard
+  components/      — TransactionsPage, EditTransactionPage, DashboardPage, SplitTransactionModal
+  pages/           — Thin re-exports of components (for route-level code splitting)
   plugins/         — NotificationListenerPlugin (Capacitor bridge TS interface)
 android/
   app/src/main/    — Kotlin NotificationListenerPlugin + AndroidManifest

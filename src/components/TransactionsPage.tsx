@@ -49,6 +49,18 @@ const COLOR_IMPORTED = "#4CAF50";
 const COLOR_SKIPPED = "#888";
 const COLOR_ERRORS = "#FFB300";
 
+const ACTION_ICON_STYLE: React.CSSProperties = {
+  background: "none",
+  border: "1px solid #444",
+  borderRadius: 8,
+  padding: "7px 9px",
+  color: "#CCC",
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
 // ---------------------------------------------------------------------------
 // TransactionCard
 // ---------------------------------------------------------------------------
@@ -256,7 +268,8 @@ interface AddTransactionModalProps {
     amount?: number,
     currency?: string,
     isCash?: boolean,
-    isIncome?: boolean
+    isIncome?: boolean,
+    receivedAt?: string
   ) => Promise<void>;
   /** Called when the modal should close (Cancel or backdrop click). */
   onClose: () => void;
@@ -275,6 +288,11 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [currency, setCurrency] = useState("");
   const [isCash, setIsCash] = useState(false);
   const [isIncome, setIsIncome] = useState(false);
+  const [receivedAt, setReceivedAt] = useState(() => {
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  });
 
   const handleSubmit = async (
     e: React.FormEvent<HTMLFormElement>
@@ -289,7 +307,8 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         : undefined,
       currency !== "" ? currency : undefined,
       isCash,
-      isIncome
+      isIncome,
+      receivedAt ? new Date(receivedAt).toISOString() : undefined
     );
     onClose();
   };
@@ -300,6 +319,17 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     if (e.target === e.currentTarget) onClose();
   };
 
+  const inputStyle: React.CSSProperties = {
+    background: "#2A2A2A",
+    color: "#E0E0E0",
+    border: "1px solid #444",
+    borderRadius: 8,
+    padding: "10px 14px",
+    fontSize: "0.95em",
+    width: "100%",
+    boxSizing: "border-box",
+  };
+
   return (
     <div
       role="dialog"
@@ -308,9 +338,9 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.5)",
+        background: "rgba(0,0,0,0.6)",
         display: "flex",
-        alignItems: "center",
+        alignItems: "flex-end",
         justifyContent: "center",
         zIndex: 1000,
       }}
@@ -320,16 +350,28 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         style={{
           background: "#1E1E1E",
           color: "#E0E0E0",
-          padding: 24,
-          borderRadius: 12,
-          minWidth: 300,
+          padding: "20px 20px 28px",
+          borderRadius: "16px 16px 0 0",
+          width: "100%",
+          maxWidth: 420,
           display: "flex",
           flexDirection: "column",
-          gap: 12,
+          gap: 14,
+          animation: "slideUp 0.25s ease-out",
         }}
         onSubmit={(e) => void handleSubmit(e)}
       >
-        <h2 style={{ margin: 0, color: "#FFFFFF" }}>Add Transaction</h2>
+        {/* Header with close X */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2 style={{ margin: 0, color: "#FFFFFF", fontSize: "1.1em" }}>Add Transaction</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            data-testid="btn-close-add-modal"
+            style={{ background: "none", border: "none", color: "#888", fontSize: "1.4em", cursor: "pointer", padding: 4, lineHeight: 1 }}
+          >✕</button>
+        </div>
 
         <input
           placeholder="Title"
@@ -337,51 +379,69 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           onChange={(e) => setTitle(e.target.value)}
           required
           aria-label="Title"
-          style={{ background: "#2A2A2A", color: "#E0E0E0", border: "1px solid #444", borderRadius: 6, padding: "8px 12px" }}
+          style={inputStyle}
         />
         <textarea
           placeholder="Description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           aria-label="Description"
-          style={{ background: "#2A2A2A", color: "#E0E0E0", border: "1px solid #444", borderRadius: 6, padding: "8px 12px" }}
+          rows={2}
+          style={{ ...inputStyle, resize: "vertical" }}
         />
-        <input
-          type="number"
-          placeholder="Amount"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          aria-label="Amount"
-          style={{ background: "#2A2A2A", color: "#E0E0E0", border: "1px solid #444", borderRadius: 6, padding: "8px 12px" }}
-        />
-        <input
-          placeholder="Currency (e.g. EUR)"
-          value={currency}
-          onChange={(e) => setCurrency(e.target.value)}
-          aria-label="Currency"
-          style={{ background: "#2A2A2A", color: "#E0E0E0", border: "1px solid #444", borderRadius: 6, padding: "8px 12px" }}
-        />
-        <ToggleSwitch
-          checked={isCash}
-          onChange={setIsCash}
-          label="Cash transaction"
-          ariaLabel="Cash transaction"
-          testId="toggle-add-cash"
-        />
-        <ToggleSwitch
-          checked={isIncome}
-          onChange={setIsIncome}
-          label="Income"
-          ariaLabel="Income"
-          testId="toggle-add-income"
-        />
-
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button type="button" onClick={onClose} style={{ background: "#333", color: "#E0E0E0", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer" }}>
-            Cancel
-          </button>
-          <button type="submit" style={{ background: "#1565C0", color: "#FFFFFF", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer" }}>Add</button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <input
+            type="number"
+            placeholder="Amount"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            aria-label="Amount"
+            style={{ ...inputStyle, flex: 2 }}
+          />
+          <input
+            placeholder="Currency"
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            aria-label="Currency"
+            style={{ ...inputStyle, flex: 1 }}
+          />
         </div>
+        <input
+          type="datetime-local"
+          value={receivedAt}
+          onChange={(e) => setReceivedAt(e.target.value)}
+          aria-label="Date and time"
+          data-testid="input-datetime"
+          style={inputStyle}
+        />
+        <div style={{ display: "flex", gap: 16 }}>
+          <ToggleSwitch
+            checked={isCash}
+            onChange={setIsCash}
+            label="Cash"
+            ariaLabel="Cash transaction"
+            testId="toggle-add-cash"
+          />
+          <ToggleSwitch
+            checked={isIncome}
+            onChange={setIsIncome}
+            label="Income"
+            ariaLabel="Income"
+            testId="toggle-add-income"
+          />
+        </div>
+
+        <button type="submit" style={{
+          background: "#1565C0",
+          color: "#FFFFFF",
+          border: "none",
+          borderRadius: 10,
+          padding: "12px 0",
+          fontSize: "1em",
+          fontWeight: 600,
+          cursor: "pointer",
+          marginTop: 4,
+        }}>Add Transaction</button>
       </form>
     </div>
   );
@@ -1001,17 +1061,7 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
   // Header button handlers
   // -------------------------------------------------------------------------
 
-  const handleRefresh = useCallback(async (): Promise<void> => {
-    const addedCount = refreshActiveNotifications
-      ? await refreshActiveNotifications()
-      : 0;
-    await loadTransactions();
-    window.alert(
-      addedCount > 0
-        ? `${addedCount} new notifications added.`
-        : "No new notifications to process."
-    );
-  }, [loadTransactions, refreshActiveNotifications]);
+
 
   const handleExport = useCallback((): void => {
     setShowExportModal(true);
@@ -1069,9 +1119,71 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
     setIncludeUntagged(false);
   }, []);
 
-  // -------------------------------------------------------------------------
-  // Card handlers
-  // -------------------------------------------------------------------------
+  // Pull-to-refresh state
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const pullStartY = useRef(0);
+  const isPulling = useRef(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const PULL_THRESHOLD = 80;
+
+  const [showTagFilter, setShowTagFilter] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+
+    if (toastTimeoutRef.current !== null) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 2000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current !== null) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
+  const handlePullStart = useCallback((e: React.TouchEvent) => {
+    const container = scrollContainerRef.current;
+    if (container && container.scrollTop <= 0) {
+      pullStartY.current = e.touches[0]?.clientY ?? 0;
+      isPulling.current = true;
+    }
+  }, []);
+
+  const handlePullMove = useCallback((e: React.TouchEvent) => {
+    if (!isPulling.current || isRefreshing) return;
+    const y = e.touches[0]?.clientY ?? 0;
+    const dist = Math.max(0, Math.min(120, y - pullStartY.current));
+    setPullDistance(dist);
+  }, [isRefreshing]);
+
+  const handlePullEnd = useCallback(async () => {
+    if (!isPulling.current) return;
+    isPulling.current = false;
+    if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
+      setIsRefreshing(true);
+      setPullDistance(0);
+      const addedCount = refreshActiveNotifications ? await refreshActiveNotifications() : 0;
+      await loadTransactions();
+      setIsRefreshing(false);
+      showToast(
+        addedCount > 0
+          ? `↻ ${addedCount} new notification${addedCount !== 1 ? "s" : ""} captured`
+          : "Up to date"
+      );
+    } else {
+      setPullDistance(0);
+    }
+  }, [pullDistance, isRefreshing, refreshActiveNotifications, loadTransactions, showToast]);
 
   const handleDelete = useCallback(
     async (id: number): Promise<void> => {
@@ -1092,71 +1204,152 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
   // -------------------------------------------------------------------------
 
   return (
-    <>
-      {/* Header action buttons */}
-      <div
-        style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}
-      >
+    <div
+      ref={scrollContainerRef}
+      data-testid="transactions-scroll-container"
+      onTouchStart={handlePullStart}
+      onTouchMove={handlePullMove}
+      onTouchEnd={handlePullEnd}
+      style={{ position: "relative" }}
+    >
+      {/* Pull-to-refresh indicator */}
+      {(pullDistance > 0 || isRefreshing) && (
+        <div style={{
+          textAlign: "center",
+          padding: "8px 0",
+          height: isRefreshing ? 40 : Math.min(pullDistance, PULL_THRESHOLD) * 0.5,
+          overflow: "hidden",
+          transition: isRefreshing ? "none" : "height 0.1s",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}>
+          <span style={{
+            display: "inline-block",
+            fontSize: "1.4em",
+            transform: `rotate(${isRefreshing ? 0 : pullDistance * 3}deg)`,
+            animation: isRefreshing ? "spin 0.8s linear infinite" : "none",
+          }} role="status" aria-label="Pull to refresh">↻</span>
+        </div>
+      )}
+
+      {/* Toast notification */}
+      {toast && (
+        <div style={{
+          position: "fixed",
+          top: 24,
+          left: "50%",
+          transform: "translateX(-50%)",
+          background: "#333",
+          color: "#FFF",
+          padding: "8px 20px",
+          borderRadius: 20,
+          fontSize: "0.85em",
+          zIndex: 1100,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+        }} role="status" data-testid="toast">{toast}</div>
+      )}
+
+      {/* Compact toolbar: action icon buttons */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 10,
+        flexWrap: "wrap",
+      }}>
+        {/* Filter icon — leftmost position */}
+        {availableTags.length > 0 && (
+          <button
+            onClick={() => setShowTagFilter(prev => !prev)}
+            aria-label="Toggle tag filter"
+            title="Filter by tags"
+            data-testid="btn-toggle-tag-filter"
+            style={{
+              ...ACTION_ICON_STYLE,
+              color: (selectedTagIds.size > 0 || includeUntagged) ? "#1565C0" : "#AAA",
+              position: "relative",
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            {(selectedTagIds.size > 0 || includeUntagged) && (
+              <span style={{
+                position: "absolute",
+                top: -2,
+                right: -2,
+                width: 8,
+                height: 8,
+                background: "#1565C0",
+                borderRadius: "50%",
+              }} />
+            )}
+          </button>
+        )}
         <button
-          onClick={() => navigate("/dashboard")}
-          aria-label="Dashboard"
-          style={{ background: "#1565C0", color: "#FFFFFF", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: "0.9em", cursor: "pointer" }}
+          onClick={handleExport}
+          aria-label="Export"
+          title="Export"
+          style={ACTION_ICON_STYLE}
         >
-          📊 Dashboard
-        </button>
-        <button
-          onClick={() => setShowModal(true)}
-          aria-label="Add Transaction"
-        >
-          Add Transaction
-        </button>
-        <button onClick={handleRefresh} aria-label="Refresh">
-          Refresh
-        </button>
-        <button onClick={handleExport} aria-label="Export">
-          Export
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         </button>
         <button
           onClick={() => setShowImportModal(true)}
           aria-label="Import"
-          style={{ background: "#1565C0", color: "#FFFFFF", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: "0.9em", cursor: "pointer" }}
+          title="Import"
+          style={ACTION_ICON_STYLE}
         >
-          Import
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
         <button
           onClick={() => setShowRevolutImportModal(true)}
           aria-label="Revolut Import"
-          style={{ background: "#FF9800", color: "#FFFFFF", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: "0.9em", cursor: "pointer" }}
+          title="Revolut Import"
+          style={{ ...ACTION_ICON_STYLE, color: "#FF9800" }}
         >
-          Revolut Import
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
         </button>
-        <button onClick={handleClearAll} aria-label="Clear All">
-          Clear All
+        <button
+          onClick={handleClearAll}
+          aria-label="Clear All"
+          title="Clear All"
+          style={{ ...ACTION_ICON_STYLE, color: "#FF6B6B" }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>
+
+        <div style={{ flex: 1 }} />
+
+        {/* Show deleted toggle with trash icon label */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: showDeleted ? "#FF6B6B" : "#777", flexShrink: 0 }}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <ToggleSwitch
+            checked={showDeleted}
+            onChange={setShowDeleted}
+            label="Deleted"
+            ariaLabel="Show deleted entries"
+            testId="toggle-show-deleted"
+          />
+        </div>
       </div>
 
-      {/* Tag filter chips */}
-      {availableTags.length > 0 && (
-        <TagFilterChips
-          tags={availableTags}
-          selectedTagIds={selectedTagIds}
-          includeUntagged={includeUntagged}
-          onToggleTag={handleToggleTag}
-          onToggleUntagged={handleToggleUntagged}
-          onClearFilter={handleClearFilter}
-        />
+      {/* Tag cloud filter — animated roll-down */}
+      {showTagFilter && availableTags.length > 0 && (
+        <div style={{
+          overflow: "hidden",
+          animation: "slideDown 0.25s ease-out",
+          marginBottom: 10,
+        }}>
+          <TagFilterChips
+            tags={availableTags}
+            selectedTagIds={selectedTagIds}
+            includeUntagged={includeUntagged}
+            onToggleTag={handleToggleTag}
+            onToggleUntagged={handleToggleUntagged}
+            onClearFilter={handleClearFilter}
+          />
+        </div>
       )}
-
-      {/* Show deleted toggle */}
-      <div style={{ marginBottom: 12 }}>
-        <ToggleSwitch
-          checked={showDeleted}
-          onChange={setShowDeleted}
-          label="Show deleted entries"
-          ariaLabel="Show deleted entries"
-          testId="toggle-show-deleted"
-        />
-      </div>
 
       {/* Loading spinner */}
       {loading && (
@@ -1192,7 +1385,35 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
         </div>
       )}
 
-      {/* Add Transaction modal */}
+      {/* Floating "+" Add button */}
+      <button
+        onClick={() => setShowModal(true)}
+        aria-label="Add Transaction"
+        data-testid="fab-add"
+        style={{
+          position: "fixed",
+          bottom: 80,
+          right: 20,
+          width: 56,
+          height: 56,
+          borderRadius: "50%",
+          background: "#1565C0",
+          color: "#FFF",
+          border: "none",
+          fontSize: "1.8em",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 4px 12px rgba(21,101,192,0.5)",
+          cursor: "pointer",
+          zIndex: 800,
+          lineHeight: 1,
+        }}
+      >
+        +
+      </button>
+
+      {/* Add Transaction modal — slide up from bottom */}
       {showModal && (
         <AddTransactionModal
           onAdd={addManualTransaction}
@@ -1236,7 +1457,7 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
           onClose={() => setRevolutImportResult(null)}
         />
       )}
-    </>
+    </div>
   );
 };
 
@@ -1271,10 +1492,7 @@ const TransactionsPage: React.FC<TransactionsPageProps> = ({
   refreshActiveNotifications,
 }) => {
   return (
-    <main style={{ padding: 16, background: "#121212", color: "#E0E0E0", minHeight: "100vh" }}>
-      {/* Page title — always rendered so routing tests can find the heading */}
-      <h1 style={{ color: "#FFFFFF" }}>Transactions</h1>
-
+    <main style={{ padding: 16, paddingBottom: 0, background: "#121212", color: "#E0E0E0", minHeight: "100vh" }}>
       {db ? (
         <TransactionsPageContent
           db={db}

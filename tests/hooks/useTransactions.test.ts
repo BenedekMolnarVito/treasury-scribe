@@ -361,7 +361,7 @@ describe("exportTransactions('json')", () => {
 
     expect(shareMock.fn).toHaveBeenCalledOnce();
     const [title, text] = shareMock.fn.mock.calls[0] as [string, string];
-    expect(title).toBe("transactions.json");
+    expect(title).toMatch(/^treasury-scribe-transactions_\d{8}_\d{6}\.json$/);
     expect(text).toContain("Share test");
   });
 
@@ -544,6 +544,24 @@ describe("exportTransactions('csv')", () => {
     });
 
     expect(csvContent).toContain("food\\;drink");
+  });
+
+  it("calls the share function with a timestamped csv filename", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    await act(async () => {
+      await result.current.addManualTransaction("CSV Export Filename", "body");
+    });
+
+    await act(async () => {
+      await result.current.exportTransactions("csv");
+    });
+
+    expect(shareMock.fn).toHaveBeenCalledOnce();
+    const [title] = shareMock.fn.mock.calls[0] as [string, string];
+    expect(title).toMatch(/^treasury-scribe-transactions_\d{8}_\d{6}\.csv$/);
   });
 });
 

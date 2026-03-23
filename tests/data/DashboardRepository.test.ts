@@ -290,7 +290,7 @@ describe("getSpendingByTag", () => {
 
 describe("getSpendingByMonth", () => {
   it("returns empty array on an empty database", () => {
-    expect(getSpendingByMonth(db)).toEqual([]);
+    expect(getSpendingByMonth(db, "2000-01-01")).toEqual([]);
   });
 
   it("groups spending by YYYY-MM in chronological order", () => {
@@ -307,7 +307,7 @@ describe("getSpendingByMonth", () => {
       receivedAt: "2024-03-10T10:00:00.000Z",
     });
 
-    const results = getSpendingByMonth(db, 120);
+    const results = getSpendingByMonth(db, "2014-01-01");
     expect(results.length).toBeGreaterThanOrEqual(2);
 
     const jan = results.find((r) => r.month === "2024-01");
@@ -325,7 +325,7 @@ describe("getSpendingByMonth", () => {
     expect(janIdx).toBeLessThan(marIdx);
   });
 
-  it("respects the months limit", () => {
+  it("respects the startDate limit", () => {
     // Insert a very old transaction outside any reasonable window
     insertTransaction({
       amount: 99,
@@ -337,7 +337,9 @@ describe("getSpendingByMonth", () => {
       receivedAt: new Date().toISOString(),
     });
 
-    const results = getSpendingByMonth(db, 1);
+    const now = new Date();
+    const startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    const results = getSpendingByMonth(db, startDate);
     // The 2000 transaction should be excluded
     expect(results.find((r) => r.month === "2000-01")).toBeUndefined();
   });
@@ -347,7 +349,8 @@ describe("getSpendingByMonth", () => {
     insertTransaction({ amount: 50, receivedAt: now });
     insertTransaction({ amount: 100, receivedAt: now, isDeleted: true });
 
-    const results = getSpendingByMonth(db, 1);
+    const startDate = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
+    const results = getSpendingByMonth(db, startDate);
     const total = results.reduce((sum, r) => sum + r.total, 0);
     expect(total).toBe(50);
   });
@@ -357,7 +360,8 @@ describe("getSpendingByMonth", () => {
     insertTransaction({ amount: 30, receivedAt: now });
     insertTransaction({ amount: 500, receivedAt: now, isIncome: true });
 
-    const results = getSpendingByMonth(db, 1);
+    const startDate = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
+    const results = getSpendingByMonth(db, startDate);
     const total = results.reduce((sum, r) => sum + r.total, 0);
     expect(total).toBe(30);
   });
@@ -369,7 +373,8 @@ describe("getSpendingByMonth", () => {
     insertTransaction({ amount: 30, receivedAt: now }); // untagged
     linkTag(tx1, foodTag);
 
-    const results = getSpendingByMonth(db, 1, [foodTag]);
+    const startDate = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
+    const results = getSpendingByMonth(db, startDate, [foodTag]);
     const total = results.reduce((sum, r) => sum + r.total, 0);
     expect(total).toBe(50);
   });
@@ -647,7 +652,7 @@ describe("getIncomeSummary", () => {
 
 describe("getIncomeByMonth", () => {
   it("returns empty array on an empty database", () => {
-    expect(getIncomeByMonth(db)).toEqual([]);
+    expect(getIncomeByMonth(db, "2000-01-01")).toEqual([]);
   });
 
   it("groups income by YYYY-MM in chronological order", () => {
@@ -662,7 +667,7 @@ describe("getIncomeByMonth", () => {
       receivedAt: "2024-03-10T10:00:00.000Z",
     });
 
-    const results = getIncomeByMonth(db, 120);
+    const results = getIncomeByMonth(db, "2014-01-01");
     expect(results.length).toBeGreaterThanOrEqual(2);
 
     const jan = results.find((r) => r.month === "2024-01");
@@ -678,7 +683,8 @@ describe("getIncomeByMonth", () => {
     insertTransaction({ amount: 5000, isIncome: true, receivedAt: now });
     insertTransaction({ amount: 100, receivedAt: now }); // expense
 
-    const results = getIncomeByMonth(db, 1);
+    const startDate = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
+    const results = getIncomeByMonth(db, startDate);
     const total = results.reduce((sum, r) => sum + r.total, 0);
     expect(total).toBe(5000);
   });
@@ -688,7 +694,8 @@ describe("getIncomeByMonth", () => {
     insertTransaction({ amount: 5000, isIncome: true, receivedAt: now });
     insertTransaction({ amount: 3000, isIncome: true, isDeleted: true, receivedAt: now });
 
-    const results = getIncomeByMonth(db, 1);
+    const startDate = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
+    const results = getIncomeByMonth(db, startDate);
     const total = results.reduce((sum, r) => sum + r.total, 0);
     expect(total).toBe(5000);
   });
@@ -700,7 +707,8 @@ describe("getIncomeByMonth", () => {
     insertTransaction({ amount: 3000, isIncome: true, receivedAt: now }); // untagged
     linkTag(tx1, salaryTag);
 
-    const results = getIncomeByMonth(db, 1, [salaryTag]);
+    const startDate = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
+    const results = getIncomeByMonth(db, startDate, [salaryTag]);
     const total = results.reduce((sum, r) => sum + r.total, 0);
     expect(total).toBe(5000);
   });

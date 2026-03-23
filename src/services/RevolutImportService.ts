@@ -213,7 +213,6 @@ function buildNotificationBody(type: string, description: string): string {
  * - Skips currency exchange rows ("Átváltás").
  * - Deduplicates against existing transactions (same vendor, same absolute
  *   amount, receivedAt within ±1 day).
- * - Tags every imported transaction with "RevolutImport".
  * - Never deletes existing transactions.
  *
  * @param db         - sql.js Database instance.
@@ -241,7 +240,6 @@ export function importRevolutCsv(
     return { imported: 0, skipped: 0 };
   }
 
-  const revolutTag = addTag(db, REVOLUT_IMPORT_TAG);
   let imported = 0;
   let skipped = 0;
 
@@ -285,8 +283,7 @@ export function importRevolutCsv(
       isDeleted: false,
     });
 
-    const inserted = addTransaction(db, txData);
-    addTagToTransaction(db, inserted.id, revolutTag.id);
+    addTransaction(db, txData);
     imported++;
   }
 
