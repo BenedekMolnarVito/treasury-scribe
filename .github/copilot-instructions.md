@@ -59,9 +59,10 @@ Key documentation:
 4. Prompt for notification access → POST_NOTIFICATIONS permission → battery optimization exclusion → MIUI/HyperOS auto-start guidance (each only once per session).
 
 ### Routes
-- `/` → `TransactionsPage`
+- `/` → `DashboardPage` (default home)
+- `/transactions` → `TransactionsPage`
 - `/edit/:id` → `EditTransactionPage`
-- `/dashboard` → `DashboardPage`
+- `/dashboard` → `DashboardPage` (alias)
 
 ## Key Conventions
 
@@ -204,4 +205,12 @@ getUntaggedTransactionCount(db, startDate?, endDate?): number
 ```
 
 ### useDashboard periods
-`DashboardPeriod = "month" | "3months" | "6months"` — filters analytics to the last 1/3/6 months from today. Tag filter via `selectedTagIds` (empty = all tags).
+`DashboardPeriod = "month" | "3months" | "6months" | "9months" | "12months"` — filters analytics to the last 1/3/6/9/12 months from today. Tag filter via `selectedTagIds` (empty = all tags).
+
+### UI structure
+- **Bottom nav bar** in `App.tsx` — Dashboard and Transactions icons with active state highlighting
+- **Floating action button** (+) on Transactions page opens slide-up Add Transaction modal
+- **Tag cloud filter** behind filter icon toggle on Transactions page (animated roll-down)
+- **Pull-to-refresh** with touch gesture detection on both Dashboard and Transactions pages
+- **DateTime picker** using native `<input type="datetime-local">` on Add and Edit Transaction forms
+- All styling is inline React `CSSProperties` — no CSS framework. Dark theme (#121212 base)
