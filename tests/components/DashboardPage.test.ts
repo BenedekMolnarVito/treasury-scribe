@@ -28,6 +28,7 @@ import {
   beforeAll,
   beforeEach,
   afterEach,
+  vi,
 } from "vitest";
 import type { Database } from "sql.js";
 
@@ -71,7 +72,10 @@ afterEach(() => {
 // Render helpers
 // ---------------------------------------------------------------------------
 
-function renderPage(database: Database = db): void {
+function renderPage(
+  database: Database = db,
+  props: Partial<{ refreshActiveNotifications: () => Promise<number> }> = {}
+): void {
   render(
     React.createElement(
       MemoryRouter,
@@ -81,7 +85,7 @@ function renderPage(database: Database = db): void {
         null,
         React.createElement(Route, {
           path: "/dashboard",
-          element: React.createElement(DashboardPage, { db: database }),
+          element: React.createElement(DashboardPage, { db: database, ...props }),
         }),
         React.createElement(Route, {
           path: "/",
@@ -469,6 +473,90 @@ describe("vendors card", () => {
       expect(card.textContent).toContain("Lidl");
       expect(card.textContent).toContain("CBA");
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pull-to-refresh
+// ---------------------------------------------------------------------------
+
+/**
+ * Simulates a downward pull-to-refresh gesture on the scroll container.
+ * Uses two separate act() phases to mirror how React processes touch events:
+ * 1. touchstart + touchmove → React re-renders with updated pullDistance
+ * 2. touchend              → handlePullEnd sees the updated pullDistance
+ */
+async function simulatePullToRefresh(container: Element): Promise<void> {
+  /**
+   * Creates a synthetic TouchEvent of the given type.
+   * `Object.defineProperty` is required because jsdom's TouchEvent does not
+   * expose the Touch constructor as a global, so `touches` must be patched
+   * directly onto the event instance. `clientY` drives the pull distance
+   * detected by handlePullMove; omit it for `touchend` (no active touches).
+   */
+  const makeEvent = (type: string, clientY?: number): TouchEvent => {
+    const e = new TouchEvent(type, { bubbles: true, cancelable: true });
+    if (clientY !== undefined) {
+      Object.defineProperty(e, "touches", {
+        get: () => [{ clientX: 0, clientY, target: container }],
+        configurable: true,
+      });
+    }
+    return e;
+  };
+
+  // Phase 1: set isPulling and pull distance, then flush React state.
+  await act(async () => {
+    container.dispatchEvent(makeEvent("touchstart", 0));
+    container.dispatchEvent(makeEvent("touchmove", 100));
+  });
+
+  // Phase 2: fire touchend now that pullDistance is updated in state.
+  await act(async () => {
+    container.dispatchEvent(makeEvent("touchend"));
+  });
+}
+
+describe("pull-to-refresh", () => {
+  it("shows 'Up to date' toast when pull-to-refresh finds no new notifications", async () => {
+    const refreshActiveNotifications = vi.fn(async () => 0);
+
+    await act(async () => {
+      renderPage(db, { refreshActiveNotifications });
+    });
+
+    const container = screen.getByTestId("dashboard-scroll-container");
+    await simulatePullToRefresh(container);
+
+    expect(refreshActiveNotifications).toHaveBeenCalledOnce();
+    expect(await screen.findByText("Up to date")).toBeTruthy();
+  });
+
+  it("shows captured notification count in pull-to-refresh toast", async () => {
+    const refreshActiveNotifications = vi.fn(async () => 2);
+
+    await act(async () => {
+      renderPage(db, { refreshActiveNotifications });
+    });
+
+    const container = screen.getByTestId("dashboard-scroll-container");
+    await simulatePullToRefresh(container);
+
+    expect(refreshActiveNotifications).toHaveBeenCalledOnce();
+    expect(await screen.findByText(/2 new notifications/i)).toBeTruthy();
+  });
+
+  it("invokes refreshActiveNotifications callback on pull-to-refresh", async () => {
+    const refreshActiveNotifications = vi.fn(async () => 0);
+
+    await act(async () => {
+      renderPage(db, { refreshActiveNotifications });
+    });
+
+    const container = screen.getByTestId("dashboard-scroll-container");
+    await simulatePullToRefresh(container);
+
+    expect(refreshActiveNotifications).toHaveBeenCalledOnce();
   });
 });
 

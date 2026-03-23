@@ -560,6 +560,26 @@ const DashboardPageContent: React.FC<DashboardPageContentProps> = ({ db, refresh
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const PULL_THRESHOLD = 80;
   const [toast, setToast] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    if (toastTimeoutRef.current !== null) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 2000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current !== null) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handlePullStart = useCallback((e: React.TouchEvent) => {
     const container = scrollContainerRef.current;
@@ -585,16 +605,15 @@ const DashboardPageContent: React.FC<DashboardPageContentProps> = ({ db, refresh
       const addedCount = refreshActiveNotifications ? await refreshActiveNotifications() : 0;
       await refresh();
       setIsRefreshing(false);
-      setToast(
+      showToast(
         addedCount > 0
           ? `↻ ${addedCount} new notification${addedCount !== 1 ? "s" : ""} captured`
           : "Up to date"
       );
-      setTimeout(() => setToast(null), 2000);
     } else {
       setPullDistance(0);
     }
-  }, [pullDistance, isRefreshing, refresh, refreshActiveNotifications]);
+  }, [pullDistance, isRefreshing, refresh, refreshActiveNotifications, showToast]);
 
   if (loading) {
     return (
@@ -613,6 +632,7 @@ const DashboardPageContent: React.FC<DashboardPageContentProps> = ({ db, refresh
       onTouchMove={handlePullMove}
       onTouchEnd={() => void handlePullEnd()}
       style={{ position: "relative" }}
+      data-testid="dashboard-scroll-container"
     >
       {/* Pull-to-refresh indicator */}
       {(pullDistance > 0 || isRefreshing) && (
