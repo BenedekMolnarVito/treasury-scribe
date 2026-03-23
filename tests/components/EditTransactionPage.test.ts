@@ -33,7 +33,7 @@ import {
 import type { Database } from "sql.js";
 
 import { initDatabase } from "../../src/data/DatabaseService";
-import { addTransaction } from "../../src/data/TransactionRepository";
+import { addTransaction, getTransactionById } from "../../src/data/TransactionRepository";
 import { addTag, addTagToTransaction } from "../../src/data/TagRepository";
 import { createTransaction } from "../../src/models/Transaction";
 import EditTransactionPage from "../../src/components/EditTransactionPage.tsx";
@@ -110,10 +110,11 @@ function insertTx(
     isIncome: boolean;
     amount: number | null;
     currency: string | null;
+    receivedAt: string;
   }> = {}
 ): number {
   const tx = addTransaction(db, {
-    ...createTransaction({ receivedAt: new Date().toISOString() }),
+    ...createTransaction({ receivedAt: overrides.receivedAt ?? new Date().toISOString() }),
     notificationTitle: overrides.title ?? "Test Title",
     notificationBody: overrides.body ?? "Test Body",
     isCash: overrides.isCash ?? false,
@@ -626,5 +627,62 @@ describe("split transaction", () => {
       fireEvent.click(screen.getByTestId("btn-split"));
     });
     expect(screen.getByRole("dialog", { name: /split transaction/i })).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// receivedAt (Date & Time field)
+// ---------------------------------------------------------------------------
+
+describe("receivedAt field", () => {
+  it("renders the Date & Time input", async () => {
+    const id = insertTx();
+    renderPage(id);
+    await waitFor(() =>
+      expect(screen.getByTestId("input-received-at")).toBeTruthy()
+    );
+  });
+
+  it("populates the Date & Time input from the stored transaction", async () => {
+    const storedAt = "2024-06-15T14:30:00.000Z";
+    const id = insertTx({ receivedAt: storedAt });
+    renderPage(id);
+    await waitFor(() => {
+      const input = screen.getByTestId("input-received-at") as HTMLInputElement;
+      // The input shows a datetime-local value (first 16 chars of the ISO string).
+      expect(input.value).toBe(storedAt.slice(0, 16));
+    });
+  });
+
+  it("persists an updated receivedAt on save", async () => {
+    const originalAt = "2024-01-01T10:00:00.000Z";
+    const id = insertTx({ receivedAt: originalAt });
+    renderPage(id);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("input-received-at")).toBeTruthy()
+    );
+
+    // Change the date/time field.
+    act(() => {
+      fireEvent.change(screen.getByTestId("input-received-at"), {
+        target: { value: "2024-06-20T08:45" },
+      });
+    });
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("btn-save"));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("transactions-page")).toBeTruthy()
+    );
+
+    // Confirm the updated value is persisted in the database.
+    const saved = getTransactionById(db, id);
+    expect(saved).not.toBeNull();
+    // Verify both the date and time are correctly persisted.
+    expect(saved!.receivedAt).toContain("2024-06-20");
+    expect(saved!.receivedAt).toContain("08:45");
   });
 });
