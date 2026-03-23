@@ -1129,12 +1129,28 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
 
   const [showTagFilter, setShowTagFilter] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
-    setTimeout(() => setToast(null), 2000);
+
+    if (toastTimeoutRef.current !== null) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 2000);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current !== null) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
   const handlePullStart = useCallback((e: React.TouchEvent) => {
     const container = scrollContainerRef.current;
     if (container && container.scrollTop <= 0) {
