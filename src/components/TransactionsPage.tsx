@@ -1393,7 +1393,7 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
         style={{
           position: "fixed",
           bottom: 80,
-          right: 20,
+          left: 20,
           width: 56,
           height: 56,
           borderRadius: "50%",
