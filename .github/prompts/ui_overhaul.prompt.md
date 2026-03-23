@@ -28,6 +28,7 @@
 - Use AVD and adb logcat for UI testing. AVD should be installed globally. The AVD name is: *poco_f5_test*. Call *mobile-worker* agent to execute tasks and verify results with UI tests.
 - Write tests that cover all the new features and bug fixes. 
 - Skip Appium tests, do NOT use appium-mcp for testing, as it is not installed.
+- Also test the app with mobile-mcp, but only for testing the new features and bug fixes, not for testing the existing functionality.
 - You MUST use *./tests/mock data/transactions.json* for testing, do NOT use real data for testing. Import the transactions JSON data into the app using the Import button in the Transactions page. Verify that the data is imported correctly and that all the new features and bug fixes work as expected with this mock data.
 - Iterate until all UI behavior is verified to be consistent with the new design and features.
 

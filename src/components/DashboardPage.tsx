@@ -9,7 +9,7 @@
  * All charts are lightweight inline SVG - no external charting library.
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Database } from "sql.js";
 import type { SpendingByTag, SpendingByMonth, SpendingByVendor } from "../data/DashboardRepository";
@@ -125,12 +125,16 @@ const PERIOD_OPTIONS: { value: DashboardPeriod; label: string }[] = [
   { value: "month", label: "This Month" },
   { value: "3months", label: "3 Mo" },
   { value: "6months", label: "6 Mo" },
+  { value: "9months", label: "9 Mo" },
+  { value: "12months", label: "12 Mo" },
 ];
 
 const PERIOD_LABELS: Record<DashboardPeriod, string> = {
   month: "This Month",
   "3months": "Last 3 Months",
   "6months": "Last 6 Months",
+  "9months": "Last 9 Months",
+  "12months": "Last 12 Months",
 };
 
 // ---------------------------------------------------------------------------
@@ -153,7 +157,8 @@ function computeAvgPerDay(expenseTotal: number, period: DashboardPeriod): number
     const dayOfMonth = now.getDate();
     return dayOfMonth > 0 ? expenseTotal / dayOfMonth : 0;
   }
-  const monthsBack = period === "3months" ? 3 : 6;
+  const monthsMap: Record<string, number> = { "3months": 3, "6months": 6, "9months": 9, "12months": 12 };
+  const monthsBack = monthsMap[period] ?? 3;
   const periodStart = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
   const diffMs = now.getTime() - periodStart.getTime();
   const totalDays = Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
@@ -408,10 +413,10 @@ const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({ expenseData, inco
   const maxVal = Math.max(...expenseValues, ...incomeValues, 1);
 
   const chartWidth = 300;
-  const chartHeight = 180;
+  const chartHeight = 200;
   const padLeft = 10;
   const padRight = 10;
-  const padTop = 10;
+  const padTop = 24;
   const padBottom = 30;
   const plotWidth = chartWidth - padLeft - padRight;
   const plotHeight = chartHeight - padTop - padBottom;
@@ -441,6 +446,16 @@ const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({ expenseData, inco
         {incomeValues.map((v, i) => (
           <circle key={`inc-${i}`} cx={getX(i)} cy={getY(v)} r={3} fill="#4CAF50" />
         ))}
+        {expenseValues.map((v, i) => v > 0 ? (
+          <text key={`exp-label-${i}`} x={getX(i)} y={getY(v) - 8} fill="#FF6B6B" fontSize="9" textAnchor="middle" fontWeight="bold">
+            {formatAmount(v)}
+          </text>
+        ) : null)}
+        {incomeValues.map((v, i) => v > 0 ? (
+          <text key={`inc-label-${i}`} x={getX(i)} y={getY(v) - 8} fill="#4CAF50" fontSize="9" textAnchor="middle" fontWeight="bold">
+            {formatAmount(v)}
+          </text>
+        ) : null)}
         {allMonths.map((month, i) => (
           <text key={month} x={getX(i)} y={chartHeight - 4} fill="#B0B0B0" fontSize="10" textAnchor="middle">
             {formatMonthLabel(month)}
@@ -536,6 +551,45 @@ const DashboardPageContent: React.FC<DashboardPageContentProps> = ({ db }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Pull-to-refresh state
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const pullStartY = useRef(0);
+  const isPulling = useRef(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const PULL_THRESHOLD = 80;
+  const [toast, setToast] = useState<string | null>(null);
+
+  const handlePullStart = useCallback((e: React.TouchEvent) => {
+    const container = scrollContainerRef.current;
+    if (container && container.scrollTop <= 0) {
+      pullStartY.current = e.touches[0]?.clientY ?? 0;
+      isPulling.current = true;
+    }
+  }, []);
+
+  const handlePullMove = useCallback((e: React.TouchEvent) => {
+    if (!isPulling.current || isRefreshing) return;
+    const y = e.touches[0]?.clientY ?? 0;
+    const dist = Math.max(0, Math.min(120, y - pullStartY.current));
+    setPullDistance(dist);
+  }, [isRefreshing]);
+
+  const handlePullEnd = useCallback(async () => {
+    if (!isPulling.current) return;
+    isPulling.current = false;
+    if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
+      setIsRefreshing(true);
+      setPullDistance(0);
+      await refresh();
+      setIsRefreshing(false);
+      setToast("Data refreshed");
+      setTimeout(() => setToast(null), 2000);
+    } else {
+      setPullDistance(0);
+    }
+  }, [pullDistance, isRefreshing, refresh]);
+
   if (loading) {
     return (
       <div role="status" aria-label="Loading" style={{ textAlign: "center", padding: 32, color: "#B0B0B0" }}>
@@ -547,18 +601,50 @@ const DashboardPageContent: React.FC<DashboardPageContentProps> = ({ db }) => {
   const avgPerDay = computeAvgPerDay(summary.total, period);
 
   return (
-    <>
-      <div style={STYLE.header}>
-        <button
-          style={STYLE.backButton}
-          onClick={() => navigate("/")}
-          data-testid="btn-back"
-          aria-label="Back"
-        >
-          {"\u2190"} Back
-        </button>
-        <h1 style={STYLE.heading}>Dashboard</h1>
-      </div>
+    <div
+      ref={scrollContainerRef}
+      onTouchStart={handlePullStart}
+      onTouchMove={handlePullMove}
+      onTouchEnd={() => void handlePullEnd()}
+      style={{ position: "relative" }}
+    >
+      {/* Pull-to-refresh indicator */}
+      {(pullDistance > 0 || isRefreshing) && (
+        <div style={{
+          textAlign: "center",
+          padding: "8px 0",
+          height: isRefreshing ? 40 : Math.min(pullDistance, PULL_THRESHOLD) * 0.5,
+          overflow: "hidden",
+          transition: isRefreshing ? "none" : "height 0.1s",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}>
+          <span style={{
+            display: "inline-block",
+            fontSize: "1.4em",
+            transform: `rotate(${isRefreshing ? 0 : pullDistance * 3}deg)`,
+            animation: isRefreshing ? "spin 0.8s linear infinite" : "none",
+          }} role="status" aria-label="Pull to refresh">↻</span>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: "fixed",
+          top: 24,
+          left: "50%",
+          transform: "translateX(-50%)",
+          background: "#333",
+          color: "#FFF",
+          padding: "8px 20px",
+          borderRadius: 20,
+          fontSize: "0.85em",
+          zIndex: 1100,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+        }} role="status" data-testid="toast">{toast}</div>
+      )}
 
       <HeroCard
         expenseTotal={summary.total}
@@ -578,8 +664,8 @@ const DashboardPageContent: React.FC<DashboardPageContentProps> = ({ db }) => {
       <TagDoughnutChart data={byTag} />
       <MonthlyTrendChart expenseData={byMonth} incomeData={incomeByMonth} />
       <TopVendorsCard data={byVendor} />
-      <UntaggedBadge count={untaggedCount} onClassify={() => navigate("/?filter=untagged")} />
-    </>
+      <UntaggedBadge count={untaggedCount} onClassify={() => navigate("/transactions?filter=untagged")} />
+    </div>
   );
 };
 

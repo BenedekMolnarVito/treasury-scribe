@@ -91,7 +91,7 @@ function renderPage(txId: number, database: Database = db): void {
           element: React.createElement(EditTransactionPage, { db: database }),
         }),
         React.createElement(Route, {
-          path: "/",
+          path: "/transactions",
           element: React.createElement("div", {
             "data-testid": "transactions-page",
           }),

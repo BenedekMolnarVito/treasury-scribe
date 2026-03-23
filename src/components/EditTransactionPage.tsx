@@ -239,6 +239,8 @@ const EditTransactionPageContent: React.FC<
     setIsIncome,
     setAmount,
     setCurrency,
+    receivedAt,
+    setReceivedAt,
     setNewTagName,
     loadTransaction,
     save,
@@ -280,14 +282,14 @@ const EditTransactionPageContent: React.FC<
 
   const handleSave = (): void => {
     save();
-    void navigate("/");
+    void navigate("/transactions");
   };
 
   const handleSplit = (spec: SplitSpec): void => {
     save();
     splitTransaction(db, transactionId, spec);
     if (onDatabaseChanged) onDatabaseChanged(db);
-    void navigate("/");
+    void navigate("/transactions");
   };
 
   // -------------------------------------------------------------------------
@@ -356,6 +358,23 @@ const EditTransactionPageContent: React.FC<
         data-testid="input-currency"
         placeholder="HUF"
         maxLength={4}
+      />
+
+      {/* Date and Time */}
+      <label htmlFor="edit-received-at" style={STYLE.label}>
+        Date & Time
+      </label>
+      <input
+        id="edit-received-at"
+        type="datetime-local"
+        style={STYLE.input}
+        value={receivedAt ? receivedAt.slice(0, 16) : ""}
+        onChange={(e) => {
+          const val = e.target.value;
+          setReceivedAt(val ? new Date(val).toISOString() : "");
+        }}
+        aria-label="Date and time"
+        data-testid="input-received-at"
       />
 
       {/* Cash Transaction toggle */}

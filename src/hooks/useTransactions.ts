@@ -76,7 +76,8 @@ export interface UseTransactionsResult {
     amount?: number,
     currency?: string,
     isCash?: boolean,
-    isIncome?: boolean
+    isIncome?: boolean,
+    receivedAt?: string
   ) => Promise<void>;
   /**
    * Serialize non-deleted transactions and share them.
@@ -361,9 +362,10 @@ export function useTransactions(
       amount?: number,
       currency?: string,
       isCash?: boolean,
-      isIncome?: boolean
+      isIncome?: boolean,
+      receivedAt?: string
     ): Promise<void> => {
-      const now = new Date().toISOString();
+      const now = receivedAt ?? new Date().toISOString();
 
       const newTx = addTransaction(db, {
         ...createTransaction({
@@ -396,15 +398,26 @@ export function useTransactions(
     async (format: "json" | "csv"): Promise<string> => {
       const rows = getAllTransactions(db); // always non-deleted
 
+      const now = new Date();
+      const timestamp = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, "0"),
+        String(now.getDate()).padStart(2, "0"),
+        "_",
+        String(now.getHours()).padStart(2, "0"),
+        String(now.getMinutes()).padStart(2, "0"),
+        String(now.getSeconds()).padStart(2, "0"),
+      ].join("");
+
       let content: string;
       let title: string;
 
       if (format === "json") {
         content = transactionsToJSON(rows);
-        title = "transactions.json";
+        title = `treasury-scribe-transactions_${timestamp}.json`;
       } else {
         content = transactionsToCSV(rows);
-        title = "transactions.csv";
+        title = `treasury-scribe-transactions_${timestamp}.csv`;
       }
 
       await share(title, content);

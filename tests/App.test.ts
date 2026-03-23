@@ -17,6 +17,7 @@ import { describe, it, expect, afterEach } from "vitest";
 // via the module graph).
 import TransactionsPage from "../src/pages/TransactionsPage.tsx";
 import EditTransactionPage from "../src/pages/EditTransactionPage.tsx";
+import DashboardPage from "../src/pages/DashboardPage.tsx";
 
 /** Render the app routes with a given initial URL using MemoryRouter. */
 function renderAt(initialPath: string): void {
@@ -29,6 +30,10 @@ function renderAt(initialPath: string): void {
         null,
         React.createElement(Route, {
           path: "/",
+          element: React.createElement(DashboardPage),
+        }),
+        React.createElement(Route, {
+          path: "/transactions",
           element: React.createElement(TransactionsPage),
         }),
         React.createElement(Route, {
@@ -45,9 +50,10 @@ describe("App routing", () => {
     cleanup();
   });
 
-  it("renders TransactionsPage at '/'", () => {
+  it("renders DashboardPage at '/'", () => {
     renderAt("/");
-    expect(screen.getByRole("heading", { name: /transactions/i })).toBeTruthy();
+    // No db provided, so Dashboard shows its no-db fallback
+    expect(screen.getByTestId("no-db-message")).toBeTruthy();
   });
 
   it("renders EditTransactionPage at '/edit/:id'", () => {

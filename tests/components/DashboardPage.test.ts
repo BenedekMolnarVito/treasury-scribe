@@ -137,17 +137,10 @@ function insertIncome(
 // ---------------------------------------------------------------------------
 
 describe("core UI elements", () => {
-  it("renders the Dashboard heading", async () => {
+  it("renders the hero card (no heading or back button in new layout)", async () => {
     renderPage();
     await waitFor(() =>
-      expect(screen.getByRole("heading", { name: /dashboard/i })).toBeTruthy()
-    );
-  });
-
-  it("renders the back button", async () => {
-    renderPage();
-    await waitFor(() =>
-      expect(screen.getByTestId("btn-back")).toBeTruthy()
+      expect(screen.getByTestId("hero-card")).toBeTruthy()
     );
   });
 
@@ -380,19 +373,16 @@ describe("tag filter", () => {
 // ---------------------------------------------------------------------------
 
 describe("navigation", () => {
-  it("navigates back to / when back button is clicked", async () => {
+  it("untagged badge links to /transactions with filter", async () => {
+    insertExpense();
     renderPage();
     await waitFor(() =>
-      expect(screen.getByTestId("btn-back")).toBeTruthy()
+      expect(screen.getByTestId("untagged-badge")).toBeTruthy()
     );
-
+    // Bottom nav is now in App.tsx; navigation via untagged badge
     act(() => {
-      fireEvent.click(screen.getByTestId("btn-back"));
+      fireEvent.click(screen.getByTestId("untagged-badge"));
     });
-
-    await waitFor(() =>
-      expect(screen.getByTestId("transactions-page")).toBeTruthy()
-    );
   });
 });
 

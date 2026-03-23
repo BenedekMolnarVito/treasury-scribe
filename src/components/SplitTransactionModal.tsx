@@ -299,7 +299,7 @@ const SplitTransactionModal: React.FC<SplitTransactionModalProps> = ({
     if (mode === "fraction") {
       return Math.abs(fractionSum - 1.0) <= FRACTION_SUM_TOLERANCE;
     }
-    return remainder > 0;
+    return remainder >= 0;
   }, [mode, fractionSum, remainder]);
 
   // -------------------------------------------------------------------------
@@ -351,9 +351,9 @@ const SplitTransactionModal: React.FC<SplitTransactionModalProps> = ({
         });
         const sum = amounts.reduce((a, b) => a + b, 0);
         const rem = Math.round((parentAmount - sum) * 100) / 100;
-        if (rem <= 0) {
+        if (rem < 0) {
           throw new Error(
-            "Remainder must be > 0 (currently " + rem.toFixed(2) + ")"
+            "Sum of parts exceeds original amount (remainder " + rem.toFixed(2) + ")"
           );
         }
         onSplit({ mode: "amount", amounts });

@@ -58,6 +58,10 @@ vi.mock("../src/pages/EditTransactionPage", () => ({
   default: () => <div>Edit transaction page mock</div>,
 }));
 
+vi.mock("../src/pages/DashboardPage", () => ({
+  default: () => <div>Dashboard page mock</div>,
+}));
+
 describe("App notification lifecycle", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -99,12 +103,11 @@ describe("App notification lifecycle", () => {
     render(<App />);
 
     expect(screen.getByText(/initializing local database/i)).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /transactions/i })).toBeTruthy();
 
     resolveDatabase?.(mockDb);
 
     await waitFor(() => {
-      expect(screen.getByText(/transactions page mock/i)).toBeTruthy();
+      expect(screen.getByText(/dashboard page mock/i)).toBeTruthy();
     });
   });
 

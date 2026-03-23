@@ -116,16 +116,17 @@ function insertTx(
 // ---------------------------------------------------------------------------
 
 describe("TransactionsPage — heading", () => {
-  it("always renders a Transactions heading", () => {
+  it("renders empty-state when no db is provided", () => {
     renderPage();
-    expect(screen.getByRole("heading", { name: /transactions/i })).toBeTruthy();
+    expect(screen.getByTestId("empty-state")).toBeTruthy();
   });
 
-  it("renders heading when db is provided", async () => {
+  it("renders content when db is provided", async () => {
     await act(async () => {
       renderPage(db);
     });
-    expect(screen.getByRole("heading", { name: /transactions/i })).toBeTruthy();
+    // With bottom nav in App.tsx, there is no heading. Check FAB is present.
+    expect(screen.getByTestId("fab-add")).toBeTruthy();
   });
 });
 
@@ -568,8 +569,8 @@ describe("TransactionsPage — navigation", () => {
       fireEvent.click(cardFace);
     });
 
-    // The page heading should still be mounted.
-    expect(screen.getByRole("heading", { name: /transactions/i })).toBeTruthy();
+    // The FAB should still be mounted (page didn't unmount).
+    expect(screen.getByTestId("fab-add")).toBeTruthy();
   });
 });
 
@@ -593,21 +594,12 @@ describe("TransactionsPage — loading state", () => {
 // ---------------------------------------------------------------------------
 
 describe("TransactionsPage — dashboard navigation", () => {
-  it("renders a Dashboard button", async () => {
+  it("does not render a Dashboard button (moved to bottom nav in App)", async () => {
     await act(async () => {
       renderPage(db);
     });
 
-    expect(screen.getByRole("button", { name: /dashboard/i })).toBeTruthy();
-  });
-
-  it("Dashboard button has blue background", async () => {
-    await act(async () => {
-      renderPage(db);
-    });
-
-    const btn = screen.getByRole("button", { name: /dashboard/i }) as HTMLElement;
-    expect(btn.style.background).toMatch(/rgb\(21,\s*101,\s*192\)|#1565C0/i);
+    expect(screen.queryByRole("button", { name: /^dashboard$/i })).toBeNull();
   });
 });
 
@@ -703,17 +695,17 @@ describe("TransactionsPage — import button", () => {
 // ---------------------------------------------------------------------------
 
 describe("TransactionsPage — tag filter", () => {
-  it("does not show tag filter when no tags exist", async () => {
+  it("does not show tag filter toggle when no tags exist", async () => {
     insertTx({ title: "No Tags" });
 
     await act(async () => {
       renderPage(db);
     });
 
-    expect(screen.queryByLabelText("Tag filter")).toBeNull();
+    expect(screen.queryByTestId("btn-toggle-tag-filter")).toBeNull();
   });
 
-  it("shows tag filter chips when transactions have tags", async () => {
+  it("shows tag filter chips when toggle is clicked", async () => {
     const tx = insertTx({ title: "Tagged" });
     const tag = addTag(db, "Food");
     addTagToTransaction(db, tx.id, tag.id);
@@ -722,9 +714,16 @@ describe("TransactionsPage — tag filter", () => {
       renderPage(db);
     });
 
+    // Filter toggle should exist
+    expect(screen.getByTestId("btn-toggle-tag-filter")).toBeTruthy();
+
+    // Click to reveal tags
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("btn-toggle-tag-filter"));
+    });
+
     const filterArea = screen.getByLabelText("Tag filter");
     expect(filterArea).toBeTruthy();
-    // Should show the tag name with count
     expect(screen.getByText(/Food \(1\)/)).toBeTruthy();
   });
 
@@ -735,6 +734,11 @@ describe("TransactionsPage — tag filter", () => {
 
     await act(async () => {
       renderPage(db);
+    });
+
+    // Click filter toggle to reveal tags
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("btn-toggle-tag-filter"));
     });
 
     expect(screen.getByText("Untagged")).toBeTruthy();
@@ -753,6 +757,11 @@ describe("TransactionsPage — tag filter", () => {
     // Both should be visible initially
     expect(screen.getByText("Food TX")).toBeTruthy();
     expect(screen.getByText("No Tag TX")).toBeTruthy();
+
+    // Click filter toggle to reveal tags
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("btn-toggle-tag-filter"));
+    });
 
     // Click Food tag chip
     await act(async () => {
@@ -774,6 +783,11 @@ describe("TransactionsPage — tag filter", () => {
       renderPage(db);
     });
 
+    // Click filter toggle to reveal tags
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("btn-toggle-tag-filter"));
+    });
+
     // Click Untagged chip
     await act(async () => {
       fireEvent.click(screen.getByText("Untagged"));
@@ -791,6 +805,11 @@ describe("TransactionsPage — tag filter", () => {
 
     await act(async () => {
       renderPage(db);
+    });
+
+    // Click filter toggle to reveal tags
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("btn-toggle-tag-filter"));
     });
 
     // No clear button initially
@@ -821,6 +840,11 @@ describe("TransactionsPage — tag filter", () => {
 
     await act(async () => {
       renderPage(db);
+    });
+
+    // Click filter toggle to reveal tags
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("btn-toggle-tag-filter"));
     });
 
     // Click Untagged (no untagged transactions exist)

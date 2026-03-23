@@ -361,7 +361,7 @@ describe("exportTransactions('json')", () => {
 
     expect(shareMock.fn).toHaveBeenCalledOnce();
     const [title, text] = shareMock.fn.mock.calls[0] as [string, string];
-    expect(title).toBe("transactions.json");
+    expect(title).toMatch(/^treasury-scribe-transactions_\d{8}_\d{6}\.json$/);
     expect(text).toContain("Share test");
   });
 
