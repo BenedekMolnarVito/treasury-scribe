@@ -170,7 +170,6 @@ export function importTransactions(db: Database, content: string): ImportResult
 // ImportResult: { imported: number; skipped: number; errors: string[] }
 // CSV column order: ReceivedAt, NotificationTitle, NotificationBody, PackageName,
 //                  Amount, Currency, IsCash, Tags (;-separated), IsDeleted
-// All imported rows receive the "Imported" tag automatically.
 ```
 
 **RevolutImportService** (`src/services/RevolutImportService.ts`) — parse Revolut's own CSV export:
@@ -179,7 +178,7 @@ export function importRevolutCsv(db: Database, csvContent: string): RevolutImpor
 // RevolutImportSummary: { imported: number; skipped: number }
 // Skipped types: ["Átváltás"] (FX conversions)
 // Handled types: Kártyás fizetés, Átutalás, Feltöltés, Kártyás visszatérítés
-// All rows tagged "RevolutImport"; dedup window: ±1 day
+// Dedup window: ±1 day
 ```
 
 **SplitTransactionService** (`src/services/SplitTransactionService.ts`) — split one transaction into parts:

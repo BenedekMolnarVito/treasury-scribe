@@ -387,13 +387,15 @@ const EditTransactionPageContent: React.FC<
       />
 
       {/* Income toggle */}
-      <ToggleSwitch
-        checked={isIncome}
-        onChange={setIsIncome}
-        label="Income"
-        ariaLabel="Income"
-        testId="toggle-income"
-      />
+      <div style={{ marginTop: 14 }}>
+        <ToggleSwitch
+          checked={isIncome}
+          onChange={setIsIncome}
+          label="Income"
+          ariaLabel="Income"
+          testId="toggle-income"
+        />
+      </div>
 
       {/* Current tags */}
       <p style={STYLE.sectionTitle}>Current Tags</p>

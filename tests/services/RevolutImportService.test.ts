@@ -452,41 +452,12 @@ describe("importRevolutCsv – does NOT delete existing transactions", () => {
 // ---------------------------------------------------------------------------
 
 describe("importRevolutCsv – tagging", () => {
-  it("tags all imported transactions with RevolutImport", () => {
-    const csv = buildCsv(CARD_PAYMENT_ROW, TOPUP_ROW, REFUND_ROW);
-    importRevolutCsv(db, csv);
-
-    const txs = getAllTransactions(db);
-    for (const tx of txs) {
-      const tags = getTagsForTransaction(db, tx.id);
-      const tagNames = tags.map((t) => t.name);
-      expect(tagNames).toContain("RevolutImport");
-    }
-  });
-
   it("does NOT tag skipped transactions (exchanges)", () => {
     const csv = buildCsv(EXCHANGE_ROW);
     importRevolutCsv(db, csv);
 
     const txs = getAllTransactions(db);
     expect(txs).toHaveLength(0);
-  });
-
-  it("does NOT tag pre-existing transactions with RevolutImport", () => {
-    const existing = addTransaction(
-      db,
-      createTransaction({
-        notificationTitle: "Untagged vendor",
-        receivedAt: "2024-06-01T10:00:00",
-      })
-    );
-
-    const csv = buildCsv(CARD_PAYMENT_ROW);
-    importRevolutCsv(db, csv);
-
-    const existingTags = getTagsForTransaction(db, existing.id);
-    const tagNames = existingTags.map((t) => t.name);
-    expect(tagNames).not.toContain("RevolutImport");
   });
 });
 
@@ -543,7 +514,7 @@ describe("importRevolutCsv – summary", () => {
 
 describe("importRevolutCsv – real CSV template file", () => {
   it("imports the account-statement CSV from tests folder", () => {
-    const csvPath = resolve(__dirname, "../account-statement_2026-02-01_2026-03-22_hu-hu_5138f3.csv");
+    const csvPath = resolve(__dirname, "../mock data/account-statement_2026-02-01_2026-03-22_hu-hu_5138f3.csv");
     const csvContent = readFileSync(csvPath, "utf-8");
 
     const summary = importRevolutCsv(db, csvContent);
@@ -556,11 +527,5 @@ describe("importRevolutCsv – real CSV template file", () => {
 
     const allTxs = getAllTransactions(db);
     expect(allTxs.length).toBe(summary.imported);
-
-    // Verify every imported tx is tagged
-    for (const tx of allTxs) {
-      const tags = getTagsForTransaction(db, tx.id);
-      expect(tags.map((t) => t.name)).toContain("RevolutImport");
-    }
   });
 });

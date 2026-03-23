@@ -21,12 +21,6 @@ export interface ImportResult {
   errors: string[];
 }
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const IMPORTED_TAG_NAME = "Imported";
-
 const EXPECTED_COLUMN_COUNT = 10;
 
 // ---------------------------------------------------------------------------
@@ -232,10 +226,6 @@ function importParsedRow(db: Database, row: ParsedRow): "imported" | "skipped" {
     const tag = addTag(db, tagName);
     addTagToTransaction(db, savedTx.id, tag.id);
   }
-
-  // Always add the "Imported" tag
-  const importedTag = addTag(db, IMPORTED_TAG_NAME);
-  addTagToTransaction(db, savedTx.id, importedTag.id);
 
   return "imported";
 }

@@ -525,9 +525,10 @@ const UntaggedBadge: React.FC<UntaggedBadgeProps> = ({ count, onClassify }) =>
 
 interface DashboardPageContentProps {
   db: Database;
+  refreshActiveNotifications?: () => Promise<number>;
 }
 
-const DashboardPageContent: React.FC<DashboardPageContentProps> = ({ db }) => {
+const DashboardPageContent: React.FC<DashboardPageContentProps> = ({ db, refreshActiveNotifications }) => {
   const navigate = useNavigate();
   const {
     summary,
@@ -581,14 +582,19 @@ const DashboardPageContent: React.FC<DashboardPageContentProps> = ({ db }) => {
     if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
       setIsRefreshing(true);
       setPullDistance(0);
+      const addedCount = refreshActiveNotifications ? await refreshActiveNotifications() : 0;
       await refresh();
       setIsRefreshing(false);
-      setToast("Data refreshed");
+      setToast(
+        addedCount > 0
+          ? `↻ ${addedCount} new notification${addedCount !== 1 ? "s" : ""} captured`
+          : "Up to date"
+      );
       setTimeout(() => setToast(null), 2000);
     } else {
       setPullDistance(0);
     }
-  }, [pullDistance, isRefreshing, refresh]);
+  }, [pullDistance, isRefreshing, refresh, refreshActiveNotifications]);
 
   if (loading) {
     return (
@@ -675,13 +681,14 @@ const DashboardPageContent: React.FC<DashboardPageContentProps> = ({ db }) => {
 
 export interface DashboardPageProps {
   db?: Database;
+  refreshActiveNotifications?: () => Promise<number>;
 }
 
-const DashboardPage: React.FC<DashboardPageProps> = ({ db }) => {
+const DashboardPage: React.FC<DashboardPageProps> = ({ db, refreshActiveNotifications }) => {
   return (
     <main style={STYLE.page}>
       {db ? (
-        <DashboardPageContent db={db} />
+        <DashboardPageContent db={db} refreshActiveNotifications={refreshActiveNotifications} />
       ) : (
         <p data-testid="no-db-message" style={{ color: "#888" }}>
           Database not available.

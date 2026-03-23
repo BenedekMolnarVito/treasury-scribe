@@ -1061,17 +1061,7 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
   // Header button handlers
   // -------------------------------------------------------------------------
 
-  const handleRefresh = useCallback(async (): Promise<void> => {
-    const addedCount = refreshActiveNotifications
-      ? await refreshActiveNotifications()
-      : 0;
-    await loadTransactions();
-    window.alert(
-      addedCount > 0
-        ? `${addedCount} new notifications added.`
-        : "No new notifications to process."
-    );
-  }, [loadTransactions, refreshActiveNotifications]);
+
 
   const handleExport = useCallback((): void => {
     setShowExportModal(true);
@@ -1168,9 +1158,12 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
       setPullDistance(0);
       const addedCount = refreshActiveNotifications ? await refreshActiveNotifications() : 0;
       await loadTransactions();
-      void addedCount; // consumed
       setIsRefreshing(false);
-      showToast("Data refreshed");
+      showToast(
+        addedCount > 0
+          ? `↻ ${addedCount} new notification${addedCount !== 1 ? "s" : ""} captured`
+          : "Up to date"
+      );
     } else {
       setPullDistance(0);
     }
@@ -1197,6 +1190,7 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
   return (
     <div
       ref={scrollContainerRef}
+      data-testid="transactions-scroll-container"
       onTouchStart={handlePullStart}
       onTouchMove={handlePullMove}
       onTouchEnd={handlePullEnd}
@@ -1248,50 +1242,7 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
         marginBottom: 10,
         flexWrap: "wrap",
       }}>
-        <button
-          onClick={handleRefresh}
-          aria-label="Refresh"
-          title="Refresh"
-          style={ACTION_ICON_STYLE}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-        </button>
-        <button
-          onClick={handleExport}
-          aria-label="Export"
-          title="Export"
-          style={ACTION_ICON_STYLE}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </button>
-        <button
-          onClick={() => setShowImportModal(true)}
-          aria-label="Import"
-          title="Import"
-          style={ACTION_ICON_STYLE}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        </button>
-        <button
-          onClick={() => setShowRevolutImportModal(true)}
-          aria-label="Revolut Import"
-          title="Revolut Import"
-          style={{ ...ACTION_ICON_STYLE, color: "#FF9800" }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-        </button>
-        <button
-          onClick={handleClearAll}
-          aria-label="Clear All"
-          title="Clear All"
-          style={{ ...ACTION_ICON_STYLE, color: "#FF6B6B" }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-        </button>
-
-        <div style={{ flex: 1 }} />
-
-        {/* Filter icon toggle */}
+        {/* Filter icon — leftmost position */}
         {availableTags.length > 0 && (
           <button
             onClick={() => setShowTagFilter(prev => !prev)}
@@ -1318,15 +1269,52 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
             )}
           </button>
         )}
+        <button
+          onClick={handleExport}
+          aria-label="Export"
+          title="Export"
+          style={ACTION_ICON_STYLE}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </button>
+        <button
+          onClick={() => setShowImportModal(true)}
+          aria-label="Import"
+          title="Import"
+          style={ACTION_ICON_STYLE}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <button
+          onClick={() => setShowRevolutImportModal(true)}
+          aria-label="Revolut Import"
+          title="Revolut Import"
+          style={{ ...ACTION_ICON_STYLE, color: "#FF9800" }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        </button>
+        <button
+          onClick={handleClearAll}
+          aria-label="Clear All"
+          title="Clear All"
+          style={{ ...ACTION_ICON_STYLE, color: "#FF6B6B" }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
 
-        {/* Show deleted toggle */}
-        <ToggleSwitch
-          checked={showDeleted}
-          onChange={setShowDeleted}
-          label=""
-          ariaLabel="Show deleted entries"
-          testId="toggle-show-deleted"
-        />
+        <div style={{ flex: 1 }} />
+
+        {/* Show deleted toggle with trash icon label */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: showDeleted ? "#FF6B6B" : "#777", flexShrink: 0 }}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <ToggleSwitch
+            checked={showDeleted}
+            onChange={setShowDeleted}
+            label="Deleted"
+            ariaLabel="Show deleted entries"
+            testId="toggle-show-deleted"
+          />
+        </div>
       </div>
 
       {/* Tag cloud filter — animated roll-down */}

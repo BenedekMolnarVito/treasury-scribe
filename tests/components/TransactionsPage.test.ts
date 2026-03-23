@@ -134,14 +134,47 @@ describe("TransactionsPage — heading", () => {
 // Header buttons
 // ---------------------------------------------------------------------------
 
+/**
+ * Simulates a downward pull-to-refresh gesture on the scroll container.
+ * Uses two separate act() phases:
+ * 1. touchstart + touchmove → React re-renders with updated pullDistance
+ * 2. touchend              → handlePullEnd sees the updated pullDistance
+ *
+ * The Object.defineProperty override is needed because jsdom's TouchEvent
+ * doesn't expose the Touch constructor as a global.
+ */
+async function simulatePullToRefresh(container: Element): Promise<void> {
+  const makeEvent = (type: string, clientY?: number): TouchEvent => {
+    const e = new TouchEvent(type, { bubbles: true, cancelable: true });
+    if (clientY !== undefined) {
+      Object.defineProperty(e, "touches", {
+        get: () => [{ clientX: 0, clientY, target: container }],
+        configurable: true,
+      });
+    }
+    return e;
+  };
+
+  // Phase 1: set isPulling and pull distance, then flush React state.
+  await act(async () => {
+    container.dispatchEvent(makeEvent("touchstart", 0));
+    container.dispatchEvent(makeEvent("touchmove", 100));
+  });
+
+  // Phase 2: fire touchend now that pullDistance is updated in state.
+  await act(async () => {
+    container.dispatchEvent(makeEvent("touchend"));
+  });
+}
+
 describe("TransactionsPage — header buttons", () => {
-  it("renders Add Transaction, Refresh, Export, and Clear All buttons", async () => {
+  it("renders Add Transaction, Filter, Export, Import, and Clear All buttons", async () => {
     await act(async () => {
       renderPage(db);
     });
 
     expect(screen.getByRole("button", { name: /add transaction/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /refresh/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^refresh$/i })).toBeNull();
     expect(screen.getByRole("button", { name: /export/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /clear all/i })).toBeTruthy();
   });
@@ -160,25 +193,21 @@ describe("TransactionsPage — header buttons", () => {
     expect(screen.getByRole("button", { name: "CSV" })).toBeTruthy();
   });
 
-  it("shows refresh feedback after checking notifications", async () => {
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+  it("shows 'Up to date' toast when pull-to-refresh finds no new notifications", async () => {
     const refreshActiveNotifications = vi.fn(async () => 0);
 
     await act(async () => {
       renderPage(db, { refreshActiveNotifications });
     });
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
-    });
+    const container = screen.getByTestId("transactions-scroll-container");
+    await simulatePullToRefresh(container);
 
     expect(refreshActiveNotifications).toHaveBeenCalledOnce();
-    expect(alertSpy).toHaveBeenCalledWith("No new notifications to process.");
-    alertSpy.mockRestore();
+    expect(await screen.findByText("Up to date")).toBeTruthy();
   });
 
-  it("reloads transactions from the database when Refresh is tapped", async () => {
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+  it("reloads transactions from the database after pull-to-refresh", async () => {
     const refreshActiveNotifications = vi.fn(async () => 0);
 
     await act(async () => {
@@ -191,21 +220,17 @@ describe("TransactionsPage — header buttons", () => {
       notificationBody: "Inserted outside the current UI state",
     });
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
-    });
+    const container = screen.getByTestId("transactions-scroll-container");
+    await simulatePullToRefresh(container);
 
     expect(refreshActiveNotifications).toHaveBeenCalledOnce();
     expect(await screen.findByText("Refresh Reloaded")).toBeTruthy();
     expect(
       await screen.findByText("Inserted outside the current UI state")
     ).toBeTruthy();
-    expect(alertSpy).toHaveBeenCalledWith("No new notifications to process.");
-    alertSpy.mockRestore();
   });
 
-  it("shows how many active notifications were added during refresh", async () => {
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+  it("shows captured notification count in pull-to-refresh toast", async () => {
     const refreshActiveNotifications = vi.fn(async () => {
       addTransaction(db, {
         ...createTransaction({ receivedAt: new Date().toISOString() }),
@@ -222,14 +247,12 @@ describe("TransactionsPage — header buttons", () => {
       renderPage(db, { refreshActiveNotifications });
     });
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
-    });
+    const container = screen.getByTestId("transactions-scroll-container");
+    await simulatePullToRefresh(container);
 
     expect(refreshActiveNotifications).toHaveBeenCalledOnce();
     expect(await screen.findByText("Refresh Vendor")).toBeTruthy();
-    expect(alertSpy).toHaveBeenCalledWith("1 new notifications added.");
-    alertSpy.mockRestore();
+    expect(await screen.findByText(/1 new notification/i)).toBeTruthy();
   });
 });
 

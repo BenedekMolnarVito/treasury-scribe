@@ -401,6 +401,7 @@ const App: React.FC = () => {
             element={
               <DashboardPage
                 db={db}
+                refreshActiveNotifications={refreshActiveNotifications}
               />
             }
           />
@@ -429,6 +430,7 @@ const App: React.FC = () => {
             element={
               <DashboardPage
                 db={db}
+                refreshActiveNotifications={refreshActiveNotifications}
               />
             }
           />
