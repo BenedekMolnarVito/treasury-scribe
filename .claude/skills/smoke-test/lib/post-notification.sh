@@ -1,63 +1,36 @@
 #!/usr/bin/env bash
-# post-notification.sh
+# post-notification.sh — drive the smoke-test capture pipeline by broadcasting
+# a synthetic Revolut notification into SmokeTestReceiver, which forwards it
+# to RevolutNotificationService.injectSmokeTestNotification(). Bypasses the
+# `cmd notification post -p` shell limitation on modern Android (≥14), which
+# no longer lets shell-posted notifications impersonate `com.revolut.revolut`.
 #
-# Inject a synthetic Revolut notification onto the connected Android device so
-# the /smoke-test skill can verify the capture-SLA path end to end.
-#
-# Posts under package "com.revolut.revolut" so RevolutNotificationService.kt's
-# filter at line 97 (`if (sbn.packageName != REVOLUT_PACKAGE) return`) accepts
-# it. The system permits cross-package posts via `cmd notification post` as
-# long as adb shell has the SHELL UID, which it always does.
-#
-# Usage:
-#   post-notification.sh <scenario-tag> <body>
-#
-# Example:
-#   post-notification.sh foreground "6 337 Ft"
-#
-# Prints (to stdout) the epoch-millisecond timestamp of the post — captured
-# by the skill as T0 for latency math.
+# Usage:  post-notification.sh <scenario-tag> <body>
 
 set -euo pipefail
 
-if [[ $# -ne 2 ]]; then
-  echo "usage: $0 <scenario-tag> <body>" >&2
-  exit 2
-fi
+[[ $# -eq 2 ]] || { echo "usage: $0 <scenario-tag> <body>" >&2; exit 2; }
 
-scenario="$1"
-body="$2"
+scenario="$1"; body="$2"
+command -v adb >/dev/null 2>&1 || { echo "adb missing on PATH" >&2; exit 3; }
 
-if ! command -v adb >/dev/null 2>&1; then
-  echo "adb not found on PATH" >&2
-  exit 3
-fi
-
-devices=$(adb devices | awk 'NR>1 && $2=="device" {print $1}')
-device_count=$(printf '%s\n' "$devices" | grep -c . || true)
-if [[ "$device_count" -ne 1 ]]; then
-  echo "expected exactly one connected device, got $device_count" >&2
-  adb devices >&2
-  exit 4
-fi
-
-# T0: epoch ms captured immediately BEFORE the post call.
-# Print first so the caller can read T0 before adb returns (and the consumer
-# can race the logcat tail without missing the T1 line).
-t0=$(date +%s%3N)
+# T0: epoch ms captured BEFORE the inject. macOS BSD `date` lacks %N, so use
+# python3 for millisecond precision.
+t0=$(python3 -c 'import time; print(int(time.time()*1000))')
 echo "$t0"
 
-# `cmd notification post`:
-#   -p <pkg>   pretend the notification came from this package
-#   -t <tag>   notification tag (must be unique to allow re-posting)
-#   <title>    positional: notification title
-#   <text>     positional: notification body
-#
-# We pack a scenario-stamped title so logcat / dumpsys traces stay readable,
-# and put the parseable amount text in the body (which is what
-# RevolutNotificationService reads via EXTRA_TEXT — see the .kt at line ~103).
-adb shell cmd notification post \
-  -p com.revolut.revolut \
-  -t "smoke-${scenario}-${t0}" \
-  "TreasuryScribeSmoke ${scenario}" \
-  "${body}" >/dev/null
+# `adb shell am broadcast` runs the args through the device-side shell, which
+# re-tokenizes on whitespace. Bodies like "6 337 Ft" would split into three
+# separate args and only "6" would land in --es body. Wrap each value with
+# single quotes (escaping any embedded single quotes the standard sh-safe
+# way) so the device shell preserves the value as one token.
+sh_quote() {
+  printf "'%s'" "${1//\'/\'\\\'\'}"
+}
+
+adb shell am broadcast \
+  -n com.treasuryscribe.app/.SmokeTestReceiver \
+  -a com.treasuryscribe.app.SMOKE_TEST_INJECT \
+  --ez treasuryScribeSmoke true \
+  --es title "$(sh_quote "Smoke-${scenario}")" \
+  --es body  "$(sh_quote "${body}")" >/dev/null
