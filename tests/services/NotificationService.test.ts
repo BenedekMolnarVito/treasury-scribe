@@ -225,6 +225,57 @@ describe("parseAmountAndCurrency", () => {
       expect(result.amount).toBeCloseTo(1234567);
       expect(result.currency).toBe("HUF");
     });
+
+    // Regression — issue #296 in transactions history (2026-06-19): a
+    // "költöttél" (spent) notification whose balance has a decimal-comma
+    // tail was being parsed as the balance (428.05) instead of the spend
+    // (18 080). The Hungarian payment matcher now accepts the "költött"
+    // verb too.
+    it("parses 'költöttél' (spent) verb with whole-number spend and decimal balance", () => {
+      const result = parseAmountAndCurrency(
+        "⚒️ 18 080 Ft összeget költöttél.\nHUF egyenlege: 27 428,05 Ft"
+      );
+      expect(result.amount).toBeCloseTo(18080);
+      expect(result.currency).toBe("HUF");
+    });
+
+    // Regression — issue #259 in transactions history (2026-05-31):
+    // analogous to #296 but with the "Pizza Eataliano" body shape, where
+    // the spend was 18 480 and the balance 14 818,68 was captured instead.
+    it("parses 'költöttél' with food emoji and balance with comma decimal", () => {
+      const result = parseAmountAndCurrency(
+        "🍽️ 18 480 Ft összeget költöttél.\nHUF egyenlege: 14 818,68 Ft"
+      );
+      expect(result.amount).toBeCloseTo(18480);
+      expect(result.currency).toBe("HUF");
+    });
+
+    it("parses 'költöttél' with the longer 'A(z) HUF Zseb egyenlege' balance prefix", () => {
+      const result = parseAmountAndCurrency(
+        "🛒 3 051 Ft összeget költöttél.\nA(z) HUF Zseb egyenlege: 53 756,49 Ft."
+      );
+      expect(result.amount).toBeCloseTo(3051);
+      expect(result.currency).toBe("HUF");
+    });
+
+    it("parses 'vettél fel' (withdrew) verb with HUF cash withdrawal", () => {
+      // From issue #137: "210 000 Ft (593,17 EUR) összeget fizettél itt:..."
+      // shape uses 'fizettél' and is already covered; this exercises the
+      // verb-form union directly in case Revolut switches forms.
+      const result = parseAmountAndCurrency(
+        "🤑 5 000 Ft összeget vettél fel itt: ATM.\nHUF egyenlege: 1 234,56 Ft"
+      );
+      expect(result.amount).toBeCloseTo(5000);
+      expect(result.currency).toBe("HUF");
+    });
+
+    it("parses a 'költöttél' spend with no thousands separator", () => {
+      const result = parseAmountAndCurrency(
+        "🛒 887 Ft összeget költöttél.\nHUF egyenlege: 23 006,05 Ft"
+      );
+      expect(result.amount).toBeCloseTo(887);
+      expect(result.currency).toBe("HUF");
+    });
   });
 });
 

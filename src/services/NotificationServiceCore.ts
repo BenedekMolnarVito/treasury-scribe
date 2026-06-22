@@ -79,19 +79,40 @@ export function createTransactionFromNotification(
 }
 
 /**
- * Matches the Hungarian Revolut payment sentence:
- *   "1 599 Ft összeget fizettél itt: OBI."
- * Must run before tryParseEuropean, which would otherwise match the balance
- * amount on the second line of the same notification.
+ * Matches the Hungarian Revolut spending sentence, capturing the spent amount
+ * (NOT the remaining balance on the line below).
+ *
+ * Revolut emits three verb forms for HUF spending:
+ *   "1 599 Ft összeget fizettél itt: OBI."         — paid at <merchant>
+ *   "4 389 Ft összeget költöttél."                  — spent
+ *   "21,23 USD (6 418,43 Ft) összeget vettél fel itt: SST."  — withdrew
+ * The balance line that follows ("HUF egyenlege: 27 428,05 Ft" or
+ * "A(z) HUF Zseb egyenlege: ...") would otherwise be greedily matched by
+ * tryParseEuropean — that pattern is whole-text and ignores line boundaries.
+ *
+ * This helper accepts both decimal-comma amounts ("18 480,50") and pure
+ * space-grouped integer amounts ("18 080"), so the whole-integer "költöttél"
+ * notifications (which previously fell through to tryParseEuropean and got
+ * the decimal balance back) parse correctly.
+ *
+ * Currency is always HUF here: the "Ft" suffix is the only currency token in
+ * the spend clause. Cross-currency withdrawals like "29,10 EUR (10 401,61 Ft)
+ * összeget vettél fel" are matched by tryParseEuropean before this helper
+ * runs, which captures the foreign-currency amount.
  */
 function tryParseHungarianPayment(text: string): ParsedAmountCurrency | null {
-  const match = text.match(/(\d+(?:\s\d+)*)\s*Ft\s+összeget\s+fizett/i);
+  // Accept either an integer (with optional space-grouped thousands) or a
+  // decimal-comma amount; the verbs are "fizett", "költött", or "vett(él|em)
+  // fel".
+  const match = text.match(
+    /(\d{1,3}(?:\s\d{3})*(?:,\d+)?|\d+(?:,\d+)?)\s*Ft\s+összeget\s+(?:fizett|költött|vett[eé][lm]?\s+fel)/i
+  );
   if (!match) return null;
 
   const amountText = match[1];
   if (!amountText) return null;
 
-  const amount = parseFloat(amountText.replace(/\s/g, ""));
+  const amount = parseFloat(amountText.replace(/\s/g, "").replace(",", "."));
   if (isNaN(amount)) return null;
 
   return { amount, currency: "HUF" };
