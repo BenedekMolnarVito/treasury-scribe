@@ -110,6 +110,38 @@ class RevolutNotificationService : NotificationListenerService() {
         return START_STICKY
     }
 
+    /**
+     * Test-injection entry point — synthesizes a notification event identical
+     * to one captured from a real Revolut post. Called by
+     * [SmokeTestReceiver] in debug/smoke-test runs only.
+     *
+     * Required because modern Android (≥14) removed the `-p <pkg>` flag from
+     * `cmd notification post`, so shell-posted notifications are always owned
+     * by `com.android.shell` and the production
+     * `if (sbn.packageName != REVOLUT_PACKAGE) return` filter rejects them —
+     * leaving no way for the smoke harness to drive the capture pipeline.
+     *
+     * Production code never calls this; only [SmokeTestReceiver] does, and
+     * only when the broadcast carries `treasuryScribeSmoke=true`.
+     */
+    fun injectSmokeTestNotification(title: String, body: String) {
+        val data = JSObject().apply {
+            put("title", title)
+            put("body", body)
+            put("packageName", REVOLUT_PACKAGE)
+            put("postedAt", formatPostedAt(System.currentTimeMillis()))
+        }
+        appendToDurableQueue(applicationContext, data)
+        val plugin = pluginInstance
+        if (plugin != null) {
+            plugin.dispatchNotificationReceived(data)
+        } else {
+            synchronized(pendingNotifications) {
+                pendingNotifications.add(data)
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         pluginInstance = null

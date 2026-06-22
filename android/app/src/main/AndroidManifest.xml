@@ -63,6 +63,20 @@
             android:name=".ServiceRestartReceiver"
             android:exported="false" />
 
+        <!-- Test-only receiver used by the /smoke-test skill to drive the
+             notification-capture pipeline. Exported=true is required so the
+             adb shell UID (2000) can deliver the intent; the receiver itself
+             still gates execution on the `treasuryScribeSmoke=true` extra
+             plus the action name, so a stray external broadcast is a no-op.
+             Production users have no reason to send this action. -->
+        <receiver
+            android:name=".SmokeTestReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.treasuryscribe.app.SMOKE_TEST_INJECT" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
