@@ -1,0 +1,3 @@
+# Smoke test artifacts land in dated subdirectories under this folder.
+# Empty marker — keeps the directory tracked while the generated outputs are
+# gitignored.
