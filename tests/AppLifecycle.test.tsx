@@ -34,6 +34,7 @@ const {
     startListening: vi.fn(),
     stopListening: vi.fn(),
     getActiveNotifications: vi.fn(),
+    drainQueuedNotifications: vi.fn(),
   },
 }));
 
@@ -84,6 +85,9 @@ describe("App notification lifecycle", () => {
     });
     notificationListenerMock.startListening.mockResolvedValue(undefined);
     notificationListenerMock.getActiveNotifications.mockResolvedValue({
+      notifications: [],
+    });
+    notificationListenerMock.drainQueuedNotifications.mockResolvedValue({
       notifications: [],
     });
   });

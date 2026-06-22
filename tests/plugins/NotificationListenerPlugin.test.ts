@@ -31,6 +31,7 @@ const { mockPluginInstance, registerPluginMock } = vi.hoisted(() => {
     startListening: vi.fn(),
     stopListening: vi.fn(),
     getActiveNotifications: vi.fn(),
+    drainQueuedNotifications: vi.fn(),
     addListener: vi.fn(),
     removeAllListeners: vi.fn(),
   };
@@ -114,6 +115,12 @@ describe("NotificationListenerPlugin interface methods", () => {
 
   it("has getActiveNotifications method", () => {
     expect(typeof NotificationListener.getActiveNotifications).toBe("function");
+  });
+
+  it("has drainQueuedNotifications method", () => {
+    expect(typeof NotificationListener.drainQueuedNotifications).toBe(
+      "function"
+    );
   });
 
   it("has addListener method", () => {

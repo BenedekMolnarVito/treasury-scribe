@@ -61,6 +61,7 @@ const {
     startListening: vi.fn(),
     stopListening: vi.fn(),
     getActiveNotifications: vi.fn(),
+    drainQueuedNotifications: vi.fn(),
     removeAllListeners: vi.fn(),
   },
   transactionsPagePropsStore: { current: null as any },
@@ -134,6 +135,9 @@ beforeEach(async () => {
   notificationListenerMock.startListening.mockResolvedValue(undefined);
   notificationListenerMock.stopListening.mockResolvedValue(undefined);
   notificationListenerMock.getActiveNotifications.mockResolvedValue({
+    notifications: [],
+  });
+  notificationListenerMock.drainQueuedNotifications.mockResolvedValue({
     notifications: [],
   });
 });

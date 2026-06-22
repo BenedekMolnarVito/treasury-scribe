@@ -151,23 +151,39 @@ const App: React.FC = () => {
     if (!db) return 0;
 
     try {
-      const { notifications } = await NotificationListener.getActiveNotifications();
+      // 1. Drain the durable on-disk queue first. This catches notifications
+      //    captured by the native service while the WebView was suspended or
+      //    killed — including ones the user has already swiped away, which
+      //    would no longer appear in getActiveNotifications().
+      const drained = await NotificationListener.drainQueuedNotifications()
+        .catch(() => ({ notifications: [] }));
+      // 2. Then read the currently-visible notification shade as a belt-and-
+      //    suspenders backup for the very first install (no queue yet).
+      const { notifications: active } =
+        await NotificationListener.getActiveNotifications();
+
       let addedCount = 0;
+      const sources: Array<{ notifications: typeof active }> = [
+        { notifications: drained.notifications },
+        { notifications: active },
+      ];
 
-      for (const { title, body, packageName, postedAt } of notifications) {
-        if (!isRevolutNotification(packageName)) {
-          continue;
-        }
+      for (const source of sources) {
+        for (const { title, body, packageName, postedAt } of source.notifications) {
+          if (!isRevolutNotification(packageName)) {
+            continue;
+          }
 
-        const transaction = createTransactionFromNotification(
-          title,
-          body,
-          packageName,
-          postedAt
-        );
-        const result = ingestNotificationTransaction(db, transaction, 1);
-        if (result !== null) {
-          addedCount += 1;
+          const transaction = createTransactionFromNotification(
+            title,
+            body,
+            packageName,
+            postedAt
+          );
+          const result = ingestNotificationTransaction(db, transaction, 1);
+          if (result !== null) {
+            addedCount += 1;
+          }
         }
       }
 
@@ -351,6 +367,10 @@ const App: React.FC = () => {
     const handleFocus = (): void => {
       if (cancelled) return;
       void ensureNotificationMonitoring();
+      // Drain anything the native service queued while we were backgrounded.
+      // This is the path that recovers notifications the user swiped away
+      // before opening the app.
+      void refreshActiveNotifications();
     };
 
     const handleVisibilityChange = (): void => {

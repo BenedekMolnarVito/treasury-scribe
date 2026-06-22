@@ -127,6 +127,18 @@ export interface NotificationListenerPlugin {
   getActiveNotifications(): Promise<ActiveNotificationsResult>;
 
   /**
+   * Drains the on-disk durable queue of notifications captured by the native
+   * service while the WebView/JS layer was not alive (e.g. backgrounded or
+   * killed). Each call atomically reads and clears the queue.
+   *
+   * This is what makes background capture reliable: even if the user swipes
+   * away the Revolut notification before opening the app, the event has
+   * already been persisted to disk by `RevolutNotificationService` and can
+   * be replayed here.
+   */
+  drainQueuedNotifications(): Promise<ActiveNotificationsResult>;
+
+  /**
    * Registers a listener for incoming Revolut notification events.
    *
    * The event is only fired for the package `com.revolut.revolut`; all other

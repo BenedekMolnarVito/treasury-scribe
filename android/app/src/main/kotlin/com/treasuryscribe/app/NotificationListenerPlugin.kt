@@ -158,6 +158,35 @@ class NotificationListenerPlugin : Plugin() {
         result.put("notifications", notifications)
         call.resolve(result)
     }
+
+    /**
+     * Drains the on-disk queue of notifications captured by
+     * [RevolutNotificationService] while the WebView/JS layer was not alive.
+     *
+     * The native service appends every Revolut notification to a SharedPreferences
+     * queue at capture time, so notifications survive WebView death, app kill,
+     * or the user dismissing the source notification before opening the app.
+     * The JS layer calls this method on startup to flush that queue into the
+     * sql.js database, then the queue is cleared atomically.
+     */
+    @PluginMethod
+    fun drainQueuedNotifications(call: PluginCall) {
+        val arr = RevolutNotificationService.drainDurableQueue(context)
+        val notifications = JSArray()
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            val item = JSObject().apply {
+                put("title", obj.optString("title", ""))
+                put("body", obj.optString("body", ""))
+                put("packageName", obj.optString("packageName", ""))
+                put("postedAt", obj.optString("postedAt", ""))
+            }
+            notifications.put(item)
+        }
+        val result = JSObject()
+        result.put("notifications", notifications)
+        call.resolve(result)
+    }
     private fun isNotificationListenerEnabled(): Boolean {
         val flat = Settings.Secure.getString(
             context.contentResolver,
