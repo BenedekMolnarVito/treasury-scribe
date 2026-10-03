@@ -518,6 +518,9 @@ export function useTransactions(
         isDeleted: false,
         isCash: false,
         isIncome: false,
+        // New captures are always Default mode (feed auto-learning); the user
+        // can later flip to Exception on the Edit screen (FR8).
+        excludeFromAutoLearn: false,
       });
       if (result !== null) {
         onDatabaseChanged(db);

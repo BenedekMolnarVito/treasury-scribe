@@ -450,4 +450,27 @@ describe("lastMonth period", () => {
 
     expect(result.current.summary.total).toBe(5000);
   });
+
+  it("lastMonth includes a transaction timestamped on the LAST day of the previous month", () => {
+    // Regression: the endDate upper bound was date-only, so a same-day ISO
+    // timestamp string-compared FALSE against "<= YYYY-MM-DD" and the last
+    // day's transactions were silently dropped from the Last Month view.
+    const now = new Date();
+    const prevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+    const prevMonth = now.getMonth() === 0 ? 12 : now.getMonth(); // 1-based
+    const prevMonthStr = String(prevMonth).padStart(2, "0");
+    // Last day of the previous calendar month.
+    const lastDay = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+    const lastDayStr = String(lastDay).padStart(2, "0");
+
+    insertExpense(db, {
+      amount: 4200,
+      receivedAt: `${prevYear}-${prevMonthStr}-${lastDayStr}T14:30:00.000Z`,
+    });
+
+    const { result } = renderHook(() => useDashboard(db));
+    act(() => result.current.setPeriod("lastMonth"));
+
+    expect(result.current.summary.total).toBe(4200);
+  });
 });

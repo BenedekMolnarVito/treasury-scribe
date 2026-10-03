@@ -145,6 +145,9 @@ function createChildTransaction(
     amount,
     currency: parent.currency,
     isIncome: parent.isIncome,
+    // Inherit the parent's auto-learn exclusion so an Exception transaction's
+    // split children stay excluded from merchant auto-learning (FR8).
+    excludeFromAutoLearn: parent.excludeFromAutoLearn,
   });
 }
 

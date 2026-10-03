@@ -104,7 +104,11 @@ export function periodDateRange(period: DashboardPeriod): { startDate: string; e
     const pad = (n: number) => String(n).padStart(2, "0");
 
     const startDate = `${firstOfPrev.getFullYear()}-${pad(firstOfPrev.getMonth() + 1)}-${pad(firstOfPrev.getDate())}`;
-    const endDate   = `${lastOfPrev.getFullYear()}-${pad(lastOfPrev.getMonth() + 1)}-${pad(lastOfPrev.getDate())}`;
+    // `ReceivedAt` is stored as a full ISO timestamp, so a date-only upper
+    // bound (`<= "2026-09-30"`) would string-compare FALSE against any
+    // same-day timestamp and silently drop the last day's transactions.
+    // Pin the bound to the end of that day so the whole last day is included.
+    const endDate   = `${lastOfPrev.getFullYear()}-${pad(lastOfPrev.getMonth() + 1)}-${pad(lastOfPrev.getDate())}T23:59:59.999Z`;
     return { startDate, endDate };
   }
 
@@ -151,8 +155,10 @@ export function useDashboard(db: Database): UseDashboardResult {
       // FR3: weekly trend for single-month periods
       const isSingleMonth = activePeriod === "month" || activePeriod === "lastMonth";
       if (isSingleMonth) {
-        // endDate is defined for lastMonth; for current month use today
-        const effectiveEnd = endDate ?? new Date().toISOString().slice(0, 10);
+        // endDate is defined (end-of-day) for lastMonth; for the current month
+        // use the end of today so same-day transactions are included.
+        const effectiveEnd =
+          endDate ?? `${new Date().toISOString().slice(0, 10)}T23:59:59.999Z`;
         setByWeek(getSpendingByWeek(db, startDate, effectiveEnd));
         setIncomeByWeek(getIncomeByWeek(db, startDate, effectiveEnd));
         setTrendGranularity("weekly");
