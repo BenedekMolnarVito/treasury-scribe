@@ -938,3 +938,68 @@ describe("FR8 – addManualTransaction excludeFromAutoLearn flag", () => {
     expect(tx?.excludeFromAutoLearn).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// FR4: addManualTransaction with tagNames
+// ---------------------------------------------------------------------------
+
+describe("FR4 – addManualTransaction with tagNames", () => {
+  it("persists both AddedManually and a user-supplied tag", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "Groceries tx", "body", undefined, undefined, undefined, undefined, undefined, undefined,
+        ["Groceries"]
+      );
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx).toBeDefined();
+    const tagNames = tx!.transactionTags.map((tt) => tt.tagName);
+    expect(tagNames).toContain("AddedManually");
+    expect(tagNames).toContain("Groceries");
+    expect(tx!.transactionTags.length).toBe(2);
+  });
+
+  it("dedupes AddedManually when passed in tagNames", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "Dup tx", "body", undefined, undefined, undefined, undefined, undefined, undefined,
+        ["AddedManually", "Food"]
+      );
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx).toBeDefined();
+    const tagNames = tx!.transactionTags.map((tt) => tt.tagName);
+    expect(tagNames).toContain("AddedManually");
+    expect(tagNames).toContain("Food");
+    // AddedManually must appear only once despite being in both auto-tag and tagNames
+    const addedManuallyCount = tagNames.filter((n) => n === "AddedManually").length;
+    expect(addedManuallyCount).toBe(1);
+  });
+
+  it("still persists excludeFromAutoLearn alongside tagNames", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "Exception tx", "body", undefined, undefined, undefined, undefined, undefined, true,
+        ["Transport"]
+      );
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx).toBeDefined();
+    expect(tx!.excludeFromAutoLearn).toBe(true);
+    const tagNames = tx!.transactionTags.map((tt) => tt.tagName);
+    expect(tagNames).toContain("AddedManually");
+    expect(tagNames).toContain("Transport");
+  });
+});

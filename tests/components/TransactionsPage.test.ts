@@ -1165,3 +1165,107 @@ describe("FR8 – Default/Exception toggle in AddTransactionModal", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// FR4: Tag input in AddTransactionModal
+// ---------------------------------------------------------------------------
+
+describe("FR4 – tag input in AddTransactionModal", () => {
+  it("renders add-txn-tag-input in the Add Transaction modal", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    expect(screen.getByTestId("add-txn-tag-input")).toBeTruthy();
+  });
+
+  it("user can type a tag and it renders as a pill/chip", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    const tagInput = screen.getByTestId("add-txn-tag-input");
+    fireEvent.change(tagInput, { target: { value: "Groceries" } });
+    fireEvent.keyDown(tagInput, { key: "Enter" });
+
+    // After pressing Enter, the chip should be visible
+    await waitFor(() => {
+      expect(screen.getByText("Groceries")).toBeTruthy();
+    });
+  });
+
+  it("submit calls onAdd with tagNames containing user-typed tags", async () => {
+    const onAddSpy = vi.fn(async () => {});
+
+    render(
+      React.createElement(
+        MemoryRouter,
+        null,
+        React.createElement(
+          // We need to render the modal directly; use TransactionsPage with mocked addManualTransaction
+          // via a custom wrapper that overrides onAdd
+          // Instead, we'll spy at the TransactionsPage level by intercepting via the hook
+          TransactionsPage,
+          { db }
+        )
+      )
+    );
+
+    // Open modal
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    // Fill required title
+    fireEvent.change(
+      screen.getByRole("dialog").querySelector('input[placeholder="Title"]')!,
+      { target: { value: "Tag Test Tx" } }
+    );
+
+    // Add a tag via the tag input
+    const tagInput = screen.getByTestId("add-txn-tag-input");
+    fireEvent.change(tagInput, { target: { value: "Dining" } });
+    fireEvent.keyDown(tagInput, { key: "Enter" });
+
+    // Submit the form
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+    });
+
+    // Verify the transaction was stored with the Dining tag
+    await waitFor(() => {
+      const stmtResult = db.exec(
+        `SELECT t.Name FROM Tags t
+         JOIN TransactionTags tt ON tt.TagId = t.Id
+         JOIN Transactions tx ON tx.Id = tt.TransactionId
+         WHERE tx.NotificationTitle = 'Tag Test Tx'`
+      );
+      const names = stmtResult[0]?.values.map((row) => row[0]) ?? [];
+      expect(names).toContain("Dining");
+      expect(names).toContain("AddedManually");
+    });
+
+    void onAddSpy;
+  });
+
+  it("FR8 tag-mode-toggle still present alongside tag input", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    expect(screen.getByTestId("tag-mode-toggle")).toBeTruthy();
+    expect(screen.getByTestId("add-txn-tag-input")).toBeTruthy();
+  });
+});

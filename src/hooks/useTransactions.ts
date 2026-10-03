@@ -78,7 +78,8 @@ export interface UseTransactionsResult {
     isCash?: boolean,
     isIncome?: boolean,
     receivedAt?: string,
-    excludeFromAutoLearn?: boolean
+    excludeFromAutoLearn?: boolean,
+    tagNames?: string[]
   ) => Promise<void>;
   /**
    * Serialize all transactions (including soft-deleted) and share them.
@@ -365,7 +366,8 @@ export function useTransactions(
       isCash?: boolean,
       isIncome?: boolean,
       receivedAt?: string,
-      excludeFromAutoLearn?: boolean
+      excludeFromAutoLearn?: boolean,
+      tagNames?: string[]
     ): Promise<void> => {
       const now = receivedAt ?? new Date().toISOString();
 
@@ -384,8 +386,18 @@ export function useTransactions(
       });
 
       // Auto-tag with "AddedManually".
-      const tag = addTag(db, "AddedManually");
-      repoAddTagToTx(db, newTx.id, tag.id);
+      const autoTag = addTag(db, "AddedManually");
+      repoAddTagToTx(db, newTx.id, autoTag.id);
+
+      // Add user-supplied tags, deduped against "AddedManually".
+      if (tagNames && tagNames.length > 0) {
+        for (const name of tagNames) {
+          if (name.trim() === "" || name === "AddedManually") continue;
+          const userTag = addTag(db, name.trim());
+          repoAddTagToTx(db, newTx.id, userTag.id);
+        }
+      }
+
       onDatabaseChanged(db);
 
       await loadTransactions();
