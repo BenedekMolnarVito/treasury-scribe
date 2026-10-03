@@ -333,8 +333,66 @@ describe("setSelectedTagIds", () => {
 });
 
 // ---------------------------------------------------------------------------
-// FR1: lastMonth period
+// FR3: trendGranularity and week buckets
 // ---------------------------------------------------------------------------
+
+describe("FR3: trendGranularity", () => {
+  it("trendGranularity is 'weekly' for period=month", () => {
+    const { result } = renderHook(() => useDashboard(db));
+    act(() => result.current.refresh());
+    expect(result.current.trendGranularity).toBe("weekly");
+  });
+
+  it("trendGranularity is 'weekly' for period=lastMonth", () => {
+    const { result } = renderHook(() => useDashboard(db));
+    act(() => result.current.setPeriod("lastMonth"));
+    expect(result.current.trendGranularity).toBe("weekly");
+  });
+
+  it("trendGranularity is 'monthly' for period=3months", () => {
+    const { result } = renderHook(() => useDashboard(db));
+    act(() => result.current.setPeriod("3months"));
+    expect(result.current.trendGranularity).toBe("monthly");
+  });
+
+  it("trendGranularity is 'monthly' for period=12months", () => {
+    const { result } = renderHook(() => useDashboard(db));
+    act(() => result.current.setPeriod("12months"));
+    expect(result.current.trendGranularity).toBe("monthly");
+  });
+
+  it("trendBuckets (byWeek) are populated for single-month period", () => {
+    const now = new Date();
+    const currYear = now.getFullYear();
+    const currMonth = String(now.getMonth() + 1).padStart(2, "0");
+    // Use day 1 of the month to ensure it's always in the past within the range
+    insertExpense(db, { amount: 1500, receivedAt: `${currYear}-${currMonth}-01T10:00:00.000Z` });
+
+    const { result } = renderHook(() => useDashboard(db));
+    act(() => result.current.refresh()); // period=month
+
+    expect(result.current.byWeek.length).toBeGreaterThan(0);
+    const total = result.current.byWeek.reduce((s, b) => s + b.total, 0);
+    expect(total).toBe(1500);
+  });
+
+  it("byWeek refreshes when period changes from 3months to month", () => {
+    const now = new Date();
+    const currYear = now.getFullYear();
+    const currMonth = String(now.getMonth() + 1).padStart(2, "0");
+    // Use day 1 to ensure it's always within the range
+    insertExpense(db, { amount: 2000, receivedAt: `${currYear}-${currMonth}-01T10:00:00.000Z` });
+
+    const { result } = renderHook(() => useDashboard(db));
+
+    act(() => result.current.setPeriod("3months"));
+    expect(result.current.trendGranularity).toBe("monthly");
+
+    act(() => result.current.setPeriod("month"));
+    expect(result.current.trendGranularity).toBe("weekly");
+    expect(result.current.byWeek.length).toBeGreaterThan(0);
+  });
+});
 
 describe("lastMonth period", () => {
   it("setPeriod('lastMonth') changes the active period to lastMonth", () => {

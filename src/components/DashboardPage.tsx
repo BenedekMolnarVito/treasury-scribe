@@ -12,7 +12,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Database } from "sql.js";
-import type { SpendingByTag, SpendingByMonth, SpendingByVendor } from "../data/DashboardRepository";
+import type { SpendingByTag, SpendingByMonth, SpendingByVendor, SpendingByWeek } from "../data/DashboardRepository";
 import { useDashboard } from "../hooks/useDashboard";
 import type { DashboardPeriod } from "../hooks/useDashboard";
 import type { TagWithCount } from "../data/TransactionRepository";
@@ -434,30 +434,49 @@ const TagDoughnutChart: React.FC<TagDoughnutChartProps> = ({ data }) => {
   );
 };
 
-// -- Monthly trend line chart ------------------------------------------------
+// -- Monthly/Weekly trend line chart ------------------------------------------------
 
 interface MonthlyTrendChartProps {
   expenseData: SpendingByMonth[];
   incomeData: SpendingByMonth[];
+  trendGranularity: "weekly" | "monthly";
+  expenseWeekData: SpendingByWeek[];
+  incomeWeekData: SpendingByWeek[];
 }
 
-const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({ expenseData, incomeData }) => {
-  const allMonths = [...new Set([...expenseData.map(d => d.month), ...incomeData.map(d => d.month)])].sort();
+const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({
+  expenseData,
+  incomeData,
+  trendGranularity,
+  expenseWeekData,
+  incomeWeekData,
+}) => {
+  const isWeekly = trendGranularity === "weekly";
+  const chartTitle = isWeekly ? "Weekly Trend" : "Monthly Trend";
 
-  if (allMonths.length === 0) {
+  // When weekly: use week buckets; otherwise use month buckets
+  const allKeys = isWeekly
+    ? [...new Set([...expenseWeekData.map(d => d.week), ...incomeWeekData.map(d => d.week)])].sort()
+    : [...new Set([...expenseData.map(d => d.month), ...incomeData.map(d => d.month)])].sort();
+
+  if (allKeys.length === 0) {
     return (
-      <div style={STYLE.card} data-testid="monthly-chart">
-        <div style={STYLE.cardTitle}>Monthly Trend</div>
+      <div style={STYLE.card} data-testid="monthly-chart" data-granularity={trendGranularity}>
+        <div style={STYLE.cardTitle}>{chartTitle}</div>
         <div style={{ color: "#888" }}>No data</div>
       </div>
     );
   }
 
-  const expenseMap = new Map(expenseData.map(d => [d.month, d.total]));
-  const incomeMap = new Map(incomeData.map(d => [d.month, d.total]));
+  const expenseMap = isWeekly
+    ? new Map(expenseWeekData.map(d => [d.week, d.total]))
+    : new Map(expenseData.map(d => [d.month, d.total]));
+  const incomeMap = isWeekly
+    ? new Map(incomeWeekData.map(d => [d.week, d.total]))
+    : new Map(incomeData.map(d => [d.month, d.total]));
 
-  const expenseValues = allMonths.map(m => expenseMap.get(m) ?? 0);
-  const incomeValues = allMonths.map(m => incomeMap.get(m) ?? 0);
+  const expenseValues = allKeys.map(k => expenseMap.get(k) ?? 0);
+  const incomeValues = allKeys.map(k => incomeMap.get(k) ?? 0);
   const maxVal = Math.max(...expenseValues, ...incomeValues, 1);
 
   const chartWidth = 300;
@@ -469,7 +488,7 @@ const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({ expenseData, inco
   const plotWidth = chartWidth - padLeft - padRight;
   const plotHeight = chartHeight - padTop - padBottom;
 
-  const getX = (i: number) => padLeft + (allMonths.length > 1 ? (i / (allMonths.length - 1)) * plotWidth : plotWidth / 2);
+  const getX = (i: number) => padLeft + (allKeys.length > 1 ? (i / (allKeys.length - 1)) * plotWidth : plotWidth / 2);
   const getY = (val: number) => padTop + plotHeight - (val / maxVal) * plotHeight;
 
   const buildLine = (values: number[]) => {
@@ -477,15 +496,20 @@ const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({ expenseData, inco
     return values.map((v, i) => `${i === 0 ? "M" : "L"} ${getX(i)} ${getY(v)}`).join(" ");
   };
 
-  const formatMonthLabel = (month: string) => {
-    const monthNum = parseInt(month.slice(5), 10);
-    return MONTH_NAMES[monthNum - 1] ?? month.slice(5);
+  const formatLabel = (key: string) => {
+    if (isWeekly) {
+      // "YYYY-WW" → "W{N}" e.g. "W36"
+      const ww = parseInt(key.slice(5), 10);
+      return `W${ww}`;
+    }
+    const monthNum = parseInt(key.slice(5), 10);
+    return MONTH_NAMES[monthNum - 1] ?? key.slice(5);
   };
 
   return (
-    <div style={STYLE.card} data-testid="monthly-chart">
-      <div style={STYLE.cardTitle}>Monthly Trend</div>
-      <svg width="100%" height={chartHeight} viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="Monthly trend chart">
+    <div style={STYLE.card} data-testid="monthly-chart" data-granularity={trendGranularity}>
+      <div style={STYLE.cardTitle}>{chartTitle}</div>
+      <svg width="100%" height={chartHeight} viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={`${chartTitle} chart`}>
         <path d={buildLine(expenseValues)} fill="none" stroke="#FF6B6B" strokeWidth="2" />
         <path d={buildLine(incomeValues)} fill="none" stroke="#4CAF50" strokeWidth="2" />
         {expenseValues.map((v, i) => (
@@ -504,9 +528,9 @@ const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({ expenseData, inco
             {formatAmount(v)}
           </text>
         ) : null)}
-        {allMonths.map((month, i) => (
-          <text key={month} x={getX(i)} y={chartHeight - 4} fill="#B0B0B0" fontSize="10" textAnchor="middle">
-            {formatMonthLabel(month)}
+        {allKeys.map((key, i) => (
+          <text key={key} x={getX(i)} y={chartHeight - 4} fill="#B0B0B0" fontSize="10" textAnchor="middle">
+            {formatLabel(key)}
           </text>
         ))}
       </svg>
@@ -584,6 +608,9 @@ const DashboardPageContent: React.FC<DashboardPageContentProps> = ({ db, refresh
     byTag,
     byMonth,
     incomeByMonth,
+    byWeek,
+    incomeByWeek,
+    trendGranularity,
     byVendor,
     untaggedCount,
     period,
@@ -736,7 +763,13 @@ const DashboardPageContent: React.FC<DashboardPageContentProps> = ({ db, refresh
       />
 
       <TagDoughnutChart data={byTag} />
-      <MonthlyTrendChart expenseData={byMonth} incomeData={incomeByMonth} />
+      <MonthlyTrendChart
+        expenseData={byMonth}
+        incomeData={incomeByMonth}
+        trendGranularity={trendGranularity}
+        expenseWeekData={byWeek}
+        incomeWeekData={incomeByWeek}
+      />
       <TopVendorsCard data={byVendor} />
       <UntaggedBadge count={untaggedCount} onClassify={() => navigate("/transactions?filter=untagged")} />
     </div>

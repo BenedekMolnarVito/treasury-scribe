@@ -14,6 +14,7 @@ import type {
   SpendingByTag,
   SpendingByMonth,
   SpendingByVendor,
+  SpendingByWeek,
 } from "../data/DashboardRepository";
 import {
   getSpendingSummary,
@@ -23,6 +24,8 @@ import {
   getIncomeByMonth,
   getSpendingByVendor,
   getUntaggedTransactionCount,
+  getSpendingByWeek,
+  getIncomeByWeek,
 } from "../data/DashboardRepository";
 import type { TagWithCount } from "../data/TransactionRepository";
 import { getActiveTagsWithCounts } from "../data/TransactionRepository";
@@ -44,6 +47,9 @@ export interface UseDashboardResult {
   byTag: SpendingByTag[];
   byMonth: SpendingByMonth[];
   incomeByMonth: SpendingByMonth[];
+  byWeek: SpendingByWeek[];
+  incomeByWeek: SpendingByWeek[];
+  trendGranularity: "weekly" | "monthly";
   byVendor: SpendingByVendor[];
   untaggedCount: number;
   period: DashboardPeriod;
@@ -116,6 +122,9 @@ export function useDashboard(db: Database): UseDashboardResult {
   const [byTag, setByTag] = useState<SpendingByTag[]>([]);
   const [byMonth, setByMonth] = useState<SpendingByMonth[]>([]);
   const [incomeByMonth, setIncomeByMonth] = useState<SpendingByMonth[]>([]);
+  const [byWeek, setByWeek] = useState<SpendingByWeek[]>([]);
+  const [incomeByWeek, setIncomeByWeek] = useState<SpendingByWeek[]>([]);
+  const [trendGranularity, setTrendGranularity] = useState<"weekly" | "monthly">("weekly");
   const [byVendor, setByVendor] = useState<SpendingByVendor[]>([]);
   const [untaggedCount, setUntaggedCount] = useState<number>(0);
   const [period, setPeriodState] = useState<DashboardPeriod>("month");
@@ -138,6 +147,20 @@ export function useDashboard(db: Database): UseDashboardResult {
       setByVendor(getSpendingByVendor(db, TOP_VENDORS_LIMIT, startDate, endDate, activeTagIds));
       setUntaggedCount(getUntaggedTransactionCount(db));
       setAvailableTags(getActiveTagsWithCounts(db));
+
+      // FR3: weekly trend for single-month periods
+      const isSingleMonth = activePeriod === "month" || activePeriod === "lastMonth";
+      if (isSingleMonth) {
+        // endDate is defined for lastMonth; for current month use today
+        const effectiveEnd = endDate ?? new Date().toISOString().slice(0, 10);
+        setByWeek(getSpendingByWeek(db, startDate, effectiveEnd));
+        setIncomeByWeek(getIncomeByWeek(db, startDate, effectiveEnd));
+        setTrendGranularity("weekly");
+      } else {
+        setByWeek([]);
+        setIncomeByWeek([]);
+        setTrendGranularity("monthly");
+      }
 
       setLoading(false);
     },
@@ -170,6 +193,9 @@ export function useDashboard(db: Database): UseDashboardResult {
     byTag,
     byMonth,
     incomeByMonth,
+    byWeek,
+    incomeByWeek,
+    trendGranularity,
     byVendor,
     untaggedCount,
     period,

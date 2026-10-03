@@ -777,3 +777,92 @@ describe("FR1: Last Month tab and scrollable pill row", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// FR3: Weekly trend for single-month period
+// ---------------------------------------------------------------------------
+
+describe("FR3: weekly trend for single-month period", () => {
+  it("trend chart shows 'Weekly Trend' title when period is 'month'", async () => {
+    renderPage();
+
+    // period defaults to month
+    await waitFor(() =>
+      expect(screen.getByTestId("monthly-chart")).toBeTruthy()
+    );
+
+    const chart = screen.getByTestId("monthly-chart");
+    expect(chart.textContent).toContain("Weekly Trend");
+  });
+
+  it("trend chart has data-granularity=weekly for single-month period", async () => {
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("monthly-chart")).toBeTruthy()
+    );
+
+    const chart = screen.getByTestId("monthly-chart") as HTMLElement;
+    expect(chart.getAttribute("data-granularity")).toBe("weekly");
+  });
+
+  it("trend chart shows 'Monthly Trend' for multi-month period", async () => {
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("pill-3months")).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("pill-3months"));
+    });
+
+    await waitFor(() => {
+      const chart = screen.getByTestId("monthly-chart");
+      expect(chart.textContent).toContain("Monthly Trend");
+    });
+  });
+
+  it("trend chart has data-granularity=monthly for multi-month period", async () => {
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("pill-3months")).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("pill-3months"));
+    });
+
+    await waitFor(() => {
+      const chart = screen.getByTestId("monthly-chart") as HTMLElement;
+      expect(chart.getAttribute("data-granularity")).toBe("monthly");
+    });
+  });
+
+  it("trend chart switches to Weekly Trend when lastMonth is clicked", async () => {
+    renderPage();
+
+    // First switch to a multi-month to ensure round-trip works
+    await waitFor(() =>
+      expect(screen.getByTestId("pill-3months")).toBeTruthy()
+    );
+    act(() => {
+      fireEvent.click(screen.getByTestId("pill-3months"));
+    });
+    await waitFor(() => {
+      const chart = screen.getByTestId("monthly-chart");
+      expect(chart.textContent).toContain("Monthly Trend");
+    });
+
+    // Now switch to lastMonth
+    act(() => {
+      fireEvent.click(screen.getByTestId("pill-lastMonth"));
+    });
+
+    await waitFor(() => {
+      const chart = screen.getByTestId("monthly-chart");
+      expect(chart.textContent).toContain("Weekly Trend");
+    });
+  });
+});
+

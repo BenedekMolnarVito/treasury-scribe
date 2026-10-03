@@ -30,6 +30,13 @@ export interface SpendingByMonth {
   count: number;
 }
 
+/** Spending grouped by ISO week. */
+export interface SpendingByWeek {
+  week: string; // "YYYY-WW" format
+  total: number;
+  count: number;
+}
+
 /** Spending grouped by vendor (NotificationTitle). */
 export interface SpendingByVendor {
   vendor: string;
@@ -369,4 +376,60 @@ export function getUntaggedTransactionCount(db: Database): number {
      WHERE t.IsDeleted = 0 AND t.IsIncome = 0 AND tt.Id IS NULL`
   );
   return rows[0]?.cnt ?? 0;
+}
+
+/**
+ * Returns expense spending grouped by ISO week (strftime '%W'), ordered
+ * chronologically.  Used for the weekly trend chart within a single month.
+ *
+ * @param db - sql.js Database instance.
+ * @param startDate - Inclusive lower bound for ReceivedAt (ISO date string).
+ * @param endDate - Inclusive upper bound for ReceivedAt (ISO date string).
+ */
+export function getSpendingByWeek(
+  db: Database,
+  startDate: string,
+  endDate: string
+): SpendingByWeek[] {
+  return queryRows<SpendingByWeek>(
+    db,
+    `SELECT strftime('%Y-%W', t.ReceivedAt) AS week,
+            SUM(t.Amount) AS total,
+            COUNT(t.Id)   AS count
+     FROM Transactions t
+     WHERE ${EXPENSE_FILTER}
+       AND t.ReceivedAt >= ?
+       AND t.ReceivedAt <= ?
+     GROUP BY strftime('%Y-%W', t.ReceivedAt)
+     ORDER BY week ASC`,
+    [startDate, endDate]
+  );
+}
+
+/**
+ * Returns income grouped by ISO week, ordered chronologically.
+ * Used for the weekly trend chart within a single month.
+ *
+ * @param db - sql.js Database instance.
+ * @param startDate - Inclusive lower bound for ReceivedAt (ISO date string).
+ * @param endDate - Inclusive upper bound for ReceivedAt (ISO date string).
+ */
+export function getIncomeByWeek(
+  db: Database,
+  startDate: string,
+  endDate: string
+): SpendingByWeek[] {
+  return queryRows<SpendingByWeek>(
+    db,
+    `SELECT strftime('%Y-%W', t.ReceivedAt) AS week,
+            SUM(t.Amount) AS total,
+            COUNT(t.Id)   AS count
+     FROM Transactions t
+     WHERE t.IsDeleted = 0 AND t.IsIncome = 1 AND t.Amount IS NOT NULL
+       AND t.ReceivedAt >= ?
+       AND t.ReceivedAt <= ?
+     GROUP BY strftime('%Y-%W', t.ReceivedAt)
+     ORDER BY week ASC`,
+    [startDate, endDate]
+  );
 }
