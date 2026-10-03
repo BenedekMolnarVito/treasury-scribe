@@ -31,7 +31,7 @@ import { getActiveTagsWithCounts } from "../data/TransactionRepository";
 // Public types
 // ---------------------------------------------------------------------------
 
-export type DashboardPeriod = "month" | "3months" | "6months" | "9months" | "12months";
+export type DashboardPeriod = "month" | "lastMonth" | "3months" | "6months" | "9months" | "12months";
 
 export interface IncomeSummary {
   total: number;
@@ -64,6 +64,7 @@ const EMPTY_INCOME: IncomeSummary = { total: 0, count: 0 };
 
 const MONTHS_FOR_PERIOD: Record<DashboardPeriod, number> = {
   month: 0,
+  lastMonth: 1, // placeholder; handled specially in loadData
   "3months": 3,
   "6months": 6,
   "9months": 9,
@@ -83,6 +84,26 @@ export function periodStartDate(monthsBack: number): string {
   const mm = String(target.getMonth() + 1).padStart(2, "0");
   const dd = String(target.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+/** Compute the {startDate, endDate} date range for a given period. */
+export function periodDateRange(period: DashboardPeriod): { startDate: string; endDate?: string } {
+  if (period === "lastMonth") {
+    const now = new Date();
+    // First day of the previous calendar month
+    const firstOfPrev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    // Last day of the previous calendar month (= day before first of current)
+    const lastOfPrev = new Date(now.getFullYear(), now.getMonth(), 0);
+
+    const pad = (n: number) => String(n).padStart(2, "0");
+
+    const startDate = `${firstOfPrev.getFullYear()}-${pad(firstOfPrev.getMonth() + 1)}-${pad(firstOfPrev.getDate())}`;
+    const endDate   = `${lastOfPrev.getFullYear()}-${pad(lastOfPrev.getMonth() + 1)}-${pad(lastOfPrev.getDate())}`;
+    return { startDate, endDate };
+  }
+
+  const months = MONTHS_FOR_PERIOD[period];
+  return { startDate: periodStartDate(months) };
 }
 
 // ---------------------------------------------------------------------------
@@ -106,16 +127,15 @@ export function useDashboard(db: Database): UseDashboardResult {
     (activePeriod: DashboardPeriod, tagIds: number[]): void => {
       setLoading(true);
 
-      const months = MONTHS_FOR_PERIOD[activePeriod];
-      const startDate = periodStartDate(months);
+      const { startDate, endDate } = periodDateRange(activePeriod);
       const activeTagIds = tagIds.length > 0 ? tagIds : undefined;
 
-      setSummary(getSpendingSummary(db, startDate, undefined, activeTagIds));
-      setIncomeSummary(getIncomeSummary(db, startDate, undefined, activeTagIds));
-      setByTag(getSpendingByTag(db, startDate, undefined, activeTagIds));
-      setByMonth(getSpendingByMonth(db, startDate, activeTagIds));
-      setIncomeByMonth(getIncomeByMonth(db, startDate, activeTagIds));
-      setByVendor(getSpendingByVendor(db, TOP_VENDORS_LIMIT, startDate, undefined, activeTagIds));
+      setSummary(getSpendingSummary(db, startDate, endDate, activeTagIds));
+      setIncomeSummary(getIncomeSummary(db, startDate, endDate, activeTagIds));
+      setByTag(getSpendingByTag(db, startDate, endDate, activeTagIds));
+      setByMonth(getSpendingByMonth(db, startDate, endDate, activeTagIds));
+      setIncomeByMonth(getIncomeByMonth(db, startDate, endDate, activeTagIds));
+      setByVendor(getSpendingByVendor(db, TOP_VENDORS_LIMIT, startDate, endDate, activeTagIds));
       setUntaggedCount(getUntaggedTransactionCount(db));
       setAvailableTags(getActiveTagsWithCounts(db));
 

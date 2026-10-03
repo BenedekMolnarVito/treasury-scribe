@@ -702,3 +702,78 @@ describe("tag cloud show-more", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// FR1: Last Month tab + horizontal-scroll pill row
+// ---------------------------------------------------------------------------
+
+describe("FR1: Last Month tab and scrollable pill row", () => {
+  it("renders pill-lastMonth between pill-month and pill-3months", async () => {
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("period-pills")).toBeTruthy()
+    );
+
+    const pillsContainer = screen.getByTestId("period-pills");
+    const buttons = Array.from(pillsContainer.querySelectorAll("button"));
+    const testIds = buttons.map(b => b.getAttribute("data-testid"));
+
+    expect(testIds).toContain("pill-lastMonth");
+
+    const monthIdx = testIds.indexOf("pill-month");
+    const lastMonthIdx = testIds.indexOf("pill-lastMonth");
+    const threeMonthIdx = testIds.indexOf("pill-3months");
+
+    // lastMonth must be between month and 3months
+    expect(lastMonthIdx).toBeGreaterThan(monthIdx);
+    expect(lastMonthIdx).toBeLessThan(threeMonthIdx);
+  });
+
+  it("period-pills row has overflowX auto and flexWrap nowrap (carousel scroll)", async () => {
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("period-pills")).toBeTruthy()
+    );
+
+    const pillsContainer = screen.getByTestId("period-pills") as HTMLElement;
+    // The scroll container style must enable horizontal scrolling
+    expect(pillsContainer.style.overflowX).toBe("auto");
+    expect(pillsContainer.style.flexWrap).toBe("nowrap");
+  });
+
+  it("clicking pill-lastMonth sets period to lastMonth", async () => {
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("pill-lastMonth")).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("pill-lastMonth"));
+    });
+
+    // Hero card should still render without error after period change
+    await waitFor(() =>
+      expect(screen.getByTestId("hero-card")).toBeTruthy()
+    );
+  });
+
+  it("period label shows 'Last Month' after clicking the lastMonth pill", async () => {
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("pill-lastMonth")).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("pill-lastMonth"));
+    });
+
+    await waitFor(() => {
+      const card = screen.getByTestId("hero-card");
+      expect(card.textContent).toContain("Last Month");
+    });
+  });
+});
+

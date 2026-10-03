@@ -203,14 +203,18 @@ export function getSpendingByTag(
  *
  * @param db - sql.js Database instance.
  * @param startDate - Inclusive lower bound for ReceivedAt (ISO date string).
+ * @param endDate - Optional inclusive upper bound for ReceivedAt.
  * @param tagIds - Optional tag IDs to restrict results to.
  */
 export function getSpendingByMonth(
   db: Database,
   startDate: string,
+  endDate?: string,
   tagIds?: number[]
 ): SpendingByMonth[] {
   const tagFilter = buildTagFilterClause(tagIds);
+  const endClause = endDate !== undefined ? " AND t.ReceivedAt <= ?" : "";
+  const endParams = endDate !== undefined ? [endDate] : [];
   return queryRows<SpendingByMonth>(
     db,
     `SELECT strftime('%Y-%m', t.ReceivedAt) AS month,
@@ -218,10 +222,10 @@ export function getSpendingByMonth(
             COUNT(t.Id)   AS count
      FROM Transactions t
      WHERE ${EXPENSE_FILTER}
-       AND t.ReceivedAt >= ?${tagFilter.whereSql}
+       AND t.ReceivedAt >= ?${endClause}${tagFilter.whereSql}
      GROUP BY strftime('%Y-%m', t.ReceivedAt)
      ORDER BY month ASC`,
-    [startDate, ...tagFilter.params]
+    [startDate, ...endParams, ...tagFilter.params]
   );
 }
 
@@ -325,14 +329,18 @@ export function getIncomeSummary(
  *
  * @param db - sql.js Database instance.
  * @param startDate - Inclusive lower bound for ReceivedAt (ISO date string).
+ * @param endDate - Optional inclusive upper bound for ReceivedAt.
  * @param tagIds - Optional tag IDs to restrict results to.
  */
 export function getIncomeByMonth(
   db: Database,
   startDate: string,
+  endDate?: string,
   tagIds?: number[]
 ): SpendingByMonth[] {
   const tagFilter = buildTagFilterClause(tagIds);
+  const endClause = endDate !== undefined ? " AND t.ReceivedAt <= ?" : "";
+  const endParams = endDate !== undefined ? [endDate] : [];
   return queryRows<SpendingByMonth>(
     db,
     `SELECT strftime('%Y-%m', t.ReceivedAt) AS month,
@@ -340,10 +348,10 @@ export function getIncomeByMonth(
             COUNT(t.Id)   AS count
      FROM Transactions t
      WHERE t.IsDeleted = 0 AND t.IsIncome = 1 AND t.Amount IS NOT NULL
-       AND t.ReceivedAt >= ?${tagFilter.whereSql}
+       AND t.ReceivedAt >= ?${endClause}${tagFilter.whereSql}
      GROUP BY strftime('%Y-%m', t.ReceivedAt)
      ORDER BY month ASC`,
-    [startDate, ...tagFilter.params]
+    [startDate, ...endParams, ...tagFilter.params]
   );
 }
 

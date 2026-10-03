@@ -71,6 +71,10 @@ const STYLE = {
     display: "flex",
     gap: "8px",
     marginBottom: "12px",
+    overflowX: "auto",
+    flexWrap: "nowrap",
+    WebkitOverflowScrolling: "touch",
+    scrollbarWidth: "none",
   } as React.CSSProperties,
 
   pillActive: {
@@ -81,6 +85,7 @@ const STYLE = {
     padding: "6px 14px",
     fontSize: "0.85em",
     cursor: "pointer",
+    flexShrink: 0,
   } as React.CSSProperties,
 
   pillInactive: {
@@ -91,6 +96,7 @@ const STYLE = {
     padding: "6px 14px",
     fontSize: "0.85em",
     cursor: "pointer",
+    flexShrink: 0,
   } as React.CSSProperties,
 
   vendorRow: {
@@ -123,6 +129,7 @@ const TAG_COLORS = ["#1565C0", "#2E7D32", "#FF6B6B", "#FFB300", "#7B1FA2"];
 
 const PERIOD_OPTIONS: { value: DashboardPeriod; label: string }[] = [
   { value: "month", label: "This Month" },
+  { value: "lastMonth", label: "Last Month" },
   { value: "3months", label: "3 Mo" },
   { value: "6months", label: "6 Mo" },
   { value: "9months", label: "9 Mo" },
@@ -131,6 +138,7 @@ const PERIOD_OPTIONS: { value: DashboardPeriod; label: string }[] = [
 
 const PERIOD_LABELS: Record<DashboardPeriod, string> = {
   month: "This Month",
+  lastMonth: "Last Month",
   "3months": "Last 3 Months",
   "6months": "Last 6 Months",
   "9months": "Last 9 Months",
@@ -156,6 +164,11 @@ function computeAvgPerDay(expenseTotal: number, period: DashboardPeriod): number
   if (period === "month") {
     const dayOfMonth = now.getDate();
     return dayOfMonth > 0 ? expenseTotal / dayOfMonth : 0;
+  }
+  if (period === "lastMonth") {
+    // Number of days in the previous calendar month
+    const daysInPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+    return daysInPrevMonth > 0 ? expenseTotal / daysInPrevMonth : 0;
   }
   const monthsMap: Record<string, number> = { "3months": 3, "6months": 6, "9months": 9, "12months": 12 };
   const monthsBack = monthsMap[period] ?? 3;

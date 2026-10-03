@@ -374,7 +374,7 @@ describe("getSpendingByMonth", () => {
     linkTag(tx1, foodTag);
 
     const startDate = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
-    const results = getSpendingByMonth(db, startDate, [foodTag]);
+    const results = getSpendingByMonth(db, startDate, undefined, [foodTag]);
     const total = results.reduce((sum, r) => sum + r.total, 0);
     expect(total).toBe(50);
   });
@@ -708,7 +708,7 @@ describe("getIncomeByMonth", () => {
     linkTag(tx1, salaryTag);
 
     const startDate = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
-    const results = getIncomeByMonth(db, startDate, [salaryTag]);
+    const results = getIncomeByMonth(db, startDate, undefined, [salaryTag]);
     const total = results.reduce((sum, r) => sum + r.total, 0);
     expect(total).toBe(5000);
   });
