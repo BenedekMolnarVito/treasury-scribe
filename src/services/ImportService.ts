@@ -8,7 +8,7 @@
 
 import type { Database } from "sql.js";
 import { createTransaction } from "../models/Transaction";
-import { addTransaction, existsDuplicate } from "../data/TransactionRepository";
+import { addTransaction, existsDuplicate, softDeleteTransaction } from "../data/TransactionRepository";
 import { addTag, addTagToTransaction } from "../data/TagRepository";
 
 // ---------------------------------------------------------------------------
@@ -193,8 +193,6 @@ function parseTagString(raw: string): string[] {
 // ---------------------------------------------------------------------------
 
 function importParsedRow(db: Database, row: ParsedRow): "imported" | "skipped" {
-  if (row.isDeleted) return "skipped";
-
   if (
     existsDuplicate(
       db,
@@ -215,13 +213,18 @@ function importParsedRow(db: Database, row: ParsedRow): "imported" | "skipped" {
     amount: row.amount,
     currency: row.currency,
     isCash: row.isCash,
-    isDeleted: false,
+    isDeleted: row.isDeleted,
     isIncome: false,
   });
 
   const savedTx = addTransaction(db, txData);
 
-  // Re-create original tags
+  // If the row was soft-deleted in the source, apply soft-delete now.
+  if (row.isDeleted) {
+    softDeleteTransaction(db, savedTx.id);
+  }
+
+  // Re-create original tags (regardless of isDeleted state).
   for (const tagName of row.tags) {
     const tag = addTag(db, tagName);
     addTagToTransaction(db, savedTx.id, tag.id);

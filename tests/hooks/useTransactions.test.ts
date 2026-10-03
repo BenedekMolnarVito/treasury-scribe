@@ -297,7 +297,7 @@ describe("addManualTransaction", () => {
 // ---------------------------------------------------------------------------
 
 describe("exportTransactions('json')", () => {
-  it("produces indented JSON of non-deleted transactions", async () => {
+  it("produces indented JSON of all transactions including soft-deleted", async () => {
     const db = await makeDb();
     const shareMock = makeShareMock();
     const result = await setup(db, shareMock);
@@ -306,7 +306,7 @@ describe("exportTransactions('json')", () => {
       await result.current.addManualTransaction("Export me", "body");
     });
 
-    // Soft-delete a second transaction so we can verify it is excluded.
+    // Soft-delete a second transaction to verify it IS included with IsDeleted=1.
     await act(async () => {
       await result.current.addManualTransaction("Deleted", "body2");
     });
@@ -332,18 +332,26 @@ describe("exportTransactions('json')", () => {
     // Must be valid JSON.
     const parsed = JSON.parse(jsonContent) as unknown[];
     expect(Array.isArray(parsed)).toBe(true);
-    // Only the non-deleted transaction is exported.
-    expect(parsed.length).toBe(1);
+    // Both transactions are exported (active + soft-deleted).
+    expect(parsed.length).toBe(2);
     // Must be indented (contains newlines).
     expect(jsonContent).toContain("\n");
 
-    const row = parsed[0] as Record<string, unknown>;
+    const activeRow = (parsed as Record<string, unknown>[]).find(
+      (r) => r["NotificationTitle"] === "Export me"
+    );
+    expect(activeRow).toBeDefined();
     // All canonical CSV column names must appear in the JSON.
-    expect(row).toHaveProperty("Id");
-    expect(row).toHaveProperty("ReceivedAt");
-    expect(row).toHaveProperty("NotificationTitle", "Export me");
-    expect(row).toHaveProperty("PackageName", "Manual");
-    expect(row).toHaveProperty("IsDeleted", 0);
+    expect(activeRow).toHaveProperty("Id");
+    expect(activeRow).toHaveProperty("ReceivedAt");
+    expect(activeRow).toHaveProperty("PackageName", "Manual");
+    expect(activeRow).toHaveProperty("IsDeleted", 0);
+
+    const deletedRow = (parsed as Record<string, unknown>[]).find(
+      (r) => r["NotificationTitle"] === "Deleted"
+    );
+    expect(deletedRow).toBeDefined();
+    expect(deletedRow).toHaveProperty("IsDeleted", 1);
   });
 
   it("calls the share function with the json content", async () => {
@@ -562,6 +570,47 @@ describe("exportTransactions('csv')", () => {
     expect(shareMock.fn).toHaveBeenCalledOnce();
     const [title] = shareMock.fn.mock.calls[0] as [string, string];
     expect(title).toMatch(/^treasury-scribe-transactions_\d{8}_\d{6}\.csv$/);
+  });
+
+  it("export includes soft-deleted rows with IsDeleted=1", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    // Add two transactions.
+    await act(async () => {
+      await result.current.addManualTransaction("Visible", "active body");
+      await result.current.addManualTransaction("Hidden", "deleted body");
+    });
+
+    // Soft-delete the second one.
+    await act(async () => {
+      await result.current.loadTransactions();
+    });
+    const hiddenId = result.current.transactions.find(
+      (t) => t.notificationTitle === "Hidden"
+    )?.id;
+    expect(hiddenId).toBeDefined();
+    await act(async () => {
+      await result.current.softDeleteTransaction(hiddenId!);
+    });
+
+    // Export CSV — the deleted row must appear with IsDeleted=1.
+    let csvContent = "";
+    await act(async () => {
+      csvContent = await result.current.exportTransactions("csv");
+    });
+
+    const lines = csvContent.split("\n");
+    // Header + 2 data rows (visible + deleted).
+    expect(lines.length).toBe(3);
+    // The deleted row contains IsDeleted=1 in the last column.
+    const deletedLine = lines.find((l) => l.includes("Hidden")) ?? "";
+    expect(deletedLine).toBeTruthy();
+    expect(deletedLine.endsWith(",1")).toBe(true);
+    // The active row contains IsDeleted=0.
+    const visibleLine = lines.find((l) => l.includes("Visible")) ?? "";
+    expect(visibleLine.endsWith(",0")).toBe(true);
   });
 });
 

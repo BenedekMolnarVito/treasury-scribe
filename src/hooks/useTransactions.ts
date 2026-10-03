@@ -80,7 +80,7 @@ export interface UseTransactionsResult {
     receivedAt?: string
   ) => Promise<void>;
   /**
-   * Serialize non-deleted transactions and share them.
+   * Serialize all transactions (including soft-deleted) and share them.
    *
    * @param format - "json" produces indented JSON; "csv" produces a
    *   comma-delimited file with tags semicolon-separated inside each cell.
@@ -396,7 +396,7 @@ export function useTransactions(
 
   const exportTransactions = useCallback(
     async (format: "json" | "csv"): Promise<string> => {
-      const rows = getAllTransactions(db); // always non-deleted
+      const rows = getAllTransactionsIncludingDeleted(db); // includes soft-deleted for full round-trip fidelity
 
       const now = new Date();
       const timestamp = [

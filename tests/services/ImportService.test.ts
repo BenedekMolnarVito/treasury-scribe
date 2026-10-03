@@ -18,6 +18,7 @@ import {
 } from "../../src/services/ImportService";
 import {
   getAllTransactions,
+  getAllTransactionsIncludingDeleted,
 } from "../../src/data/TransactionRepository";
 import { getTagsForTransaction } from "../../src/data/TagRepository";
 
@@ -183,7 +184,7 @@ describe("importFromCSV", () => {
     expect(transactions).toHaveLength(1);
   });
 
-  it("skips IsDeleted=1 rows", () => {
+  it("imports IsDeleted=1 rows and soft-deletes them", () => {
     const deletedRow = csvLine(
       3,
       "2026-02-01T08:00:00.000Z",
@@ -199,9 +200,16 @@ describe("importFromCSV", () => {
     const csv = [CSV_HEADERS, deletedRow].join("\n");
     const result = importFromCSV(db, csv);
 
-    expect(result.imported).toBe(0);
-    expect(result.skipped).toBe(1);
+    // The row must be imported (count=1), not skipped.
+    expect(result.imported).toBe(1);
+    expect(result.skipped).toBe(0);
+    // The row is hidden from the regular view (isDeleted=0 filter).
     expect(getAllTransactions(db)).toHaveLength(0);
+    // But it exists when we include deleted rows.
+    const allRows = getAllTransactionsIncludingDeleted(db);
+    expect(allRows).toHaveLength(1);
+    expect(allRows[0]!.isDeleted).toBe(true);
+    expect(allRows[0]!.notificationTitle).toBe("DeletedVendor");
   });
 
   it("handles empty CSV (headers only)", () => {
@@ -312,7 +320,7 @@ describe("importFromJSON", () => {
     expect(result.errors[0]).toContain("Item 0");
   });
 
-  it("skips IsDeleted=1 rows in JSON", () => {
+  it("imports IsDeleted=1 rows in JSON and soft-deletes them", () => {
     const jsonWithDeleted = JSON.stringify([
       {
         Id: 5,
@@ -329,9 +337,16 @@ describe("importFromJSON", () => {
     ]);
     const result = importFromJSON(db, jsonWithDeleted);
 
-    expect(result.imported).toBe(0);
-    expect(result.skipped).toBe(1);
+    // The row must be imported (count=1), not skipped.
+    expect(result.imported).toBe(1);
+    expect(result.skipped).toBe(0);
+    // The row is hidden from the regular view.
     expect(getAllTransactions(db)).toHaveLength(0);
+    // But it exists when we include deleted rows.
+    const allRows = getAllTransactionsIncludingDeleted(db);
+    expect(allRows).toHaveLength(1);
+    expect(allRows[0]!.isDeleted).toBe(true);
+    expect(allRows[0]!.notificationTitle).toBe("Deleted");
   });
 });
 
@@ -360,5 +375,45 @@ describe("importTransactions", () => {
 
     expect(result.imported).toBe(1);
     expect(result.errors).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round-trip: export (with deleted) → re-import → hidden in fresh DB
+// ---------------------------------------------------------------------------
+
+describe("IsDeleted round-trip (export → import)", () => {
+  it("a soft-deleted row is hidden after re-import into a fresh DB", async () => {
+    // Simulate an export file that contains a deleted row (IsDeleted=1).
+    // This is what the fixed export will produce after FR5.
+    const exportedCsv = [
+      CSV_HEADERS,
+      // Non-deleted row
+      csvLine(1, "2026-03-01T09:00:00.000Z", "ActiveVendor", "Active body", "com.app", 500, "HUF", 0, "", 0),
+      // Deleted row
+      csvLine(2, "2026-03-02T10:00:00.000Z", "GoneVendor", "Gone body", "com.app", 999, "HUF", 0, "OldTag", 1),
+    ].join("\n");
+
+    // Re-import into a fresh DB (db is reset per test via beforeEach).
+    const result = importFromCSV(db, exportedCsv);
+    expect(result.imported).toBe(2);
+    expect(result.skipped).toBe(0);
+    expect(result.errors).toHaveLength(0);
+
+    // Active row visible in normal view.
+    const visible = getAllTransactions(db);
+    expect(visible).toHaveLength(1);
+    expect(visible[0]!.notificationTitle).toBe("ActiveVendor");
+
+    // Deleted row hidden from normal view but present when including deleted.
+    const all = getAllTransactionsIncludingDeleted(db);
+    expect(all).toHaveLength(2);
+    const gone = all.find((t) => t.notificationTitle === "GoneVendor");
+    expect(gone).toBeDefined();
+    expect(gone!.isDeleted).toBe(true);
+
+    // Tags on the deleted row are still re-created.
+    const tags = tagNames(db, gone!.id);
+    expect(tags).toContain("OldTag");
   });
 });
