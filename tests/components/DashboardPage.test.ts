@@ -560,3 +560,145 @@ describe("pull-to-refresh", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// FR2: Tag cloud show-more
+// ---------------------------------------------------------------------------
+
+describe("tag cloud show-more", () => {
+  /**
+   * Creates N tags, each attached to a unique expense transaction.
+   * Tags are named "tag-1" .. "tag-N" with count 1 each.
+   */
+  function insertTaggedExpenses(n: number): void {
+    for (let i = 1; i <= n; i++) {
+      const txId = insertExpense({ amount: 1000 });
+      const tag = addTag(db, `tag-${i}`);
+      addTagToTransaction(db, txId, tag.id);
+    }
+  }
+
+  it("shows at most 8 chips initially when 20 tags exist", async () => {
+    insertTaggedExpenses(20);
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-filter")).toBeTruthy()
+    );
+
+    // The show-more button must be present
+    expect(screen.getByTestId("tag-filter-show-more")).toBeTruthy();
+
+    // Only 8 chip buttons (+ 1 show-more button) should be in the container
+    // (the clear button is absent because nothing is selected yet)
+    const tagFilter = screen.getByTestId("tag-filter");
+    const chipButtons = Array.from(tagFilter.querySelectorAll("button")).filter(
+      (btn) => btn.getAttribute("data-testid") !== "tag-filter-show-more"
+    );
+    expect(chipButtons.length).toBe(8);
+  });
+
+  it("reveals all chips after clicking show-more", async () => {
+    insertTaggedExpenses(20);
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-filter-show-more")).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-filter-show-more"));
+    });
+
+    await waitFor(() => {
+      const tagFilter = screen.getByTestId("tag-filter");
+      const chipButtons = Array.from(tagFilter.querySelectorAll("button")).filter(
+        (btn) =>
+          btn.getAttribute("data-testid") !== "tag-filter-show-more" &&
+          btn.getAttribute("data-testid") !== "tag-filter-clear"
+      );
+      expect(chipButtons.length).toBe(20);
+    });
+  });
+
+  it("shows 'show less' affordance after expanding", async () => {
+    insertTaggedExpenses(20);
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-filter-show-more")).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-filter-show-more"));
+    });
+
+    // After expanding the button should toggle to a 'show less' label
+    await waitFor(() => {
+      const btn = screen.getByTestId("tag-filter-show-more");
+      expect(btn.textContent?.toLowerCase()).toContain("less");
+    });
+  });
+
+  it("does not show the show-more button when 8 or fewer tags exist", async () => {
+    insertTaggedExpenses(8);
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-filter")).toBeTruthy()
+    );
+
+    expect(screen.queryByTestId("tag-filter-show-more")).toBeNull();
+  });
+
+  it("always shows a selected (hidden) chip even when collapsed", async () => {
+    // Insert 10 tags so show-more kicks in; then select the last one which
+    // would be hidden in the default view
+    insertTaggedExpenses(10);
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-filter-show-more")).toBeTruthy()
+    );
+
+    // Expand first, click the last chip, then collapse
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-filter-show-more")); // expand
+    });
+    await waitFor(() => {
+      const tagFilter = screen.getByTestId("tag-filter");
+      const chips = Array.from(tagFilter.querySelectorAll("button")).filter(
+        (btn) =>
+          btn.getAttribute("data-testid") !== "tag-filter-show-more" &&
+          btn.getAttribute("data-testid") !== "tag-filter-clear"
+      );
+      expect(chips.length).toBe(10);
+    });
+    // Click 10th chip (last one, which would be hidden in collapsed state)
+    const tagFilter = screen.getByTestId("tag-filter");
+    const chips = Array.from(tagFilter.querySelectorAll("button")).filter(
+      (btn) =>
+        btn.getAttribute("data-testid") !== "tag-filter-show-more" &&
+        btn.getAttribute("data-testid") !== "tag-filter-clear"
+    );
+    act(() => {
+      fireEvent.click(chips[chips.length - 1]!);
+    });
+    // Collapse
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-filter-show-more")); // show less → collapse
+    });
+
+    // The selected chip should still be visible (8 unselected top + 1 selected)
+    await waitFor(() => {
+      const tagFilterEl = screen.getByTestId("tag-filter");
+      const visibleChips = Array.from(tagFilterEl.querySelectorAll("button")).filter(
+        (btn) =>
+          btn.getAttribute("data-testid") !== "tag-filter-show-more" &&
+          btn.getAttribute("data-testid") !== "tag-filter-clear"
+      );
+      // Should show the 8 top unselected + at least the 1 selected
+      expect(visibleChips.length).toBeGreaterThanOrEqual(9);
+    });
+  });
+});
+

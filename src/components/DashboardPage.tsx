@@ -241,16 +241,33 @@ interface TagFilterChipsProps {
   onChangeSelectedTagIds: (ids: number[]) => void;
 }
 
+const TAG_CLOUD_CAP = 8;
+
 const TagFilterChips: React.FC<TagFilterChipsProps> = ({
   availableTags,
   selectedTagIds,
   onChangeSelectedTagIds,
 }) => {
+  const [showAll, setShowAll] = useState(false);
+
   if (availableTags.length === 0) return null;
+
+  // Sort by count descending (most-used first)
+  const sorted = [...availableTags].sort((a, b) => b.count - a.count);
+
+  // Always show selected chips; from the unselected, show the top-N by count
+  const selectedChips = sorted.filter(tag => selectedTagIds.includes(tag.tagId));
+  const unselectedChips = sorted.filter(tag => !selectedTagIds.includes(tag.tagId));
+
+  const visibleUnselected = showAll ? unselectedChips : unselectedChips.slice(0, TAG_CLOUD_CAP);
+  const visibleChips = [...selectedChips, ...visibleUnselected];
+
+  const hiddenCount = unselectedChips.length - visibleUnselected.length;
+  const needsToggle = unselectedChips.length > TAG_CLOUD_CAP;
 
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }} data-testid="tag-filter">
-      {availableTags.map((tag) => {
+      {visibleChips.map((tag) => {
         const selected = selectedTagIds.includes(tag.tagId);
         return (
           <button
@@ -285,6 +302,24 @@ const TagFilterChips: React.FC<TagFilterChipsProps> = ({
           style={{ background: "transparent", color: "#FF6B6B", border: "none", fontSize: "0.85em", cursor: "pointer" }}
         >
           {"\u2715"} Clear
+        </button>
+      )}
+      {needsToggle && (
+        <button
+          type="button"
+          data-testid="tag-filter-show-more"
+          onClick={() => setShowAll(prev => !prev)}
+          style={{
+            background: "transparent",
+            color: "#B0B0B0",
+            border: "1px solid #444",
+            borderRadius: 16,
+            padding: "4px 12px",
+            fontSize: "0.85em",
+            cursor: "pointer",
+          }}
+        >
+          {showAll ? "show less" : `show more (${hiddenCount})`}
         </button>
       )}
     </div>
