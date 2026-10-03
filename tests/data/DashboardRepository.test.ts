@@ -816,6 +816,20 @@ describe("getSpendingByWeek", () => {
     const total = result.reduce((sum: number, r: {total: number}) => sum + r.total, 0);
     expect(total).toBe(100);
   });
+
+  it("restricts to the given tagIds when a tag filter is active", () => {
+    const groceries = insertTag("Groceries");
+    const transport = insertTag("Transport");
+    const taggedTx = insertTransaction({ amount: 100, receivedAt: "2024-09-10T10:00:00.000Z" });
+    linkTag(taggedTx, groceries);
+    const otherTx = insertTransaction({ amount: 500, receivedAt: "2024-09-10T11:00:00.000Z" });
+    linkTag(otherTx, transport);
+
+    const result = getSpendingByWeek(db, "2024-09-01", "2024-09-30", [groceries]);
+
+    const total = result.reduce((sum: number, r: {total: number}) => sum + r.total, 0);
+    expect(total).toBe(100); // only the Groceries-tagged expense, not the Transport one
+  });
 });
 
 describe("getIncomeByWeek", () => {
@@ -842,5 +856,19 @@ describe("getIncomeByWeek", () => {
 
     const total = result.reduce((sum: number, r: {total: number}) => sum + r.total, 0);
     expect(total).toBe(5000);
+  });
+
+  it("restricts to the given tagIds when a tag filter is active", () => {
+    const salary = insertTag("Salary");
+    const refund = insertTag("Refund");
+    const salaryTx = insertTransaction({ amount: 5000, receivedAt: "2024-09-05T10:00:00.000Z", isIncome: true });
+    linkTag(salaryTx, salary);
+    const refundTx = insertTransaction({ amount: 1200, receivedAt: "2024-09-05T11:00:00.000Z", isIncome: true });
+    linkTag(refundTx, refund);
+
+    const result = getIncomeByWeek(db, "2024-09-01", "2024-09-30", [salary]);
+
+    const total = result.reduce((sum: number, r: {total: number}) => sum + r.total, 0);
+    expect(total).toBe(5000); // only the Salary-tagged income, not the Refund one
   });
 });

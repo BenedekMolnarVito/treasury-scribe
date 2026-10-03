@@ -864,5 +864,29 @@ describe("FR3: weekly trend for single-month period", () => {
       expect(chart.textContent).toContain("Weekly Trend");
     });
   });
+
+  it("weekly trend x-axis labels are relative (W1, W2…), not calendar-week numbers", async () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    // Two expenses in distinct weeks of the current month → ≥2 week buckets.
+    insertExpense({ amount: 1000, receivedAt: `${y}-${m}-02T10:00:00.000Z` });
+    insertExpense({ amount: 2000, receivedAt: `${y}-${m}-20T10:00:00.000Z` });
+
+    renderPage();
+
+    await waitFor(() => {
+      const chart = screen.getByTestId("monthly-chart") as HTMLElement;
+      expect(chart.getAttribute("data-granularity")).toBe("weekly");
+    });
+
+    const chart = screen.getByTestId("monthly-chart") as HTMLElement;
+    const text = chart.textContent ?? "";
+    // Relative labels start at W1 and increment; the first week shown is W1.
+    expect(text).toContain("W1");
+    // Must NOT render a raw ISO calendar-week number (would be W02..W53 for
+    // dates this far into the year); relative labels never exceed the bucket count.
+    expect(text).not.toMatch(/W(?:[2-9]\d|\d{3,})/);
+  });
 });
 

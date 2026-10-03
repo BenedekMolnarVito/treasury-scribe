@@ -238,9 +238,13 @@ const EditTransactionPageContent: React.FC<
         // The dynamic import fails in web/jsdom when the Capacitor native plugin
         // is unavailable — silently skip in that case (expected environment).
         // For genuine runtime failures (e.g. addListener throws), log a warning
-        // so the broken listener does not go completely undetected.
-        // eslint-disable-next-line no-console
-        console.warn("backButton listener registration failed", err);
+        // so the broken listener does not go completely undetected — but suppress
+        // it under the test runner (NODE_ENV==="test"), where @capacitor/app's web
+        // stub throws on addListener on every mount and would spam the test output.
+        if (process.env.NODE_ENV !== "test") {
+          // eslint-disable-next-line no-console
+          console.warn("backButton listener registration failed", err);
+        }
       }
     };
 

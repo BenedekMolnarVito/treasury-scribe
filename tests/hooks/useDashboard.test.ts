@@ -392,6 +392,26 @@ describe("FR3: trendGranularity", () => {
     expect(result.current.trendGranularity).toBe("weekly");
     expect(result.current.byWeek.length).toBeGreaterThan(0);
   });
+
+  it("byWeek respects the active tag filter (single-month weekly trend)", () => {
+    const now = new Date();
+    const currYear = now.getFullYear();
+    const currMonth = String(now.getMonth() + 1).padStart(2, "0");
+    const taggedTx = insertExpense(db, { amount: 1500, receivedAt: `${currYear}-${currMonth}-01T10:00:00.000Z` });
+    const tag = addTag(db, "food");
+    addTagToTransaction(db, taggedTx, tag.id);
+    insertExpense(db, { amount: 4000, receivedAt: `${currYear}-${currMonth}-01T11:00:00.000Z` }); // untagged
+
+    const { result } = renderHook(() => useDashboard(db));
+    act(() => result.current.refresh()); // period=month, no filter
+    const unfilteredTotal = result.current.byWeek.reduce((s, b) => s + b.total, 0);
+    expect(unfilteredTotal).toBe(5500);
+
+    // Apply the "food" filter — the weekly trend must drop the untagged row too.
+    act(() => result.current.setSelectedTagIds([tag.id]));
+    const filteredTotal = result.current.byWeek.reduce((s, b) => s + b.total, 0);
+    expect(filteredTotal).toBe(1500);
+  });
 });
 
 describe("lastMonth period", () => {

@@ -385,12 +385,15 @@ export function getUntaggedTransactionCount(db: Database): number {
  * @param db - sql.js Database instance.
  * @param startDate - Inclusive lower bound for ReceivedAt (ISO date string).
  * @param endDate - Inclusive upper bound for ReceivedAt (ISO date string).
+ * @param tagIds - Optional tag IDs to restrict results to.
  */
 export function getSpendingByWeek(
   db: Database,
   startDate: string,
-  endDate: string
+  endDate: string,
+  tagIds?: number[]
 ): SpendingByWeek[] {
+  const tagFilter = buildTagFilterClause(tagIds);
   return queryRows<SpendingByWeek>(
     db,
     `SELECT strftime('%Y-%W', t.ReceivedAt) AS week,
@@ -399,10 +402,10 @@ export function getSpendingByWeek(
      FROM Transactions t
      WHERE ${EXPENSE_FILTER}
        AND t.ReceivedAt >= ?
-       AND t.ReceivedAt <= ?
+       AND t.ReceivedAt <= ?${tagFilter.whereSql}
      GROUP BY strftime('%Y-%W', t.ReceivedAt)
      ORDER BY week ASC`,
-    [startDate, endDate]
+    [startDate, endDate, ...tagFilter.params]
   );
 }
 
@@ -413,12 +416,15 @@ export function getSpendingByWeek(
  * @param db - sql.js Database instance.
  * @param startDate - Inclusive lower bound for ReceivedAt (ISO date string).
  * @param endDate - Inclusive upper bound for ReceivedAt (ISO date string).
+ * @param tagIds - Optional tag IDs to restrict results to.
  */
 export function getIncomeByWeek(
   db: Database,
   startDate: string,
-  endDate: string
+  endDate: string,
+  tagIds?: number[]
 ): SpendingByWeek[] {
+  const tagFilter = buildTagFilterClause(tagIds);
   return queryRows<SpendingByWeek>(
     db,
     `SELECT strftime('%Y-%W', t.ReceivedAt) AS week,
@@ -427,9 +433,9 @@ export function getIncomeByWeek(
      FROM Transactions t
      WHERE t.IsDeleted = 0 AND t.IsIncome = 1 AND t.Amount IS NOT NULL
        AND t.ReceivedAt >= ?
-       AND t.ReceivedAt <= ?
+       AND t.ReceivedAt <= ?${tagFilter.whereSql}
      GROUP BY strftime('%Y-%W', t.ReceivedAt)
      ORDER BY week ASC`,
-    [startDate, endDate]
+    [startDate, endDate, ...tagFilter.params]
   );
 }

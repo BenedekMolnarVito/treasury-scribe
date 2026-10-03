@@ -147,6 +147,43 @@ def seed_all(seed_spec):
     return n
 
 
+def backdate_one_to_last_month():
+    """Back-date the first transaction into the previous calendar month via the
+    edit screen's receivedAt field, so the 'Last Month' tab (FR1b) exercises
+    populated data — not just selection state. Modal-seeded rows all land in the
+    current month (the Add modal has no date field), so without this the Last
+    Month summary is empty. Returns True on success."""
+    cdp.tap_testid("nav-transactions"); time.sleep(1)
+    # Open the first transaction's edit screen. The card exposes
+    # data-testid="transaction-card" with an inner role="button" clickable face
+    # (handleCardClick -> navigate(/edit/:id)); click that face.
+    opened = cdp.eval_js(
+        "(()=>{const card=document.querySelector('[data-testid=\"transaction-card\"]');"
+        "if(!card)return false;"
+        "const face=card.querySelector('[role=\"button\"]')||card;"
+        "face.click();return true;})()"
+    )
+    if not opened:
+        log("  backdate: no transaction row found — skipping")
+        return False
+    time.sleep(1)
+    if not cdp.eval_js("(()=>!!document.querySelector('[data-testid=input-received-at]'))()"):
+        log("  backdate: edit screen did not open — skipping")
+        return False
+    # Mid-previous-month at noon, formatted for a datetime-local input
+    # (YYYY-MM-DDTHH:mm), computed relative to run time so it is always "last month".
+    last_month_local = cdp.eval_js(
+        "(()=>{const n=new Date();const d=new Date(n.getFullYear(),n.getMonth()-1,15,12,0,0);"
+        "const p=x=>String(x).padStart(2,'0');"
+        "return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T12:00`;})()"
+    )
+    cdp.set_input("input-received-at", last_month_local)
+    time.sleep(0.3)
+    cdp.tap_testid("btn-save"); time.sleep(1.2)
+    log(f"  backdated one transaction to {last_month_local} (last month)")
+    return True
+
+
 # --- vitest shell-out for non-UI paths --------------------------------------
 def run_vitest(files):
     """Run the Node test suite for paths the emulator UI can't drive."""
@@ -209,6 +246,8 @@ def main():
     ap.add_argument("--only", default="", help="comma-separated id prefixes to run")
     ap.add_argument("--no-vitest", action="store_true")
     ap.add_argument("--no-seed", action="store_true", help="skip seeding (assume data present)")
+    ap.add_argument("--no-backdate", action="store_true",
+                    help="skip back-dating one seeded row into last month (FR1b data coverage)")
     ap.add_argument("--rebuild", action="store_true", help="rebuild+reinstall APK first")
     args = ap.parse_args()
 
@@ -245,6 +284,8 @@ def main():
         cdp.launch(); time.sleep(3)
         if not args.no_seed:
             seed_all(spec.get("seed", {}))
+            if not args.no_backdate:
+                backdate_one_to_last_month()
 
     results = []
     for sc in scenarios:

@@ -49,7 +49,12 @@ This is a project-scoped skill: the runnable harness lives in the repo at
 4. **Scenarios are declarative data** in `scenarios.yaml`. Adding/maintaining a
    test = editing YAML.
 5. **Reproducible:** `--fresh` clears app state and reseeds fixed transactions
-   through the app's own Add-Transaction modal before UI scenarios run.
+   through the app's own Add-Transaction modal before UI scenarios run. One
+   seeded row is then back-dated into the previous calendar month (via the edit
+   screen's `receivedAt` field) so the Last Month tab (FR1b) exercises populated
+   data, not just selection state — the Add modal has no date field, so all
+   modal-seeded rows otherwise land in the current month. Skip with
+   `--no-backdate`.
 
 ## Prerequisites
 
@@ -78,6 +83,7 @@ Common invocations:
 - `python3 harness.py --fresh --no-vitest` — UI scenarios only (fast iteration).
 - `python3 harness.py --only FR1,FR3` — run a subset by id prefix.
 - `python3 harness.py --no-seed` — reuse existing on-device data (don't reseed).
+- `python3 harness.py --no-backdate` — reseed but keep all rows in the current month (skip FR1b last-month data coverage).
 - `python3 harness.py --rebuild` — rebuild+reinstall the APK first, then run.
 
 Exit code 0 iff every selected non-skipped scenario PASSED. Per-scenario DOM

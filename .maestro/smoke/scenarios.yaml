@@ -66,9 +66,17 @@ scenarios:
     feature: "Selecting Last Month refreshes the dashboard"
     nav: [{tap_testid: nav-dashboard}, {sleep: 1}, {tap_text: "Last Month"}, {sleep: 1}]
     code_assert:
+      # "Last Month" present AND (data-level coverage) the hero expenses total is
+      # non-zero — the harness back-dates one seeded row into last month, so this
+      # exercises populated data, not just the selection flipping. Folded into a
+      # single boolean because the runner's code_assert supports one `js` slot.
       js:
         expr: >
-          (()=>document.body.innerText.includes('Last Month'))()
+          (()=>{if(!document.body.innerText.includes('Last Month'))return false;
+          const el=document.querySelector('[data-testid=hero-expenses]');
+          if(!el)return false;
+          const n=parseInt((el.innerText||'').replace(/[^0-9]/g,''),10);
+          return Number.isFinite(n)&&n>0;})()
         equals: true
     jev_assert:
       - {id: lastmonth_active, question: "Is the 'Last Month' period now the active/selected period for the dashboard summary?", true: "Last Month is the active selected period", false: "This Month or another period is still active"}

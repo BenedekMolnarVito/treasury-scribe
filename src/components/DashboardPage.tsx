@@ -496,11 +496,12 @@ const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({
     return values.map((v, i) => `${i === 0 ? "M" : "L"} ${getX(i)} ${getY(v)}`).join(" ");
   };
 
-  const formatLabel = (key: string) => {
+  const formatLabel = (key: string, index: number) => {
     if (isWeekly) {
-      // "YYYY-WW" → "W{N}" e.g. "W36"
-      const ww = parseInt(key.slice(5), 10);
-      return `W${ww}`;
+      // Relative week position within the displayed period: the first week
+      // shown is W1, the next W2, etc. (ISO calendar week numbers like W36/W37
+      // read confusingly and don't reset to 1 across a month boundary).
+      return `W${index + 1}`;
     }
     const monthNum = parseInt(key.slice(5), 10);
     return MONTH_NAMES[monthNum - 1] ?? key.slice(5);
@@ -530,7 +531,7 @@ const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({
         ) : null)}
         {allKeys.map((key, i) => (
           <text key={key} x={getX(i)} y={chartHeight - 4} fill="#B0B0B0" fontSize="10" textAnchor="middle">
-            {formatLabel(key)}
+            {formatLabel(key, i)}
           </text>
         ))}
       </svg>

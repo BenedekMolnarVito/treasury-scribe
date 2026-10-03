@@ -159,8 +159,8 @@ export function useDashboard(db: Database): UseDashboardResult {
         // use the end of today so same-day transactions are included.
         const effectiveEnd =
           endDate ?? `${new Date().toISOString().slice(0, 10)}T23:59:59.999Z`;
-        setByWeek(getSpendingByWeek(db, startDate, effectiveEnd));
-        setIncomeByWeek(getIncomeByWeek(db, startDate, effectiveEnd));
+        setByWeek(getSpendingByWeek(db, startDate, effectiveEnd, activeTagIds));
+        setIncomeByWeek(getIncomeByWeek(db, startDate, effectiveEnd, activeTagIds));
         setTrendGranularity("weekly");
       } else {
         setByWeek([]);
