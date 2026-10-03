@@ -151,6 +151,9 @@ const CSV_HEADERS = [
   "IsCash",
   "Tags",
   "IsDeleted",
+  // Column 11 (index 10): added in FR8 to persist the auto-learn exclusion flag.
+  // Old export files (10 columns) remain importable — the importer treats this as optional.
+  "ExcludeFromAutoLearn",
 ] as const;
 
 /**
@@ -199,6 +202,7 @@ function transactionsToCSV(transactions: Transaction[]): string {
       csvEscape(tx.isCash ? 1 : 0),
       csvEscape(tagNames),
       csvEscape(tx.isDeleted ? 1 : 0),
+      csvEscape(tx.excludeFromAutoLearn ? 1 : 0),
     ].join(",");
   });
 
@@ -220,6 +224,8 @@ interface ExportRow {
   IsCash: 0 | 1;
   Tags: string;
   IsDeleted: 0 | 1;
+  /** FR8: persists the auto-learn exclusion flag (column 11, index 10 in CSV). */
+  ExcludeFromAutoLearn: 0 | 1;
 }
 
 /**
@@ -243,6 +249,7 @@ function transactionsToJSON(transactions: Transaction[]): string {
       .map((tt) => getTagDisplayName(tt).replace(/;/g, "\\;"))
       .join(";"),
     IsDeleted: tx.isDeleted ? 1 : 0,
+    ExcludeFromAutoLearn: tx.excludeFromAutoLearn ? 1 : 0,
   }));
   return JSON.stringify(rows, null, 2);
 }
@@ -392,7 +399,7 @@ export function useTransactions(
       // Add user-supplied tags, deduped against "AddedManually".
       if (tagNames && tagNames.length > 0) {
         for (const name of tagNames) {
-          if (name.trim() === "" || name === "AddedManually") continue;
+          if (name.trim() === "" || name.trim() === "AddedManually") continue;
           const userTag = addTag(db, name.trim());
           repoAddTagToTx(db, newTx.id, userTag.id);
         }

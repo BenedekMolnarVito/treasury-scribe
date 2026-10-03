@@ -122,15 +122,16 @@ export function ingestNotification(
   // 5. Auto-tag by vendor – copy qualifying tags from the best previous
   //    transaction for this vendor (excluding "AddedManually").
   //
-  //    PREFER the title+stripped-body match so that same-recipient recurring
-  //    transfers (same title, different amounts) inherit tags from the most
-  //    recent transfer to the SAME recipient.
+  //    PREFER the title+stripped-body match (previousByTitleAndBody).
+  //    findLastTransactionByTitleAndBody handles a null incoming body
+  //    natively (null-to-null matching), so previousByTitleAndBody is
+  //    non-null whenever any previous transaction shares both title and body
+  //    (including the null-body case).
   //
-  //    FALL BACK to the title-only match ONLY when the incoming body is null
-  //    (no body information means we cannot distinguish by content, so title
-  //    alone is the best available signal). When the incoming body is non-null
-  //    but no stripped-body match exists, the transaction is new to this
-  //    recipient/pattern and should NOT inherit from a different one.
+  //    FALL BACK to previousByTitle ONLY when previousByTitleAndBody is null
+  //    (i.e. no previous transaction matched on title + stripped body).
+  //    This preserves tag propagation for title-only patterns while keeping
+  //    different-recipient transfers classified independently.
   // -------------------------------------------------------------------------
   const previous =
     previousByTitleAndBody ??

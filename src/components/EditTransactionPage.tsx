@@ -234,8 +234,13 @@ const EditTransactionPageContent: React.FC<
         listenerHandle = await App.addListener("backButton", () => {
           void navigate("/transactions");
         });
-      } catch {
-        // Native plugin unavailable (web / jsdom) — silently skip.
+      } catch (err) {
+        // The dynamic import fails in web/jsdom when the Capacitor native plugin
+        // is unavailable — silently skip in that case (expected environment).
+        // For genuine runtime failures (e.g. addListener throws), log a warning
+        // so the broken listener does not go completely undetected.
+        // eslint-disable-next-line no-console
+        console.warn("backButton listener registration failed", err);
       }
     };
 

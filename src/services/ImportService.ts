@@ -21,6 +21,10 @@ export interface ImportResult {
   errors: string[];
 }
 
+// Minimum accepted column count (old 10-column format). The 11th column
+// (ExcludeFromAutoLearn, added in FR8) is optional: rows with exactly 10
+// columns are still accepted; the importer defaults the flag to false.
+// Rows with fewer than 10 columns are rejected as malformed.
 const EXPECTED_COLUMN_COUNT = 10;
 
 // ---------------------------------------------------------------------------
@@ -89,6 +93,8 @@ interface ParsedRow {
   isCash: boolean;
   tags: string[];
   isDeleted: boolean;
+  /** FR8: false when absent (old 10-column exports) or when field value is "0". */
+  excludeFromAutoLearn: boolean;
 }
 
 function parseCSVRow(fields: string[]): ParsedRow {
@@ -103,6 +109,9 @@ function parseCSVRow(fields: string[]): ParsedRow {
 
   const rawIsCash = fields[7] ?? "0";
   const rawIsDeleted = fields[9] ?? "0";
+  // Column 11 (index 10) is optional: present in new-format exports (11 columns),
+  // absent in old exports (10 columns). Default to false when missing.
+  const rawExcludeFromAutoLearn = fields[10] ?? "0";
 
   return {
     receivedAt,
@@ -114,6 +123,7 @@ function parseCSVRow(fields: string[]): ParsedRow {
     isCash: rawIsCash === "1",
     tags: parseTagString(fields[8] ?? ""),
     isDeleted: rawIsDeleted === "1",
+    excludeFromAutoLearn: rawExcludeFromAutoLearn === "1",
   };
 }
 
@@ -153,6 +163,9 @@ function parseJSONRow(row: Record<string, unknown>): ParsedRow {
     ),
     isDeleted:
       row["IsDeleted"] === 1 || row["IsDeleted"] === true,
+    // FR8: absent in old JSON exports — default false for backward-compat.
+    excludeFromAutoLearn:
+      row["ExcludeFromAutoLearn"] === 1 || row["ExcludeFromAutoLearn"] === true,
   };
 }
 
@@ -215,6 +228,7 @@ function importParsedRow(db: Database, row: ParsedRow): "imported" | "skipped" {
     isCash: row.isCash,
     isDeleted: row.isDeleted,
     isIncome: false,
+    excludeFromAutoLearn: row.excludeFromAutoLearn,
   });
 
   const savedTx = addTransaction(db, txData);

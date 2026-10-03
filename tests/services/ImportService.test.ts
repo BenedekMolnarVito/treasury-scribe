@@ -417,3 +417,102 @@ describe("IsDeleted round-trip (export → import)", () => {
     expect(tags).toContain("OldTag");
   });
 });
+
+// ---------------------------------------------------------------------------
+// FIX 1 (I-2): ExcludeFromAutoLearn round-trip in ImportService
+// ---------------------------------------------------------------------------
+
+describe("FIX I-2 – ExcludeFromAutoLearn import (CSV)", () => {
+  const NEW_CSV_HEADERS =
+    "Id,ReceivedAt,NotificationTitle,NotificationBody,PackageName,Amount,Currency,IsCash,Tags,IsDeleted,ExcludeFromAutoLearn";
+
+  it("(a) new-format row with ExcludeFromAutoLearn=1 imports with flag=true", () => {
+    const row11Col = "1,2026-01-15T10:00:00.000Z,Shell,Card payment,com.revolut.revolut,200,HUF,0,,0,1";
+    const csv = [NEW_CSV_HEADERS, row11Col].join("\n");
+    importFromCSV(db, csv);
+
+    const txs = getAllTransactionsIncludingDeleted(db);
+    expect(txs).toHaveLength(1);
+    expect(txs[0]!.excludeFromAutoLearn).toBe(true);
+  });
+
+  it("(b) old-format 10-column row still imports fine with flag defaulting to false (backward-compat)", () => {
+    const OLD_HEADERS = "Id,ReceivedAt,NotificationTitle,NotificationBody,PackageName,Amount,Currency,IsCash,Tags,IsDeleted";
+    const row10Col = "1,2026-01-15T10:00:00.000Z,Shell,Card payment,com.revolut.revolut,200,HUF,0,,0";
+    const csv = [OLD_HEADERS, row10Col].join("\n");
+    const result = importFromCSV(db, csv);
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.imported).toBe(1);
+
+    const txs = getAllTransactionsIncludingDeleted(db);
+    expect(txs).toHaveLength(1);
+    expect(txs[0]!.excludeFromAutoLearn).toBe(false);
+  });
+
+  it("(c) a row with ExcludeFromAutoLearn=0 in new-format imports with flag=false", () => {
+    const row11Col = "1,2026-01-15T10:00:00.000Z,Shell,Card payment,com.revolut.revolut,200,HUF,0,,0,0";
+    const csv = [NEW_CSV_HEADERS, row11Col].join("\n");
+    importFromCSV(db, csv);
+
+    const txs = getAllTransactionsIncludingDeleted(db);
+    expect(txs).toHaveLength(1);
+    expect(txs[0]!.excludeFromAutoLearn).toBe(false);
+  });
+
+  it("genuinely malformed row (< 10 columns) still gets an error", () => {
+    const csv = [NEW_CSV_HEADERS, "only,three,columns"].join("\n");
+    const result = importFromCSV(db, csv);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toContain("Row 1");
+  });
+});
+
+describe("FIX I-2 – ExcludeFromAutoLearn import (JSON)", () => {
+  it("(a) JSON row with ExcludeFromAutoLearn=1 imports with flag=true", () => {
+    const json = JSON.stringify([
+      {
+        Id: 1,
+        ReceivedAt: "2026-01-15T10:00:00.000Z",
+        NotificationTitle: "Shell",
+        NotificationBody: "Card payment",
+        PackageName: "com.revolut.revolut",
+        Amount: 200,
+        Currency: "HUF",
+        IsCash: 0,
+        Tags: "",
+        IsDeleted: 0,
+        ExcludeFromAutoLearn: 1,
+      },
+    ]);
+    importFromJSON(db, json);
+
+    const txs = getAllTransactionsIncludingDeleted(db);
+    expect(txs).toHaveLength(1);
+    expect(txs[0]!.excludeFromAutoLearn).toBe(true);
+  });
+
+  it("(b) JSON row without ExcludeFromAutoLearn field imports with flag=false (backward-compat)", () => {
+    const json = JSON.stringify([
+      {
+        Id: 1,
+        ReceivedAt: "2026-01-15T10:00:00.000Z",
+        NotificationTitle: "Shell",
+        NotificationBody: "Card payment",
+        PackageName: "com.revolut.revolut",
+        Amount: 200,
+        Currency: "HUF",
+        IsCash: 0,
+        Tags: "",
+        IsDeleted: 0,
+        // No ExcludeFromAutoLearn field
+      },
+    ]);
+    const result = importFromJSON(db, json);
+
+    expect(result.errors).toHaveLength(0);
+    const txs = getAllTransactionsIncludingDeleted(db);
+    expect(txs).toHaveLength(1);
+    expect(txs[0]!.excludeFromAutoLearn).toBe(false);
+  });
+});
