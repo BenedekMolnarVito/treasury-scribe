@@ -19,6 +19,8 @@ import {
   getUntaggedTransactionCount,
   getIncomeSummary,
   getIncomeByMonth,
+  getSpendingByWeek,
+  getIncomeByWeek,
 } from "../../src/data/DashboardRepository";
 
 // ---------------------------------------------------------------------------
@@ -374,7 +376,7 @@ describe("getSpendingByMonth", () => {
     linkTag(tx1, foodTag);
 
     const startDate = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
-    const results = getSpendingByMonth(db, startDate, [foodTag]);
+    const results = getSpendingByMonth(db, startDate, undefined, [foodTag]);
     const total = results.reduce((sum, r) => sum + r.total, 0);
     expect(total).toBe(50);
   });
@@ -708,7 +710,7 @@ describe("getIncomeByMonth", () => {
     linkTag(tx1, salaryTag);
 
     const startDate = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
-    const results = getIncomeByMonth(db, startDate, [salaryTag]);
+    const results = getIncomeByMonth(db, startDate, undefined, [salaryTag]);
     const total = results.reduce((sum, r) => sum + r.total, 0);
     expect(total).toBe(5000);
   });
@@ -758,5 +760,87 @@ describe("getUntaggedTransactionCount", () => {
     linkTag(tx2, tag);
 
     expect(getUntaggedTransactionCount(db)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FR3: getSpendingByWeek / getIncomeByWeek
+// ---------------------------------------------------------------------------
+
+describe("getSpendingByWeek", () => {
+  it("returns empty array when no transactions exist in the range", () => {
+    const result = getSpendingByWeek(db, "2020-01-01", "2020-01-31");
+    expect(result).toEqual([]);
+  });
+
+  it("buckets a month's expense transactions into weeks with correct totals", () => {
+    // Insert expenses across a month with known week groupings
+    insertTransaction({ amount: 100, receivedAt: "2024-09-02T10:00:00.000Z" }); // week
+    insertTransaction({ amount: 200, receivedAt: "2024-09-10T10:00:00.000Z" }); // different week
+    insertTransaction({ amount: 50, receivedAt: "2024-09-10T12:00:00.000Z" });  // same week as prev
+
+    const result = getSpendingByWeek(db, "2024-09-01", "2024-09-30");
+
+    // Should have at least 2 week buckets
+    expect(result.length).toBeGreaterThanOrEqual(2);
+    const total = result.reduce((sum: number, r: {week: string; total: number; count: number}) => sum + r.total, 0);
+    expect(total).toBe(350);
+  });
+
+  it("each bucket has a week label in YYYY-WW format", () => {
+    insertTransaction({ amount: 100, receivedAt: "2024-09-02T10:00:00.000Z" });
+
+    const result = getSpendingByWeek(db, "2024-09-01", "2024-09-30");
+
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    // week key should match YYYY-WW pattern
+    expect(result[0].week).toMatch(/^\d{4}-\d{2}$/);
+  });
+
+  it("excludes transactions outside the date range", () => {
+    insertTransaction({ amount: 999, receivedAt: "2024-08-15T10:00:00.000Z" }); // before range
+    insertTransaction({ amount: 100, receivedAt: "2024-09-10T10:00:00.000Z" }); // in range
+
+    const result = getSpendingByWeek(db, "2024-09-01", "2024-09-30");
+
+    const total = result.reduce((sum: number, r: {total: number}) => sum + r.total, 0);
+    expect(total).toBe(100);
+  });
+
+  it("excludes income transactions", () => {
+    insertTransaction({ amount: 100, receivedAt: "2024-09-10T10:00:00.000Z", isIncome: false });
+    insertTransaction({ amount: 999, receivedAt: "2024-09-10T10:00:00.000Z", isIncome: true });
+
+    const result = getSpendingByWeek(db, "2024-09-01", "2024-09-30");
+
+    const total = result.reduce((sum: number, r: {total: number}) => sum + r.total, 0);
+    expect(total).toBe(100);
+  });
+});
+
+describe("getIncomeByWeek", () => {
+  it("returns empty array when no income transactions exist in the range", () => {
+    const result = getIncomeByWeek(db, "2020-01-01", "2020-01-31");
+    expect(result).toEqual([]);
+  });
+
+  it("buckets income transactions by week with correct totals", () => {
+    insertTransaction({ amount: 5000, receivedAt: "2024-09-05T10:00:00.000Z", isIncome: true });
+    insertTransaction({ amount: 3000, receivedAt: "2024-09-20T10:00:00.000Z", isIncome: true });
+
+    const result = getIncomeByWeek(db, "2024-09-01", "2024-09-30");
+
+    const total = result.reduce((sum: number, r: {total: number}) => sum + r.total, 0);
+    expect(total).toBe(8000);
+  });
+
+  it("excludes expense transactions", () => {
+    insertTransaction({ amount: 5000, receivedAt: "2024-09-05T10:00:00.000Z", isIncome: true });
+    insertTransaction({ amount: 999, receivedAt: "2024-09-05T10:00:00.000Z", isIncome: false });
+
+    const result = getIncomeByWeek(db, "2024-09-01", "2024-09-30");
+
+    const total = result.reduce((sum: number, r: {total: number}) => sum + r.total, 0);
+    expect(total).toBe(5000);
   });
 });
