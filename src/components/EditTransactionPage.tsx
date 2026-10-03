@@ -227,6 +227,7 @@ const EditTransactionPageContent: React.FC<
     description,
     isCash,
     isIncome,
+    excludeFromAutoLearn,
     amount,
     currency,
     newTagName,
@@ -237,6 +238,7 @@ const EditTransactionPageContent: React.FC<
     setDescription,
     setIsCash,
     setIsIncome,
+    setExcludeFromAutoLearn,
     setAmount,
     setCurrency,
     receivedAt,
@@ -395,6 +397,48 @@ const EditTransactionPageContent: React.FC<
           ariaLabel="Income"
           testId="toggle-income"
         />
+      </div>
+
+      {/* Default / Exception tag mode toggle */}
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 16, marginBottom: 4 }}
+        data-testid="tag-mode-toggle"
+      >
+        <button
+          type="button"
+          data-testid="tag-mode-default"
+          aria-pressed={!excludeFromAutoLearn}
+          onClick={() => setExcludeFromAutoLearn(false)}
+          style={{
+            background: !excludeFromAutoLearn ? "#1565C0" : "#2A2A2A",
+            color: !excludeFromAutoLearn ? "#FFFFFF" : "#B0B0B0",
+            border: "1px solid " + (!excludeFromAutoLearn ? "#1565C0" : "#555"),
+            borderRadius: "6px 0 0 6px",
+            padding: "6px 14px",
+            cursor: "pointer",
+            fontSize: "0.88em",
+          }}
+        >
+          Default
+        </button>
+        <button
+          type="button"
+          data-testid="tag-mode-exception"
+          aria-pressed={excludeFromAutoLearn}
+          onClick={() => setExcludeFromAutoLearn(true)}
+          style={{
+            background: excludeFromAutoLearn ? "#B71C1C" : "#2A2A2A",
+            color: excludeFromAutoLearn ? "#FFFFFF" : "#B0B0B0",
+            border: "1px solid " + (excludeFromAutoLearn ? "#B71C1C" : "#555"),
+            borderRadius: "0 6px 6px 0",
+            padding: "6px 14px",
+            cursor: "pointer",
+            fontSize: "0.88em",
+            marginLeft: -1,
+          }}
+        >
+          Exception
+        </button>
       </div>
 
       {/* Current tags */}

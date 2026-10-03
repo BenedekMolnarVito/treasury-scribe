@@ -13,7 +13,7 @@ import type { Database } from "sql.js";
 import type { Tag } from "../models/Tag";
 import type { DatabaseChangedFn } from "./useTransactions";
 
-import { getTransactionById, updateTransaction } from "../data/TransactionRepository";
+import { getTransactionById, updateTransaction, setTransactionException } from "../data/TransactionRepository";
 import {
   addTag as repoAddTag,
   addTagToTransaction,
@@ -51,6 +51,8 @@ export interface UseEditTransactionResult {
   isCash: boolean;
   /** Editable copy of `isIncome`. */
   isIncome: boolean;
+  /** Editable copy of `excludeFromAutoLearn`. */
+  excludeFromAutoLearn: boolean;
   /** Editable copy of `amount`. */
   amount: number | null;
   /** Editable copy of `currency`. */
@@ -74,6 +76,11 @@ export interface UseEditTransactionResult {
   setDescription: (value: string) => void;
   setIsCash: (value: boolean) => void;
   setIsIncome: (value: boolean) => void;
+  /**
+   * Flips the exception flag, persists it to DB, and clears tags when setting
+   * to exception mode.
+   */
+  setExcludeFromAutoLearn: (value: boolean) => void;
   setAmount: (value: number | null) => void;
   setCurrency: (value: string | null) => void;
   setReceivedAt: (value: string) => void;
@@ -154,6 +161,7 @@ export function useEditTransaction(
   const [description, setDescription] = useState<string>("");
   const [isCash, setIsCash] = useState<boolean>(false);
   const [isIncome, setIsIncome] = useState<boolean>(false);
+  const [excludeFromAutoLearn, setExcludeFromAutoLearnState] = useState<boolean>(false);
   const [amount, setAmount] = useState<number | null>(null);
   const [currency, setCurrency] = useState<string | null>(null);
   const [receivedAt, setReceivedAt] = useState<string>("");
@@ -183,6 +191,7 @@ export function useEditTransaction(
       setDescription(tx.notificationBody ?? "");
       setIsCash(tx.isCash);
       setIsIncome(tx.isIncome);
+      setExcludeFromAutoLearnState(tx.excludeFromAutoLearn);
       setAmount(tx.amount);
       setCurrency(tx.currency ?? null);
       setReceivedAt(tx.receivedAt ?? "");
@@ -212,6 +221,7 @@ export function useEditTransaction(
       notificationBody: description,
       isCash,
       isIncome,
+      excludeFromAutoLearn,
       amount,
       currency,
       receivedAt: receivedAt || tx.receivedAt,
@@ -250,6 +260,35 @@ export function useEditTransaction(
       removeTagFromTransaction(db, id, tagId);
       setCurrentTags((prev) => prev.filter((t) => t.id !== tagId));
       onDatabaseChanged(db);
+    },
+    [db, onDatabaseChanged]
+  );
+
+  // -------------------------------------------------------------------------
+  // setExcludeFromAutoLearn
+  // -------------------------------------------------------------------------
+
+  /**
+   * Flips the exception flag.  When switching TO exception mode, all tags are
+   * removed from the transaction and persisted immediately.  Switching back
+   * to Default does NOT restore the cleared tags.
+   */
+  const setExcludeFromAutoLearn = useCallback(
+    (value: boolean): void => {
+      const id = transactionIdRef.current;
+      setExcludeFromAutoLearnState(value);
+      if (id !== null) {
+        setTransactionException(db, id, value);
+        if (value) {
+          // Clear all tags and persist the empty set.
+          const tags = getTagsForTransaction(db, id);
+          for (const tag of tags) {
+            removeTagFromTransaction(db, id, tag.id);
+          }
+          setCurrentTags([]);
+        }
+        onDatabaseChanged(db);
+      }
     },
     [db, onDatabaseChanged]
   );
@@ -296,6 +335,7 @@ export function useEditTransaction(
     description,
     isCash,
     isIncome,
+    excludeFromAutoLearn,
     amount,
     currency,
     receivedAt,
@@ -308,6 +348,7 @@ export function useEditTransaction(
     setDescription,
     setIsCash,
     setIsIncome,
+    setExcludeFromAutoLearn,
     setAmount,
     setCurrency,
     setReceivedAt,

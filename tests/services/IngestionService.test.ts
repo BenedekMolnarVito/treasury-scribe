@@ -96,6 +96,7 @@ function makeTxData(
     isDeleted: false,
     isCash: false,
     isIncome: false,
+    excludeFromAutoLearn: false,
   };
 }
 
@@ -552,5 +553,65 @@ describe("ingestNotification – combined behaviours", () => {
     // Auto-tagged from the previous non-deleted transaction.
     const tagNames = result!.transactionTags.map((tt) => tt.tagName);
     expect(tagNames).toContain("Recurring");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FR8: Exception txns excluded from auto-tagging source
+// ---------------------------------------------------------------------------
+
+import { setTransactionException } from "../../src/data/TransactionRepository";
+
+describe("FR8 – exception transactions excluded from auto-tag learning", () => {
+  it("does NOT copy tags from an exception transaction (findLastTransactionByTitle path)", () => {
+    // Seed an exception transaction at merchant M with a tag "ExceptionTag".
+    const exceptionTx = addTransaction(db, {
+      ...createTransaction({
+        notificationTitle: "MerchantM",
+        notificationBody: "Some body",
+        receivedAt: makeTimestamp(0),
+      }),
+      excludeFromAutoLearn: false,
+    });
+    const tag = addTag(db, "ExceptionTag");
+    addTagToTransaction(db, exceptionTx.id, tag.id);
+    // Mark it as exception AFTER tagging (simulates retroactive reclassification)
+    setTransactionException(db, exceptionTx.id, true);
+
+    // Ingest a new notification for the same merchant
+    const result = ingestNotification(
+      db,
+      makeTxData("MerchantM", "Some body", "com.merchant", makeTimestamp(10))
+    );
+
+    expect(result).not.toBeNull();
+    const tagNames = result!.transactionTags.map((tt) => tt.tagName);
+    // Exception was excluded → new tx should NOT have "ExceptionTag"
+    expect(tagNames).not.toContain("ExceptionTag");
+  });
+
+  it("DOES copy tags from a Default (non-exception) transaction", () => {
+    // Seed a Default transaction at merchant N with a tag "DefaultTag".
+    const defaultTx = addTransaction(db, {
+      ...createTransaction({
+        notificationTitle: "MerchantN",
+        notificationBody: "Payment body",
+        receivedAt: makeTimestamp(0),
+      }),
+      excludeFromAutoLearn: false,
+    });
+    const tag = addTag(db, "DefaultTag");
+    addTagToTransaction(db, defaultTx.id, tag.id);
+
+    // Ingest a new notification for the same merchant
+    const result = ingestNotification(
+      db,
+      makeTxData("MerchantN", "Payment body", "com.merchant2", makeTimestamp(10))
+    );
+
+    expect(result).not.toBeNull();
+    const tagNames = result!.transactionTags.map((tt) => tt.tagName);
+    // Default is included → new tx SHOULD have "DefaultTag"
+    expect(tagNames).toContain("DefaultTag");
   });
 });

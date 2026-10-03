@@ -892,3 +892,49 @@ describe("addManualTransaction with isIncome", () => {
     expect(tx?.isIncome).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// FR8: addManualTransaction excludeFromAutoLearn flag
+// ---------------------------------------------------------------------------
+
+describe("FR8 – addManualTransaction excludeFromAutoLearn flag", () => {
+  it("defaults excludeFromAutoLearn to false when not provided", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction("DefaultTx", "body");
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx?.excludeFromAutoLearn).toBe(false);
+  });
+
+  it("persists excludeFromAutoLearn=true when exception flag is passed", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "ExceptionTx", "body", 10, "HUF", false, false, undefined, true
+      );
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx?.excludeFromAutoLearn).toBe(true);
+  });
+
+  it("persists excludeFromAutoLearn=false when default flag is passed explicitly", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "DefaultExplicitTx", "body", 10, "HUF", false, false, undefined, false
+      );
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx?.excludeFromAutoLearn).toBe(false);
+  });
+});

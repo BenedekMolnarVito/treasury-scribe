@@ -37,6 +37,7 @@ interface TransactionRow {
   Amount: number | null;
   Currency: string | null;
   IsIncome: number;
+  ExcludeFromAutoLearn: number;
   // From TransactionTags JOIN
   TtId: number | null;
   TagId: number | null;
@@ -71,6 +72,7 @@ function groupTransactionRows(rows: TransactionRow[]): Transaction[] {
         amount: row.Amount,
         currency: row.Currency,
         isIncome: row.IsIncome === 1,
+        excludeFromAutoLearn: row.ExcludeFromAutoLearn === 1,
         transactionTags: [],
         // Placeholders – overwritten by withComputedProps
         parsedAmount: null,
@@ -137,6 +139,7 @@ const SELECT_WITH_TAGS = `
     t.Amount,
     t.Currency,
     t.IsIncome,
+    t.ExcludeFromAutoLearn,
     tt.Id       AS TtId,
     tt.TagId    AS TagId,
     tt.CreatedAt AS TtCreatedAt,
@@ -205,8 +208,8 @@ export function addTransaction(
   db.run(
     `INSERT INTO Transactions
       (RawContent, JsonContent, ReceivedAt, NotificationTitle, NotificationBody,
-       PackageName, IsDeleted, IsCash, Amount, Currency, IsIncome)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       PackageName, IsDeleted, IsCash, Amount, Currency, IsIncome, ExcludeFromAutoLearn)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       transaction.rawContent,
       transaction.jsonContent,
@@ -219,6 +222,7 @@ export function addTransaction(
       transaction.amount,
       transaction.currency,
       transaction.isIncome ? 1 : 0,
+      transaction.excludeFromAutoLearn ? 1 : 0,
     ] as Parameters<typeof db.run>[1]
   );
 
@@ -255,6 +259,7 @@ export function updateTransaction(
     | "amount"
     | "currency"
     | "isIncome"
+    | "excludeFromAutoLearn"
   >
 ): void {
   db.run(
@@ -269,7 +274,8 @@ export function updateTransaction(
       IsCash            = ?,
       Amount            = ?,
       Currency          = ?,
-      IsIncome          = ?
+      IsIncome          = ?,
+      ExcludeFromAutoLearn = ?
      WHERE Id = ?`,
     [
       transaction.rawContent,
@@ -283,6 +289,7 @@ export function updateTransaction(
       transaction.amount,
       transaction.currency,
       transaction.isIncome ? 1 : 0,
+      transaction.excludeFromAutoLearn ? 1 : 0,
       transaction.id,
     ] as Parameters<typeof db.run>[1]
   );
@@ -316,6 +323,24 @@ export function softDeleteTransaction(db: Database, id: number): void {
  */
 export function softDeleteAllTransactions(db: Database): void {
   db.run("UPDATE Transactions SET IsDeleted = 1");
+}
+
+/**
+ * Flips the `ExcludeFromAutoLearn` flag on a single transaction.
+ *
+ * @param db - sql.js Database instance.
+ * @param id - Primary key of the transaction to update.
+ * @param isException - `true` to exclude from auto-learning, `false` to include.
+ */
+export function setTransactionException(
+  db: Database,
+  id: number,
+  isException: boolean
+): void {
+  db.run(
+    "UPDATE Transactions SET ExcludeFromAutoLearn = ? WHERE Id = ?",
+    [isException ? 1 : 0, id] as Parameters<typeof db.run>[1]
+  );
 }
 
 /**
@@ -423,6 +448,7 @@ export function findLastTransactionByTitle(
     db,
     `SELECT Id FROM Transactions
      WHERE IsDeleted = 0
+       AND ExcludeFromAutoLearn = 0
        AND NotificationTitle IS ?
      ORDER BY ReceivedAt DESC
      LIMIT 1`,
@@ -495,6 +521,7 @@ export function findLastTransactionByTitleAndBody(
     db,
     `SELECT Id, NotificationBody FROM Transactions
      WHERE IsDeleted = 0
+       AND ExcludeFromAutoLearn = 0
        AND NotificationTitle IS ?
      ORDER BY ReceivedAt DESC`,
     [title]

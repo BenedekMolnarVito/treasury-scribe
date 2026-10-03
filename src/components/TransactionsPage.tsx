@@ -269,7 +269,8 @@ interface AddTransactionModalProps {
     currency?: string,
     isCash?: boolean,
     isIncome?: boolean,
-    receivedAt?: string
+    receivedAt?: string,
+    excludeFromAutoLearn?: boolean
   ) => Promise<void>;
   /** Called when the modal should close (Cancel or backdrop click). */
   onClose: () => void;
@@ -288,6 +289,7 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [currency, setCurrency] = useState("");
   const [isCash, setIsCash] = useState(false);
   const [isIncome, setIsIncome] = useState(false);
+  const [excludeFromAutoLearn, setExcludeFromAutoLearn] = useState(false);
   const [receivedAt, setReceivedAt] = useState(() => {
     const now = new Date();
     const pad = (n: number) => n.toString().padStart(2, "0");
@@ -308,7 +310,8 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       currency !== "" ? currency : undefined,
       isCash,
       isIncome,
-      receivedAt ? new Date(receivedAt).toISOString() : undefined
+      receivedAt ? new Date(receivedAt).toISOString() : undefined,
+      excludeFromAutoLearn
     );
     onClose();
   };
@@ -429,6 +432,48 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             ariaLabel="Income"
             testId="toggle-add-income"
           />
+        </div>
+
+        {/* Default / Exception tag mode toggle */}
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 0 }}
+          data-testid="tag-mode-toggle"
+        >
+          <button
+            type="button"
+            data-testid="tag-mode-default"
+            aria-pressed={!excludeFromAutoLearn}
+            onClick={() => setExcludeFromAutoLearn(false)}
+            style={{
+              background: !excludeFromAutoLearn ? "#1565C0" : "#2A2A2A",
+              color: !excludeFromAutoLearn ? "#FFFFFF" : "#B0B0B0",
+              border: "1px solid " + (!excludeFromAutoLearn ? "#1565C0" : "#555"),
+              borderRadius: "6px 0 0 6px",
+              padding: "6px 14px",
+              cursor: "pointer",
+              fontSize: "0.88em",
+            }}
+          >
+            Default
+          </button>
+          <button
+            type="button"
+            data-testid="tag-mode-exception"
+            aria-pressed={excludeFromAutoLearn}
+            onClick={() => setExcludeFromAutoLearn(true)}
+            style={{
+              background: excludeFromAutoLearn ? "#B71C1C" : "#2A2A2A",
+              color: excludeFromAutoLearn ? "#FFFFFF" : "#B0B0B0",
+              border: "1px solid " + (excludeFromAutoLearn ? "#B71C1C" : "#555"),
+              borderRadius: "0 6px 6px 0",
+              padding: "6px 14px",
+              cursor: "pointer",
+              fontSize: "0.88em",
+              marginLeft: -1,
+            }}
+          >
+            Exception
+          </button>
         </div>
 
         <button type="submit" style={{

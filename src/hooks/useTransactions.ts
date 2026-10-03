@@ -77,7 +77,8 @@ export interface UseTransactionsResult {
     currency?: string,
     isCash?: boolean,
     isIncome?: boolean,
-    receivedAt?: string
+    receivedAt?: string,
+    excludeFromAutoLearn?: boolean
   ) => Promise<void>;
   /**
    * Serialize all transactions (including soft-deleted) and share them.
@@ -363,7 +364,8 @@ export function useTransactions(
       currency?: string,
       isCash?: boolean,
       isIncome?: boolean,
-      receivedAt?: string
+      receivedAt?: string,
+      excludeFromAutoLearn?: boolean
     ): Promise<void> => {
       const now = receivedAt ?? new Date().toISOString();
 
@@ -376,6 +378,7 @@ export function useTransactions(
           currency: currency ?? null,
           isCash: isCash ?? false,
           isIncome: isIncome ?? false,
+          excludeFromAutoLearn: excludeFromAutoLearn ?? false,
           receivedAt: now,
         }),
       });

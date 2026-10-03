@@ -1079,3 +1079,89 @@ describe("TransactionsPage — add transaction income toggle", () => {
     expect(incomeToggle.getAttribute("aria-checked")).toBe("false");
   });
 });
+
+// ---------------------------------------------------------------------------
+// FR8: Default / Exception toggle on AddTransactionModal
+// ---------------------------------------------------------------------------
+
+describe("FR8 – Default/Exception toggle in AddTransactionModal", () => {
+  it("renders tag-mode-toggle, tag-mode-default, tag-mode-exception in the modal", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    expect(screen.getByTestId("tag-mode-toggle")).toBeTruthy();
+    expect(screen.getByTestId("tag-mode-default")).toBeTruthy();
+    expect(screen.getByTestId("tag-mode-exception")).toBeTruthy();
+  });
+
+  it("defaults to Default mode (tag-mode-default aria-pressed=true)", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    const defaultBtn = screen.getByTestId("tag-mode-default") as HTMLButtonElement;
+    expect(defaultBtn.getAttribute("aria-pressed")).toBe("true");
+    const exceptionBtn = screen.getByTestId("tag-mode-exception") as HTMLButtonElement;
+    expect(exceptionBtn.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("can flip to Exception mode", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-mode-exception"));
+    });
+
+    const exceptionBtn = screen.getByTestId("tag-mode-exception") as HTMLButtonElement;
+    expect(exceptionBtn.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("persists excludeFromAutoLearn=true when Exception is selected on add", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    // Fill in required title
+    fireEvent.change(screen.getByRole("dialog").querySelector('input[placeholder="Title"]')!, {
+      target: { value: "Exception Tx" },
+    });
+
+    // Select Exception mode
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-mode-exception"));
+    });
+
+    // Submit the form
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+    });
+
+    // Verify a transaction was added with excludeFromAutoLearn=true
+    await waitFor(() => {
+      const txs = screen.queryAllByTestId(/^tx-card-/);
+      // The modal should have closed; find the transaction in DB
+      const stmtResult = db.exec(
+        "SELECT ExcludeFromAutoLearn FROM Transactions WHERE NotificationTitle = 'Exception Tx' LIMIT 1"
+      );
+      expect(stmtResult.length).toBeGreaterThan(0);
+      const val = stmtResult[0]!.values[0]![0];
+      expect(val).toBe(1);
+      void txs;
+    });
+  });
+});
