@@ -227,7 +227,7 @@ export function useEditTransaction(
       receivedAt: receivedAt || tx.receivedAt,
     });
     onDatabaseChanged(db);
-  }, [db, title, description, isCash, isIncome, amount, currency, receivedAt, onDatabaseChanged]);
+  }, [db, title, description, isCash, isIncome, excludeFromAutoLearn, amount, currency, receivedAt, onDatabaseChanged]);
 
   // -------------------------------------------------------------------------
   // addTag
