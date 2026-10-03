@@ -681,9 +681,12 @@ describe("receivedAt field", () => {
     // Confirm the updated value is persisted in the database.
     const saved = getTransactionById(db, id);
     expect(saved).not.toBeNull();
-    // Verify both the date and time are correctly persisted.
-    expect(saved!.receivedAt).toContain("2024-06-20");
-    expect(saved!.receivedAt).toContain("08:45");
+    // The datetime-local field is a wall-clock value with no timezone; the
+    // component stores it as UTC via `new Date(local).toISOString()`. Assert
+    // against that exact conversion so the test is deterministic in any
+    // timezone (a literal "08:45" only holds when the runner's TZ is UTC).
+    const expectedIso = new Date("2024-06-20T08:45").toISOString();
+    expect(saved!.receivedAt).toBe(expectedIso);
   });
 });
 
