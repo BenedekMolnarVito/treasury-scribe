@@ -402,6 +402,57 @@ export function existsDuplicate(
 }
 
 /**
+ * Checks whether an imported transaction with the same exported data already
+ * exists. Unlike notification deduplication, import matching must not use a
+ * time window because distinct historical transactions may be close together.
+ */
+export function existsImportedDuplicate(
+  db: Database,
+  transaction: Pick<
+    Transaction,
+    | "receivedAt"
+    | "notificationTitle"
+    | "notificationBody"
+    | "packageName"
+    | "amount"
+    | "currency"
+    | "isCash"
+    | "isDeleted"
+    | "isIncome"
+    | "excludeFromAutoLearn"
+  >
+): boolean {
+  const rows = queryRows<{ cnt: number }>(
+    db,
+    `SELECT COUNT(*) AS cnt
+     FROM Transactions
+     WHERE ReceivedAt = ?
+       AND NotificationTitle IS ?
+       AND NotificationBody IS ?
+       AND PackageName IS ?
+       AND Amount IS ?
+       AND Currency IS ?
+       AND IsCash = ?
+       AND IsDeleted = ?
+       AND IsIncome = ?
+       AND ExcludeFromAutoLearn = ?`,
+    [
+      transaction.receivedAt,
+      transaction.notificationTitle,
+      transaction.notificationBody,
+      transaction.packageName,
+      transaction.amount,
+      transaction.currency,
+      transaction.isCash ? 1 : 0,
+      transaction.isDeleted ? 1 : 0,
+      transaction.isIncome ? 1 : 0,
+      transaction.excludeFromAutoLearn ? 1 : 0,
+    ]
+  );
+  return (rows[0]?.cnt ?? 0) > 0;
+}
+
+/**
  * Finds a soft-deleted transaction that matches the given title and body.
  * Returns the first match or `null` if none exists.
  *

@@ -5,12 +5,12 @@
  * Wraps TransactionRepository and TagRepository behind a clean stateful API.
  *
  * The optional `share` parameter allows callers (and tests) to inject a
- * custom share handler.  In production the default falls back to the
- * Capacitor Share plugin loaded via a dynamic import so that no hard
- * dependency on `@capacitor/share` is needed at module load time.
+ * custom share handler. Native exports are written to a temporary file before
+ * sharing so large transaction histories are not retained in activity state.
  */
 
 import { useState, useCallback } from "react";
+import { Capacitor } from "@capacitor/core";
 import type { Database } from "sql.js";
 import type { Transaction } from "../models/Transaction";
 import type { Tag } from "../models/Tag";
@@ -222,6 +222,7 @@ interface ExportRow {
   Amount: number | null;
   Currency: string | null;
   IsCash: 0 | 1;
+  IsIncome: 0 | 1;
   Tags: string;
   IsDeleted: 0 | 1;
   /** FR8: persists the auto-learn exclusion flag (column 11, index 10 in CSV). */
@@ -245,6 +246,7 @@ function transactionsToJSON(transactions: Transaction[]): string {
     Amount: tx.amount,
     Currency: tx.currency,
     IsCash: tx.isCash ? 1 : 0,
+    IsIncome: tx.isIncome ? 1 : 0,
     Tags: tx.transactionTags
       .map((tt) => getTagDisplayName(tt).replace(/;/g, "\\;"))
       .join(";"),
@@ -264,8 +266,12 @@ function transactionsToJSON(transactions: Transaction[]): string {
  * where Capacitor is not available (e.g., unit-test Node process).
  */
 async function downloadExportFile(title: string, text: string): Promise<void> {
-  if (typeof document === "undefined" || typeof URL === "undefined") {
-    return;
+  if (
+    typeof document === "undefined" ||
+    typeof URL === "undefined" ||
+    typeof URL.createObjectURL !== "function"
+  ) {
+    throw new Error("File downloads are unavailable in this environment.");
   }
 
   const blob = new Blob([text], {
@@ -284,18 +290,28 @@ async function downloadExportFile(title: string, text: string): Promise<void> {
 }
 
 const capacitorShare: ShareFn = async (title: string, text: string) => {
-  try {
-    const { Share } = await import("@capacitor/share");
-    await (
-      Share as unknown as { share?: (opts: Record<string, string>) => Promise<unknown> }
-    ).share?.({
+  if (Capacitor.isNativePlatform()) {
+    const [{ Directory, Encoding, Filesystem }, { Share }] = await Promise.all([
+      import("@capacitor/filesystem"),
+      import("@capacitor/share"),
+    ]);
+    const { uri } = await Filesystem.writeFile({
+      path: title,
+      data: text,
+      directory: Directory.Cache,
+      encoding: Encoding.UTF8,
+    });
+    await Share.share({
       title,
-      text,
+      files: [uri],
       dialogTitle: title,
     });
     return;
-  } catch {
-    // Fall through to the browser download fallback below.
+  }
+
+  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+    await navigator.share({ title, text });
+    return;
   }
 
   await downloadExportFile(title, text);

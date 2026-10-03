@@ -1178,6 +1178,21 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
   const [showRevolutImportModal, setShowRevolutImportModal] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [revolutImportResult, setRevolutImportResult] = useState<RevolutImportSummary | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+
+    if (toastTimeoutRef.current !== null) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 2000);
+  }, []);
 
   // Tag filter state
   const [availableTags, setAvailableTags] = useState<TagWithCount[]>([]);
@@ -1249,9 +1264,13 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
   const handleExportSelection = useCallback(
     (format: "json" | "csv"): void => {
       setShowExportModal(false);
-      void exportTransactions(format);
+      void exportTransactions(format).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error("Failed to export transactions", error);
+        showToast(`Export failed: ${message}`);
+      });
     },
-    [exportTransactions]
+    [exportTransactions, showToast]
   );
 
   const handleImported = useCallback(
@@ -1307,22 +1326,6 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
   const PULL_THRESHOLD = 80;
 
   const [showTagFilter, setShowTagFilter] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
-
-    if (toastTimeoutRef.current !== null) {
-      clearTimeout(toastTimeoutRef.current);
-    }
-
-    toastTimeoutRef.current = setTimeout(() => {
-      setToast(null);
-      toastTimeoutRef.current = null;
-    }, 2000);
-  }, []);
-
   useEffect(() => {
     return () => {
       if (toastTimeoutRef.current !== null) {

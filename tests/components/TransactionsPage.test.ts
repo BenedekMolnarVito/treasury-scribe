@@ -21,6 +21,9 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { Share } from "@capacitor/share";
+import { Filesystem } from "@capacitor/filesystem";
+import { Capacitor } from "@capacitor/core";
 import {
   describe,
   it,
@@ -66,6 +69,7 @@ beforeEach(async () => {
 afterEach(() => {
   cleanup();
   db.close();
+  vi.restoreAllMocks();
 });
 
 // ---------------------------------------------------------------------------
@@ -191,6 +195,64 @@ describe("TransactionsPage — header buttons", () => {
     expect(screen.getByRole("dialog", { name: /export transactions/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: "JSON" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "CSV" })).toBeTruthy();
+  });
+
+  it.each(["JSON", "CSV"] as const)(
+    "starts a %s export when its format button is selected",
+    async (format) => {
+      vi.spyOn(Capacitor, "isNativePlatform").mockReturnValue(true);
+      const writeFileSpy = vi
+        .spyOn(Filesystem, "writeFile")
+        .mockResolvedValue({ uri: `file:///cache/export.${format.toLowerCase()}` });
+      const shareSpy = vi.spyOn(Share, "share");
+      await act(async () => {
+        renderPage(db);
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /export/i }));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: format }));
+      });
+
+      await waitFor(() => expect(shareSpy).toHaveBeenCalledOnce());
+      const options = shareSpy.mock.calls[0]![0];
+      expect(options.title).toMatch(new RegExp(`\\.${format.toLowerCase()}$`));
+      expect(writeFileSpy).toHaveBeenCalledOnce();
+      const fileOptions = writeFileSpy.mock.calls[0]![0];
+      expect(fileOptions.data).toContain(format === "JSON" ? "[" : "ReceivedAt");
+      expect(options.files).toEqual([`file:///cache/export.${format.toLowerCase()}`]);
+      expect(options.text).toBeUndefined();
+      expect(screen.queryByRole("dialog", { name: /export transactions/i })).toBeNull();
+    }
+  );
+
+  it("shows and logs export failures instead of silently closing the dialog", async () => {
+    vi.spyOn(Capacitor, "isNativePlatform").mockReturnValue(true);
+    vi.spyOn(Filesystem, "writeFile").mockResolvedValue({
+      uri: "file:///cache/transactions.json",
+    });
+    const error = new Error("Share plugin unavailable");
+    const shareSpy = vi.spyOn(Share, "share").mockRejectedValue(error);
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await act(async () => {
+      renderPage(db);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /export/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "JSON" }));
+    });
+
+    const status = await screen.findByRole("status");
+    expect(status.textContent).toContain("Export failed: Share plugin unavailable");
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "Failed to export transactions",
+      error
+    );
   });
 
   it("shows 'Up to date' toast when pull-to-refresh finds no new notifications", async () => {

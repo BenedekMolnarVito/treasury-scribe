@@ -1117,6 +1117,46 @@ describe("FIX I-2 – ExcludeFromAutoLearn in CSV/JSON export", () => {
     expect(parsed).toHaveLength(1);
     expect(parsed[0]!["ExcludeFromAutoLearn"]).toBe(0);
   });
+
+  it("JSON export includes IsIncome as 1 for income transactions", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "Salary", "Monthly payment", 931000, "HUF", false, true
+      );
+    });
+
+    let json = "";
+    await act(async () => {
+      json = await result.current.exportTransactions("json");
+    });
+
+    const parsed = JSON.parse(json) as Array<Record<string, unknown>>;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]!["IsIncome"]).toBe(1);
+  });
+
+  it("JSON export includes IsIncome as 0 for expense transactions", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "Groceries", "Market", 100, "HUF", false, false
+      );
+    });
+
+    let json = "";
+    await act(async () => {
+      json = await result.current.exportTransactions("json");
+    });
+
+    const parsed = JSON.parse(json) as Array<Record<string, unknown>>;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]!["IsIncome"]).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -8,7 +8,11 @@
 
 import type { Database } from "sql.js";
 import { createTransaction } from "../models/Transaction";
-import { addTransaction, existsDuplicate, softDeleteTransaction } from "../data/TransactionRepository";
+import {
+  addTransaction,
+  existsImportedDuplicate,
+  softDeleteTransaction,
+} from "../data/TransactionRepository";
 import { addTag, addTagToTransaction } from "../data/TagRepository";
 
 // ---------------------------------------------------------------------------
@@ -91,6 +95,7 @@ interface ParsedRow {
   amount: number | null;
   currency: string | null;
   isCash: boolean;
+  isIncome: boolean;
   tags: string[];
   isDeleted: boolean;
   /** FR8: false when absent (old 10-column exports) or when field value is "0". */
@@ -121,6 +126,7 @@ function parseCSVRow(fields: string[]): ParsedRow {
     amount,
     currency: fields[6] || null,
     isCash: rawIsCash === "1",
+    isIncome: false,
     tags: parseTagString(fields[8] ?? ""),
     isDeleted: rawIsDeleted === "1",
     excludeFromAutoLearn: rawExcludeFromAutoLearn === "1",
@@ -158,6 +164,7 @@ function parseJSONRow(row: Record<string, unknown>): ParsedRow {
     amount,
     currency,
     isCash: row["IsCash"] === 1 || row["IsCash"] === true,
+    isIncome: row["IsIncome"] === 1 || row["IsIncome"] === true,
     tags: parseTagString(
       typeof row["Tags"] === "string" ? row["Tags"] : ""
     ),
@@ -206,18 +213,6 @@ function parseTagString(raw: string): string[] {
 // ---------------------------------------------------------------------------
 
 function importParsedRow(db: Database, row: ParsedRow): "imported" | "skipped" {
-  if (
-    existsDuplicate(
-      db,
-      row.notificationTitle,
-      row.notificationBody,
-      row.packageName,
-      row.receivedAt
-    )
-  ) {
-    return "skipped";
-  }
-
   const txData = createTransaction({
     receivedAt: row.receivedAt,
     notificationTitle: row.notificationTitle,
@@ -227,9 +222,13 @@ function importParsedRow(db: Database, row: ParsedRow): "imported" | "skipped" {
     currency: row.currency,
     isCash: row.isCash,
     isDeleted: row.isDeleted,
-    isIncome: false,
+    isIncome: row.isIncome,
     excludeFromAutoLearn: row.excludeFromAutoLearn,
   });
+
+  if (existsImportedDuplicate(db, txData)) {
+    return "skipped";
+  }
 
   const savedTx = addTransaction(db, txData);
 

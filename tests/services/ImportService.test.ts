@@ -295,6 +295,70 @@ describe("importFromJSON", () => {
     expect(getAllTransactions(db)).toHaveLength(1);
   });
 
+  it("imports nearby distinct transactions and only skips exact re-imports", () => {
+    const nearbyRows = JSON.stringify([
+      {
+        ReceivedAt: "2026-01-15T10:00:00.000Z",
+        NotificationTitle: "Madis",
+        NotificationBody: "",
+        PackageName: "Manual",
+        Amount: 931000,
+        Currency: "HUF",
+        IsCash: 0,
+        Tags: "",
+        IsDeleted: 0,
+      },
+      {
+        ReceivedAt: "2026-01-15T10:00:03.000Z",
+        NotificationTitle: "Madis",
+        NotificationBody: "",
+        PackageName: "Manual",
+        Amount: 931000,
+        Currency: "HUF",
+        IsCash: 0,
+        Tags: "",
+        IsDeleted: 0,
+      },
+    ]);
+
+    const firstImport = importFromJSON(db, nearbyRows);
+    expect(firstImport.imported).toBe(2);
+    expect(firstImport.skipped).toBe(0);
+    expect(getAllTransactions(db)).toHaveLength(2);
+
+    const secondImport = importFromJSON(db, nearbyRows);
+    expect(secondImport.imported).toBe(0);
+    expect(secondImport.skipped).toBe(2);
+    expect(getAllTransactions(db)).toHaveLength(2);
+  });
+
+  it("imports IsIncome=1 JSON rows and defaults missing IsIncome to false", () => {
+    const json = JSON.stringify([
+      {
+        ReceivedAt: "2026-01-15T10:00:00.000Z",
+        NotificationTitle: "Salary",
+        PackageName: "Manual",
+        Amount: 931000,
+        Currency: "HUF",
+        IsIncome: 1,
+      },
+      {
+        ReceivedAt: "2026-01-16T10:00:00.000Z",
+        NotificationTitle: "Old export",
+        PackageName: "Manual",
+        Amount: 100,
+        Currency: "HUF",
+      },
+    ]);
+
+    const result = importFromJSON(db, json);
+    expect(result.imported).toBe(2);
+
+    const transactions = getAllTransactions(db);
+    expect(transactions.find((tx) => tx.notificationTitle === "Salary")!.isIncome).toBe(true);
+    expect(transactions.find((tx) => tx.notificationTitle === "Old export")!.isIncome).toBe(false);
+  });
+
   it("handles empty array", () => {
     const result = importFromJSON(db, "[]");
 
