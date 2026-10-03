@@ -1079,3 +1079,193 @@ describe("TransactionsPage — add transaction income toggle", () => {
     expect(incomeToggle.getAttribute("aria-checked")).toBe("false");
   });
 });
+
+// ---------------------------------------------------------------------------
+// FR8: Default / Exception toggle on AddTransactionModal
+// ---------------------------------------------------------------------------
+
+describe("FR8 – Default/Exception toggle in AddTransactionModal", () => {
+  it("renders tag-mode-toggle, tag-mode-default, tag-mode-exception in the modal", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    expect(screen.getByTestId("tag-mode-toggle")).toBeTruthy();
+    expect(screen.getByTestId("tag-mode-default")).toBeTruthy();
+    expect(screen.getByTestId("tag-mode-exception")).toBeTruthy();
+  });
+
+  it("defaults to Default mode (tag-mode-default aria-pressed=true)", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    const defaultBtn = screen.getByTestId("tag-mode-default") as HTMLButtonElement;
+    expect(defaultBtn.getAttribute("aria-pressed")).toBe("true");
+    const exceptionBtn = screen.getByTestId("tag-mode-exception") as HTMLButtonElement;
+    expect(exceptionBtn.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("can flip to Exception mode", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-mode-exception"));
+    });
+
+    const exceptionBtn = screen.getByTestId("tag-mode-exception") as HTMLButtonElement;
+    expect(exceptionBtn.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("persists excludeFromAutoLearn=true when Exception is selected on add", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    // Fill in required title
+    fireEvent.change(screen.getByRole("dialog").querySelector('input[placeholder="Title"]')!, {
+      target: { value: "Exception Tx" },
+    });
+
+    // Select Exception mode
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-mode-exception"));
+    });
+
+    // Submit the form
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+    });
+
+    // Verify a transaction was added with excludeFromAutoLearn=true
+    await waitFor(() => {
+      const txs = screen.queryAllByTestId(/^tx-card-/);
+      // The modal should have closed; find the transaction in DB
+      const stmtResult = db.exec(
+        "SELECT ExcludeFromAutoLearn FROM Transactions WHERE NotificationTitle = 'Exception Tx' LIMIT 1"
+      );
+      expect(stmtResult.length).toBeGreaterThan(0);
+      const val = stmtResult[0]!.values[0]![0];
+      expect(val).toBe(1);
+      void txs;
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FR4: Tag input in AddTransactionModal
+// ---------------------------------------------------------------------------
+
+describe("FR4 – tag input in AddTransactionModal", () => {
+  it("renders add-txn-tag-input in the Add Transaction modal", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    expect(screen.getByTestId("add-txn-tag-input")).toBeTruthy();
+  });
+
+  it("user can type a tag and it renders as a pill/chip", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    const tagInput = screen.getByTestId("add-txn-tag-input");
+    fireEvent.change(tagInput, { target: { value: "Groceries" } });
+    fireEvent.keyDown(tagInput, { key: "Enter" });
+
+    // After pressing Enter, the chip should be visible
+    await waitFor(() => {
+      expect(screen.getByText("Groceries")).toBeTruthy();
+    });
+  });
+
+  it("submit calls onAdd with tagNames containing user-typed tags", async () => {
+    const onAddSpy = vi.fn(async () => {});
+
+    render(
+      React.createElement(
+        MemoryRouter,
+        null,
+        React.createElement(
+          // We need to render the modal directly; use TransactionsPage with mocked addManualTransaction
+          // via a custom wrapper that overrides onAdd
+          // Instead, we'll spy at the TransactionsPage level by intercepting via the hook
+          TransactionsPage,
+          { db }
+        )
+      )
+    );
+
+    // Open modal
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    // Fill required title
+    fireEvent.change(
+      screen.getByRole("dialog").querySelector('input[placeholder="Title"]')!,
+      { target: { value: "Tag Test Tx" } }
+    );
+
+    // Add a tag via the tag input
+    const tagInput = screen.getByTestId("add-txn-tag-input");
+    fireEvent.change(tagInput, { target: { value: "Dining" } });
+    fireEvent.keyDown(tagInput, { key: "Enter" });
+
+    // Submit the form
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+    });
+
+    // Verify the transaction was stored with the Dining tag
+    await waitFor(() => {
+      const stmtResult = db.exec(
+        `SELECT t.Name FROM Tags t
+         JOIN TransactionTags tt ON tt.TagId = t.Id
+         JOIN Transactions tx ON tx.Id = tt.TransactionId
+         WHERE tx.NotificationTitle = 'Tag Test Tx'`
+      );
+      const names = stmtResult[0]?.values.map((row) => row[0]) ?? [];
+      expect(names).toContain("Dining");
+      expect(names).toContain("AddedManually");
+    });
+
+    void onAddSpy;
+  });
+
+  it("FR8 tag-mode-toggle still present alongside tag input", async () => {
+    await act(async () => {
+      renderPage(db);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /add transaction/i }));
+    });
+
+    expect(screen.getByTestId("tag-mode-toggle")).toBeTruthy();
+    expect(screen.getByTestId("add-txn-tag-input")).toBeTruthy();
+  });
+});

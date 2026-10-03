@@ -34,6 +34,8 @@ export interface Transaction {
   currency: string | null;
   /** True when the transaction is income (credit), false for expense (debit). */
   isIncome: boolean;
+  /** When true this transaction is excluded from merchant auto-learning. */
+  excludeFromAutoLearn: boolean;
 
   // -------------------------------------------------------------------------
   // Computed properties
@@ -114,6 +116,7 @@ export function createTransaction(
     amount: fields.amount ?? null,
     currency: fields.currency ?? null,
     isIncome: fields.isIncome ?? false,
+    excludeFromAutoLearn: fields.excludeFromAutoLearn ?? false,
     transactionTags: fields.transactionTags ?? [],
 
     get parsedAmount(): number | null {

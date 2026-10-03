@@ -37,6 +37,7 @@ interface TransactionRow {
   Amount: number | null;
   Currency: string | null;
   IsIncome: number;
+  ExcludeFromAutoLearn: number;
   // From TransactionTags JOIN
   TtId: number | null;
   TagId: number | null;
@@ -71,6 +72,7 @@ function groupTransactionRows(rows: TransactionRow[]): Transaction[] {
         amount: row.Amount,
         currency: row.Currency,
         isIncome: row.IsIncome === 1,
+        excludeFromAutoLearn: row.ExcludeFromAutoLearn === 1,
         transactionTags: [],
         // Placeholders – overwritten by withComputedProps
         parsedAmount: null,
@@ -137,6 +139,7 @@ const SELECT_WITH_TAGS = `
     t.Amount,
     t.Currency,
     t.IsIncome,
+    t.ExcludeFromAutoLearn,
     tt.Id       AS TtId,
     tt.TagId    AS TagId,
     tt.CreatedAt AS TtCreatedAt,
@@ -205,8 +208,8 @@ export function addTransaction(
   db.run(
     `INSERT INTO Transactions
       (RawContent, JsonContent, ReceivedAt, NotificationTitle, NotificationBody,
-       PackageName, IsDeleted, IsCash, Amount, Currency, IsIncome)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       PackageName, IsDeleted, IsCash, Amount, Currency, IsIncome, ExcludeFromAutoLearn)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       transaction.rawContent,
       transaction.jsonContent,
@@ -219,6 +222,7 @@ export function addTransaction(
       transaction.amount,
       transaction.currency,
       transaction.isIncome ? 1 : 0,
+      transaction.excludeFromAutoLearn ? 1 : 0,
     ] as Parameters<typeof db.run>[1]
   );
 
@@ -255,6 +259,7 @@ export function updateTransaction(
     | "amount"
     | "currency"
     | "isIncome"
+    | "excludeFromAutoLearn"
   >
 ): void {
   db.run(
@@ -269,7 +274,8 @@ export function updateTransaction(
       IsCash            = ?,
       Amount            = ?,
       Currency          = ?,
-      IsIncome          = ?
+      IsIncome          = ?,
+      ExcludeFromAutoLearn = ?
      WHERE Id = ?`,
     [
       transaction.rawContent,
@@ -283,6 +289,7 @@ export function updateTransaction(
       transaction.amount,
       transaction.currency,
       transaction.isIncome ? 1 : 0,
+      transaction.excludeFromAutoLearn ? 1 : 0,
       transaction.id,
     ] as Parameters<typeof db.run>[1]
   );
@@ -316,6 +323,24 @@ export function softDeleteTransaction(db: Database, id: number): void {
  */
 export function softDeleteAllTransactions(db: Database): void {
   db.run("UPDATE Transactions SET IsDeleted = 1");
+}
+
+/**
+ * Flips the `ExcludeFromAutoLearn` flag on a single transaction.
+ *
+ * @param db - sql.js Database instance.
+ * @param id - Primary key of the transaction to update.
+ * @param isException - `true` to exclude from auto-learning, `false` to include.
+ */
+export function setTransactionException(
+  db: Database,
+  id: number,
+  isException: boolean
+): void {
+  db.run(
+    "UPDATE Transactions SET ExcludeFromAutoLearn = ? WHERE Id = ?",
+    [isException ? 1 : 0, id] as Parameters<typeof db.run>[1]
+  );
 }
 
 /**
@@ -423,6 +448,7 @@ export function findLastTransactionByTitle(
     db,
     `SELECT Id FROM Transactions
      WHERE IsDeleted = 0
+       AND ExcludeFromAutoLearn = 0
        AND NotificationTitle IS ?
      ORDER BY ReceivedAt DESC
      LIMIT 1`,
@@ -432,6 +458,95 @@ export function findLastTransactionByTitle(
   const matchId = idRows[0]?.Id;
   if (matchId === undefined) return null;
   return getTransactionById(db, matchId);
+}
+
+// ---------------------------------------------------------------------------
+// stripNumbers (local helper — shared by findLastTransactionByTitleAndBody)
+// ---------------------------------------------------------------------------
+
+/**
+ * Strips sequences of digits, dots, commas and spaces-between-digit-groups
+ * from `body`, returning the collapsed result.
+ *
+ * This is intentionally conservative: only `[\d.,]+` is stripped so that
+ * alphabetic content (recipient names, currency codes) is preserved.
+ *
+ * **NULL contract:** a `null` input returns `null`; callers must handle this
+ * explicitly so that null bodies are matched against null stored bodies only
+ * (see `findLastTransactionByTitleAndBody`).
+ */
+function stripNumbers(body: string | null): string | null {
+  if (body === null) return null;
+  return body.replace(/[\d.,]+/g, "").trim();
+}
+
+/**
+ * Returns the most recent non-deleted transaction whose `NotificationTitle`
+ * matches `title` AND whose `NotificationBody`, when stripped of digits,
+ * commas and dots, matches the stripped form of `body`.
+ *
+ * **Why JS-side filtering, not SQL?**
+ * SQL cannot apply the same stripping transformation to stored column values
+ * without adding a computed/virtual column. To keep symmetry between the
+ * comparison of the incoming body and the stored body, we:
+ *   1. Fetch all non-deleted candidates that share `NotificationTitle` ordered
+ *      by `ReceivedAt DESC`.
+ *   2. Strip both sides in JS using the same `stripNumbers` helper.
+ *   3. Return the first (most recent) candidate whose stripped body equals
+ *      the stripped incoming body.
+ *
+ * This guarantees that `"Átutalás elküldve 15 000 Ft Kovács Jánosnak"` and
+ * `"Átutalás elküldve 20 000 Ft Kovács Jánosnak"` are treated as the SAME
+ * classification source (same stripped body: `"Átutalás elküldve  Ft Kovács
+ * Jánosnak"`), while `"Átutalás elküldve 15 000 Ft Kovács Jánosnak"` and
+ * `"Átutalás elküldve 15 000 Ft Nagy Péternek"` remain DISTINCT.
+ *
+ * **NULL contract:** a `null` incoming `body` matches only candidates with a
+ * `null` stored body. A candidate with a non-null body never matches a null
+ * incoming body.
+ *
+ * @param db    - sql.js Database instance.
+ * @param title - The notification title to search for.
+ * @param body  - The notification body (raw, as received). Stripped before
+ *                comparison. Pass `null` to match null-bodied transactions.
+ * @returns The most recent matching transaction with tags, or `null`.
+ */
+export function findLastTransactionByTitleAndBody(
+  db: Database,
+  title: string | null,
+  body: string | null
+): Transaction | null {
+  // Fetch all title-matched non-deleted candidates ordered by recency.
+  const candidateRows = queryRows<{ Id: number; NotificationBody: string | null }>(
+    db,
+    `SELECT Id, NotificationBody FROM Transactions
+     WHERE IsDeleted = 0
+       AND ExcludeFromAutoLearn = 0
+       AND NotificationTitle IS ?
+     ORDER BY ReceivedAt DESC`,
+    [title]
+  );
+
+  const targetStripped = stripNumbers(body);
+
+  for (const row of candidateRows) {
+    const candidateStripped = stripNumbers(row.NotificationBody);
+
+    // Both sides are null → match.
+    // Both sides are non-null and equal after stripping → match.
+    if (targetStripped === null && candidateStripped === null) {
+      return getTransactionById(db, row.Id) ?? null;
+    }
+    if (
+      targetStripped !== null &&
+      candidateStripped !== null &&
+      candidateStripped === targetStripped
+    ) {
+      return getTransactionById(db, row.Id) ?? null;
+    }
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------

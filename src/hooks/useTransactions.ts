@@ -77,10 +77,12 @@ export interface UseTransactionsResult {
     currency?: string,
     isCash?: boolean,
     isIncome?: boolean,
-    receivedAt?: string
+    receivedAt?: string,
+    excludeFromAutoLearn?: boolean,
+    tagNames?: string[]
   ) => Promise<void>;
   /**
-   * Serialize non-deleted transactions and share them.
+   * Serialize all transactions (including soft-deleted) and share them.
    *
    * @param format - "json" produces indented JSON; "csv" produces a
    *   comma-delimited file with tags semicolon-separated inside each cell.
@@ -149,6 +151,9 @@ const CSV_HEADERS = [
   "IsCash",
   "Tags",
   "IsDeleted",
+  // Column 11 (index 10): added in FR8 to persist the auto-learn exclusion flag.
+  // Old export files (10 columns) remain importable — the importer treats this as optional.
+  "ExcludeFromAutoLearn",
 ] as const;
 
 /**
@@ -197,6 +202,7 @@ function transactionsToCSV(transactions: Transaction[]): string {
       csvEscape(tx.isCash ? 1 : 0),
       csvEscape(tagNames),
       csvEscape(tx.isDeleted ? 1 : 0),
+      csvEscape(tx.excludeFromAutoLearn ? 1 : 0),
     ].join(",");
   });
 
@@ -218,6 +224,8 @@ interface ExportRow {
   IsCash: 0 | 1;
   Tags: string;
   IsDeleted: 0 | 1;
+  /** FR8: persists the auto-learn exclusion flag (column 11, index 10 in CSV). */
+  ExcludeFromAutoLearn: 0 | 1;
 }
 
 /**
@@ -241,6 +249,7 @@ function transactionsToJSON(transactions: Transaction[]): string {
       .map((tt) => getTagDisplayName(tt).replace(/;/g, "\\;"))
       .join(";"),
     IsDeleted: tx.isDeleted ? 1 : 0,
+    ExcludeFromAutoLearn: tx.excludeFromAutoLearn ? 1 : 0,
   }));
   return JSON.stringify(rows, null, 2);
 }
@@ -363,7 +372,9 @@ export function useTransactions(
       currency?: string,
       isCash?: boolean,
       isIncome?: boolean,
-      receivedAt?: string
+      receivedAt?: string,
+      excludeFromAutoLearn?: boolean,
+      tagNames?: string[]
     ): Promise<void> => {
       const now = receivedAt ?? new Date().toISOString();
 
@@ -376,13 +387,24 @@ export function useTransactions(
           currency: currency ?? null,
           isCash: isCash ?? false,
           isIncome: isIncome ?? false,
+          excludeFromAutoLearn: excludeFromAutoLearn ?? false,
           receivedAt: now,
         }),
       });
 
       // Auto-tag with "AddedManually".
-      const tag = addTag(db, "AddedManually");
-      repoAddTagToTx(db, newTx.id, tag.id);
+      const autoTag = addTag(db, "AddedManually");
+      repoAddTagToTx(db, newTx.id, autoTag.id);
+
+      // Add user-supplied tags, deduped against "AddedManually".
+      if (tagNames && tagNames.length > 0) {
+        for (const name of tagNames) {
+          if (name.trim() === "" || name.trim() === "AddedManually") continue;
+          const userTag = addTag(db, name.trim());
+          repoAddTagToTx(db, newTx.id, userTag.id);
+        }
+      }
+
       onDatabaseChanged(db);
 
       await loadTransactions();
@@ -396,7 +418,7 @@ export function useTransactions(
 
   const exportTransactions = useCallback(
     async (format: "json" | "csv"): Promise<string> => {
-      const rows = getAllTransactions(db); // always non-deleted
+      const rows = getAllTransactionsIncludingDeleted(db); // includes soft-deleted for full round-trip fidelity
 
       const now = new Date();
       const timestamp = [
@@ -496,6 +518,9 @@ export function useTransactions(
         isDeleted: false,
         isCash: false,
         isIncome: false,
+        // New captures are always Default mode (feed auto-learning); the user
+        // can later flip to Exception on the Edit screen (FR8).
+        excludeFromAutoLearn: false,
       });
       if (result !== null) {
         onDatabaseChanged(db);
