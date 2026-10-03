@@ -1,137 +1,129 @@
-# Team Operating Manual
+# AGENTS.md — Treasury Scribe (caveman mode)
 
-## Mission
+> Caveman speech = few token, no glue word. Reader fill grammar. Signal only.
+> Last sync: 2026-10-03, branch feat/2026-10-03-change-reqs-impl.
 
-Autonomously deliver software that fully satisfies the project specification. Every decision, trade-off, and line of code must be traceable back to the specification. When the specification is silent on a matter, choose the option with the highest long-term maintainability and the lowest cognitive overhead.
+## WHAT REPO IS
 
----
+Treasury Scribe = offline-first Android budget app. React 18 + TS 5 + Vite 7, Android via Capacitor 8. DB = sql.js (SQLite in WASM), on-device, zero network. Capture Revolut push notif → parse amount/currency/vendor → tag/edit/export. Reimpl of vito-budget-tracker (old .NET MAUI).
 
-## Core Principles
+All business logic in TS → testable no Android. Kotlin plugin thin, only forward notif.
 
-### 1. Specification is Law
-- Read `SPECIFICATION.md` (or the active spec file) before acting on any task.
-- If a requirement is ambiguous, **stop and resolve ambiguity against the spec** before writing code. Do not invent requirements.
-- If a required behavior is not in the spec, treat it as **out of scope** and flag it rather than silently implementing it.
-
-### 2. Clean, Readable Codebase
-- Code is read far more than it is written. Optimise for the next reader.
-- Prefer **explicit over clever**: clear variable names, short functions, obvious control flow.
-- Each function/class has exactly **one reason to change** (Single Responsibility Principle).
-- No magic numbers, no dead code, no commented-out blocks left behind.
-- Consistent formatting enforced by the project linter; never submit code that fails lint.
-
-### 3. Test Coverage ≥ 95%
-- Every PR must include tests. New behaviour without tests is **never acceptable**.
-- Target **≥ 95% line and branch coverage** measured by the project test runner.
-- Prioritise **business-flow scenarios** over isolated unit tests: test the journey, not just the steps.
-- Tests must be deterministic and hermetic — no reliance on real time, network, or filesystem state without explicit fixtures.
-- Use `pytest -x -q` as the baseline gate; all tests must pass before committing.
-
-### 4. Scenario-Driven Verification
-- For every feature, identify the primary user/system scenarios **from the spec** and write end-to-end or integration tests that exercise those exact flows.
-- A passing test suite with poor scenario coverage is a false green. The QA Judge is the final arbiter.
-
-### 5. Consult Mission on Uncertainty
-- Before making any architectural decision not covered by the spec, ask: *"Does this serve the mission?"*
-- The mission takes priority over personal style, performance micro-optimisations, or novelty.
-- When two valid options exist, choose the one that is **simpler to change later**.
-
----
-
-## Workflow
+## TOOLCHAIN (not pytest!)
 
 ```
-PLANNER   →   WORKER   →   QA JUDGE
-   ↑               ↓           ↓
-RESEARCHER    DEBUGGER    REFACTORER
-                               ↓
-                       SECURITY AUDITOR
+npm run test        # vitest run — ALL tests, baseline gate
+npm run test:watch  # vitest watch, TDD red→green
+npm run build       # vite build
+npm run dev         # vite dev server
+npx tsc --noEmit    # typecheck = de-facto lint (NO separate lint cmd)
+npm run cap:sync    # web → android
+npm run android:run # build → cap sync → gradle installDebug
 ```
 
-- **BRAINSTORMER** Looks for fresh ideas and approaches using web search.
-- **PLANNER** breaks the spec into ordered tasks and commits a task list.
-- **RESEARCHER** resolves blockers before WORKER is unblocked.
-- **WORKER** implements exactly one task at a time.
-- **QA JUDGE** verifies acceptance criteria for the just-completed task.
-- **DEBUGGER** resolves any test failures reported by QA Judge.
-- **REFACTORER** improves code quality to meet the quality threshold.
-- **SECURITY AUDITOR** runs a vulnerability scan on every Nth iteration.
+Gate = `npm run test` exit 0 + `npm run build` ok + `npx tsc --noEmit` clean. State now: 23 files, 691 tests, all green.
 
-No agent skips ahead or reaches outside its lane. The orchestrator's arbitration rules are the source of truth for agent selection.
+## SPEC SOURCES (no SPECIFICATION.md exist)
 
----
+- change_reqs.md — active fixed-requirement list (FR Dashboard + Transactions) + brainstorm/plan asks.
+- docs/ARCHITECTURE.md — layers, schema, module duty, data-flow diagrams. Synced Oct 2026 to current code.
+- README.md — feature overview + install/test/build + project structure. Synced Oct 2026.
+- docs/BUSINESS_LOGIC.md — user flows + smart behaviors.
+- .github/copilot-instructions.md — DETAILED repo-reality (commands, conventions, service signatures). Read FIRST for implementation detail. Authoritative on code conventions.
+- docs/updates_2026_10_03/ — design plan + impl plans from brainstorm pipeline.
 
-## Git Conventions
+Spec silent → pick most maintainable, lowest cognitive load. Ambiguous → stop, resolve vs spec, no invent. Behavior not in spec = out of scope, flag not build.
 
-- Branch naming: `feat/<goal-slug>` (created automatically by the orchestrator).
-- Commit messages follow **Conventional Commits**: `feat(<agent>): <imperative summary>`.
-- A PR is opened automatically when all acceptance criteria are met.
-- Never force-push. Never amend published commits.
+## ARCHITECTURE (5 layer, strict duty)
 
----
+```
+Capacitor Plugin (Kotlin)    → listen Revolut notif, forward TS via event
+  ↓
+NotificationServiceCore (TS) → validate pkg, regex parse amount/currency, build Transaction
+  ↓  (NotificationService.ts = thin re-export facade, logic in Core)
+IngestionService (TS)        → 4 smart behavior FIXED order: dedup → persist → auto-soft-delete → auto-tag
+  ↓
+Repositories (TS)            → all SQLite, prepared stmt, eager JOIN, explicit cols, WHERE IsDeleted=0 default
+  ↓
+React hooks + components     → useTransactions / useEditTransaction / useDashboard own screen state; components = stateless render
+```
 
-## Definition of Done
+Extra services: ImportService (app CSV/JSON bulk), RevolutImportService (Revolut own CSV, skip Átváltás FX, ±1day dedup), SplitTransactionService (split 1 txn → parts, parent soft-delete). DashboardRepository = analytics (summary/byTag/byMonth/byVendor/untagged), base filter IsDeleted=0 AND IsIncome=0 AND Amount NOT NULL.
 
-A task is **DONE** when all of the following are true:
+Routes: `/`→Dashboard (home), `/transactions`→list, `/edit/:id`→edit, `/dashboard`→alias.
 
-1. All acceptance criteria listed in the task are satisfied.
-2. All existing tests pass (`pytest -x -q` exits 0).
-3. New tests cover the changed behaviour (coverage ≥ 95% maintained).
-4. QA Judge verdict is `VERDICT: PASS`.
-5. The SECURITY_AUDITOR has found no open `ISSUE:` items for the changed code.
-6. Code quality score meets or exceeds `quality_threshold` from `OrchestratorConfig`.
-7. Changes are committed with a conventional commit message.
-8. Scenarios are created autonomously by the Planner agent based on Definition of Done and acceptance criteria.
-9. Scenarios are added to the test suite and pass successfully verified by QA Judge agent.
+## KEY CONVENTION (full detail → copilot-instructions.md)
 
----
+- Repo fn: `db: Database` FIRST param, inject in-memory DB in test. No singleton DB import.
+- Query: prepared stmt `?` binds, no interpolation; JOIN eager, no N+1; explicit cols no `SELECT *`.
+- Models src/models/ = interface + factory, factory set all default explicit. DB object → `withComputedProps()` re-attach parsedAmount/parsedCurrency getters.
+- Test: fresh in-memory DB per test (beforeEach initDatabase, afterEach db.close). Import vitest fns explicit, NO globals. `make*` fixture factory, override only what test care. Capacitor mocked no-op via src/__mocks__.
+- Naming: DB table/col PascalCase; TS var/fn camelCase; interface/type PascalCase; const UPPER_SNAKE.
+- Styling inline React CSSProperties, dark theme #121212, no CSS framework.
+- Currency parse 6 format priority, default HUF. Symbol map $→USD €→EUR £→GBP ¥→JPY ₹→INR ₽→RUB ₣→CHF ₩→KRW.
 
-## Agent Roster
+## GIT
 
-| Agent | Primary Concern | Key Output |
+- Branch feat/<goal-slug>, auto by orchestrator.
+- Commit = Conventional: feat(<scope>): <imperative>.
+- Never force-push. Never amend published. Never --no-verify.
+- PR auto when all acceptance met.
+
+## DEFINITION OF DONE
+
+1. All acceptance criteria met.
+2. `npm run test` exit 0 (all 691+ pass).
+3. New behavior = new test, coverage ≥95% line+branch hold.
+4. QA Judge verdict PASS.
+5. SECURITY_AUDITOR no open ISSUE on changed code.
+6. Quality score ≥ quality_threshold (OrchestratorConfig).
+7. Committed, conventional message.
+8. Scenarios autonomously made by Planner from DoD + acceptance.
+9. Scenarios in suite + pass, QA Judge verify. Behavioral scenario = .maestro/ (Maestro flows + CDP+Jev smoke harness .maestro/smoke/), NOT scenarios.md.
+
+## VERIFY EVIDENCE (not Android-Studio-only)
+
+QA Judge evidence from REAL output: `npm run test` result, `npm run build` result, `npx tsc --noEmit`, OR behavioral smoke harness .maestro/smoke/ (CDP+Jev DOM dumps in out/*.json + report.json). On-device = Capacitor + adb logcat. No lazy evidence, no behavioral inconsistency accept. QA = guardian of DoD, check every flow.
+
+## WORKFLOW (dynamic subagent — applicable today)
+
+NO static roster. NO fixed cast of persistent agents. Work = parent spawn SUBAGENT on demand, each w/ dynamically specified task (goal + context + toolset), auto-discovered routing. Role is just a HAT the parent assigns per task, not a standing seat. Pipeline that built this repo = that pattern (see .superpowers/sdd/).
+
+Routing (parent choose per task, auto-discover from task shape):
+- novel idea / UX explore → spawn explorer, web search, interdisciplinary bridge, UX/UI stat.
+- spec decompose → spawn planner, spec → ordered task list, balance tech+UX, DoD verifiable w/ primitive tool.
+- knowledge gap → spawn researcher, credible source / official doc.
+- implement task → spawn worker, 1 task scope, follow spec, self-check logic CAUSE specified behavior, contradiction → escalate to parent/planner.
+- verify acceptance → spawn QA judge, REAL tool output, guardian of DoD.
+- test fail → spawn debugger, root cause not symptom, drill log 1 level, check every var + I/O.
+- quality pass → spawn refactorer, check regression, change only if REALLY needed.
+- vuln scan (every Nth iter) → spawn security auditor, assume adversarial, hunt back door; found vuln → spawn researcher for known exploit, add to issue.
+
+Model tier per task: deep = design/root-cause/ambiguous; standard = scoped impl/edit (default); quick = verify/fetch/categorize. Subagent resolve alias from config.
+
+Dispatch rule (proven): big brief inline → stream timeout. Write brief/rubric to file in worktree, dispatch SHORT prompt "read <path>, authoritative". Subagent report/diff → file not inline.
+
+Parallel (proven): group FILE-DISJOINT task clusters, each own git worktree+branch (npm ci per worktree), serial within cluster, parallel across, merge --no-ff = zero conflict.
+
+Routing is parent judgement by task, no agent skip scope. Subagent isolated: knows nothing of parent convo → pass all needed context. External side effect (upload/write) = verify handle self, not trust self-report.
+
+## TASK HATS (dynamic — spawn as needed, not a roster)
+
+| Hat | Concern | Output |
 |---|---|---|
-| BRAINSTORMER | Web seaching for novel ideas | Plannable directions |
-| PLANNER | Specification decomposition | Ordered task list |
-| RESEARCHER | Knowledge gaps | Research findings |
-| WORKER | Implementation | Source code changes |
-| QA_JUDGE | Acceptance verification | `VERDICT: PASS/FAIL` |
-| DEBUGGER | Failure diagnosis and repair | `FIX: SUCCESS/FAILED` |
-| REFACTORER | Code quality | `QUALITY_SCORE: <float>` |
-| SECURITY_AUDITOR | Vulnerability scanning | `ISSUE: <text>` per finding |
+| explorer | novel idea web search | plannable direction |
+| planner | spec decomposition | ordered task list |
+| researcher | knowledge gap | findings |
+| worker | implementation | code change |
+| qa judge | acceptance verify | VERDICT: PASS/FAIL |
+| debugger | failure fix | FIX: SUCCESS/FAILED |
+| refactorer | code quality | QUALITY_SCORE: <float> |
+| security auditor | vuln scan | ISSUE: <text> per find |
 
----
+## ANTI-PATTERN (any task)
 
-## Agent-specific guidance
-- **Brainstormer**: Look for novel ideas and interdisciplinary aspects. Try to synthesize multiple existing methods into a new, optimized one. Prioritize finding bridges between seemingly remote domain. Connect the dots between concepts. Maximize creativity and novelty in your research. User experience questions should direct you to look for UX/UI statistics.
-- **Planner**: Balance technical and UX trade-offs. Remember that a performant software brings user satisfaction, but bugs dissatisfy humans. Ask *brainstormer* agent if not sure about what makes humans satisfied.
-- **Debugger**: Look for causal relationships in error messages and code behavior. After a failed fix attempt, drill down in error logging one level at a time. Self-reflect: Did I check every variable and function input/output that is causing the issue? Ask *researcher* agent if you need credible documentation on the error.
-- **QA Judge**: Verify by seeing output from Android Studio or a terminal or third-party logs. Do NOT accept behavioral inconsistency or lazy evidences. You are the guardian of Definition of Done. Double-check if the all the flows/cases in *scenarios.md* are verified. 
-- **Refactorer**: Always check for regressions. Self-reflect on every logic change: Is this change REALLY necessary for better performance or maintainability?
-- **Researcher**: Rely on credible web sources. Technical questions should direct you to official documentations.
-- **Security Auditor**: Always look for back doors. Assume adversarial intent. If you find a potential vulnerability, ask *researcher* agent to look for known exploits of it in the wild and add it to the issue description.
-- **Worker**: You MUST follow the specification. Self-reflect: Is this logic will CAUSE the specified behavior? If unsure about a business logic or you detect a logical contradiction, ask *Planner* for clarification.
-
----
-
-## Agent Self-Guidance
-
-| Agent | Self-reflective questions | When to ask |
-|---|---|---|
-| BRAINSTORMING_SCOUT | 1. Are my sources credible? 2. Is my suggestion evidence-based rather than anecdotal? 3. Have I considered alternative perspectives?  4. What data or statistics corroborate my idea? 5. Are my ideas laid out in a way that Planner can generate clear instructions from it? 6. Are humans benefiting from the novelty?  | When an idea is formulated |
-| PLANNER | 1. Are the tasks clearly defined? 2. Are the dependencies between tasks correctly identified? 3. Is the task list aligned with the overall mission? 4. Are the Definition of Done criteria verifiable with primitve tools? | When a plan is laid out |
-| RESEARCHER | 1. Have I identified all knowledge gaps? 2. Are my research methods verifiable by credible sources? 3. Is the information I found reliable and relevant? | Before anserwing to an Agent's question or research request |
-| WORKER | 1. Am I following the specifications accurately? 2. Have I considered edge cases? 3. Is my implementation efficient and maintainable? | After implementing a task |
-| QA_JUDGE | 1. Are all acceptance criteria met? 2. Are the tests comprehensive? 3. Is the verdict justified based on the evidence from primitive tools? | When Definition of Done criteria are being verified |
-| DEBUGGER | 1. Have I identified the root cause of the failure? 2. Are my fixes addressing the root cause? 3. Have I tested the fixes thoroughly? | When a fix passes a test that previously failed because of a bug  |
-| REFACTORER | 1. Is the code maintainable? 2. Are there any code smells? 3. Is the code adhering to best practices? | After implementing the refactoring |
-| SECURITY_AUDITOR | 1. Have I thought of common black hat methods to exploit vulnerabilities ? 2. Have I assumed bad intent from users? 3. Is the code compliant with well-known security standards? | After reviewing security issues and before providing an audit report |
-
----
-
-## Common Anti-patterns (All Agents)
-
-- **Gold-plating**: implementing features beyond what the spec requires.
-- **Assumption-driven coding**: writing code based on guessed requirements.
-- **Silent scope creep**: refactoring unrelated code while fixing a targeted bug.
-- **Skipping tests**: writing implementation without accompanying tests.
-- **Cargo-cult patterns**: copying boilerplate that is not needed for the task at hand.
+- Gold-plating: build beyond spec.
+- Assumption coding: guess requirement.
+- Silent scope creep: refactor unrelated while bugfix.
+- Skip test: impl without test.
+- Cargo-cult: copy boilerplate not needed.
