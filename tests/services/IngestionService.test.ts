@@ -380,6 +380,137 @@ describe("ingestNotification – auto-tag by vendor", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 5. Auto-tag by vendor – title + number-stripped body (FR6)
+// ---------------------------------------------------------------------------
+
+describe("ingestNotification – auto-tag by title + stripped body (FR6)", () => {
+  it("inherits tags when same title and bodies differ only by numbers (same recipient)", () => {
+    // First transfer to Kovács Jánosnak — tagged "Transfer"
+    const prev = addTransaction(
+      db,
+      createTransaction({
+        notificationTitle: "Átutalás elküldve",
+        notificationBody: "Átutalás elküldve 15 000 Ft Kovács Jánosnak",
+        packageName: "com.bank",
+        receivedAt: makeTimestamp(-120),
+      })
+    );
+    addTagToTransaction(db, prev.id, addTag(db, "Transfer").id);
+
+    // Second transfer to same recipient but different amount — should inherit
+    const result = ingestNotification(
+      db,
+      makeTxData(
+        "Átutalás elküldve",
+        "Átutalás elküldve 20 000 Ft Kovács Jánosnak",
+        "com.bank",
+        makeTimestamp()
+      )
+    );
+
+    expect(result).not.toBeNull();
+    const tagNames = result!.transactionTags.map((tt) => tt.tagName);
+    expect(tagNames).toContain("Transfer");
+  });
+
+  it("does NOT inherit tags when same title but different recipient (different stripped body)", () => {
+    // First transfer to Kovács Jánosnak — tagged "Transfer"
+    const prev = addTransaction(
+      db,
+      createTransaction({
+        notificationTitle: "Átutalás elküldve",
+        notificationBody: "Átutalás elküldve 15 000 Ft Kovács Jánosnak",
+        packageName: "com.bank",
+        receivedAt: makeTimestamp(-120),
+      })
+    );
+    addTagToTransaction(db, prev.id, addTag(db, "Transfer").id);
+
+    // Transfer to DIFFERENT recipient — stripped body differs, should NOT inherit
+    const result = ingestNotification(
+      db,
+      makeTxData(
+        "Átutalás elküldve",
+        "Átutalás elküldve 15 000 Ft Nagy Péternek",
+        "com.bank",
+        makeTimestamp()
+      )
+    );
+
+    expect(result).not.toBeNull();
+    const tagNames = result!.transactionTags.map((tt) => tt.tagName);
+    expect(tagNames).not.toContain("Transfer");
+  });
+
+  it("falls back to title-only match when incoming body is null (null-body fallback)", () => {
+    // Previous transaction with a title, no body — tagged "GenericVendor"
+    const prev = addTransaction(
+      db,
+      createTransaction({
+        notificationTitle: "Generic Bank",
+        notificationBody: null,
+        packageName: "com.bank",
+        receivedAt: makeTimestamp(-120),
+      })
+    );
+    addTagToTransaction(db, prev.id, addTag(db, "GenericVendor").id);
+
+    // Ingest with null body — should fall back to title-only and inherit tags
+    const result = ingestNotification(
+      db,
+      makeTxData("Generic Bank", null, "com.bank", makeTimestamp())
+    );
+
+    expect(result).not.toBeNull();
+    const tagNames = result!.transactionTags.map((tt) => tt.tagName);
+    // Title+body match (null+null) should work and propagate tags
+    expect(tagNames).toContain("GenericVendor");
+  });
+
+  it("prefers title+body match over title-only match when both exist", () => {
+    // An older transaction with a different body — tagged "OldTag"
+    const older = addTransaction(
+      db,
+      createTransaction({
+        notificationTitle: "Átutalás elküldve",
+        notificationBody: "Átutalás elküldve 5 Ft Nagy Péternek",
+        packageName: "com.bank",
+        receivedAt: makeTimestamp(-300),
+      })
+    );
+    addTagToTransaction(db, older.id, addTag(db, "OldTag").id);
+
+    // A more recent transaction matching the stripped body — tagged "CorrectTag"
+    const closer = addTransaction(
+      db,
+      createTransaction({
+        notificationTitle: "Átutalás elküldve",
+        notificationBody: "Átutalás elküldve 15 000 Ft Kovács Jánosnak",
+        packageName: "com.bank",
+        receivedAt: makeTimestamp(-60),
+      })
+    );
+    addTagToTransaction(db, closer.id, addTag(db, "CorrectTag").id);
+
+    // Ingest same recipient (Kovács) — should prefer title+body match => "CorrectTag"
+    const result = ingestNotification(
+      db,
+      makeTxData(
+        "Átutalás elküldve",
+        "Átutalás elküldve 20 000 Ft Kovács Jánosnak",
+        "com.bank",
+        makeTimestamp()
+      )
+    );
+
+    expect(result).not.toBeNull();
+    const tagNames = result!.transactionTags.map((tt) => tt.tagName);
+    expect(tagNames).toContain("CorrectTag");
+    expect(tagNames).not.toContain("OldTag");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 4. Interaction: auto-soft-delete + auto-tag
 // ---------------------------------------------------------------------------
 

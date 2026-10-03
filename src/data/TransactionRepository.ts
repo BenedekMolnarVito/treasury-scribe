@@ -435,6 +435,94 @@ export function findLastTransactionByTitle(
 }
 
 // ---------------------------------------------------------------------------
+// stripNumbers (local helper — shared by findLastTransactionByTitleAndBody)
+// ---------------------------------------------------------------------------
+
+/**
+ * Strips sequences of digits, dots, commas and spaces-between-digit-groups
+ * from `body`, returning the collapsed result.
+ *
+ * This is intentionally conservative: only `[\d.,]+` is stripped so that
+ * alphabetic content (recipient names, currency codes) is preserved.
+ *
+ * **NULL contract:** a `null` input returns `null`; callers must handle this
+ * explicitly so that null bodies are matched against null stored bodies only
+ * (see `findLastTransactionByTitleAndBody`).
+ */
+function stripNumbers(body: string | null): string | null {
+  if (body === null) return null;
+  return body.replace(/[\d.,]+/g, "").trim();
+}
+
+/**
+ * Returns the most recent non-deleted transaction whose `NotificationTitle`
+ * matches `title` AND whose `NotificationBody`, when stripped of digits,
+ * commas and dots, matches the stripped form of `body`.
+ *
+ * **Why JS-side filtering, not SQL?**
+ * SQL cannot apply the same stripping transformation to stored column values
+ * without adding a computed/virtual column. To keep symmetry between the
+ * comparison of the incoming body and the stored body, we:
+ *   1. Fetch all non-deleted candidates that share `NotificationTitle` ordered
+ *      by `ReceivedAt DESC`.
+ *   2. Strip both sides in JS using the same `stripNumbers` helper.
+ *   3. Return the first (most recent) candidate whose stripped body equals
+ *      the stripped incoming body.
+ *
+ * This guarantees that `"Átutalás elküldve 15 000 Ft Kovács Jánosnak"` and
+ * `"Átutalás elküldve 20 000 Ft Kovács Jánosnak"` are treated as the SAME
+ * classification source (same stripped body: `"Átutalás elküldve  Ft Kovács
+ * Jánosnak"`), while `"Átutalás elküldve 15 000 Ft Kovács Jánosnak"` and
+ * `"Átutalás elküldve 15 000 Ft Nagy Péternek"` remain DISTINCT.
+ *
+ * **NULL contract:** a `null` incoming `body` matches only candidates with a
+ * `null` stored body. A candidate with a non-null body never matches a null
+ * incoming body.
+ *
+ * @param db    - sql.js Database instance.
+ * @param title - The notification title to search for.
+ * @param body  - The notification body (raw, as received). Stripped before
+ *                comparison. Pass `null` to match null-bodied transactions.
+ * @returns The most recent matching transaction with tags, or `null`.
+ */
+export function findLastTransactionByTitleAndBody(
+  db: Database,
+  title: string | null,
+  body: string | null
+): Transaction | null {
+  // Fetch all title-matched non-deleted candidates ordered by recency.
+  const candidateRows = queryRows<{ Id: number; NotificationBody: string | null }>(
+    db,
+    `SELECT Id, NotificationBody FROM Transactions
+     WHERE IsDeleted = 0
+       AND NotificationTitle IS ?
+     ORDER BY ReceivedAt DESC`,
+    [title]
+  );
+
+  const targetStripped = stripNumbers(body);
+
+  for (const row of candidateRows) {
+    const candidateStripped = stripNumbers(row.NotificationBody);
+
+    // Both sides are null → match.
+    // Both sides are non-null and equal after stripping → match.
+    if (targetStripped === null && candidateStripped === null) {
+      return getTransactionById(db, row.Id) ?? null;
+    }
+    if (
+      targetStripped !== null &&
+      candidateStripped !== null &&
+      candidateStripped === targetStripped
+    ) {
+      return getTransactionById(db, row.Id) ?? null;
+    }
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Tag filter queries
 // ---------------------------------------------------------------------------
 

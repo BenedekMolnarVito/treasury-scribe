@@ -27,6 +27,7 @@ import {
   existsDuplicate,
   findSoftDeletedMatch,
   findLastTransactionByTitle,
+  findLastTransactionByTitleAndBody,
   getActiveTagsWithCounts,
   getTransactionsByTagFilter,
 } from "../../src/data/TransactionRepository";
@@ -474,6 +475,132 @@ describe("findLastTransactionByTitle", () => {
 
     const found = findLastTransactionByTitle(db, "Revolut");
     expect(found!.id).toBe(active.id);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findLastTransactionByTitleAndBody
+// ---------------------------------------------------------------------------
+
+describe("findLastTransactionByTitleAndBody", () => {
+  it("returns null when no transaction has the given title", () => {
+    expect(
+      findLastTransactionByTitleAndBody(db, "Unknown", "some body")
+    ).toBeNull();
+  });
+
+  it("returns null when only soft-deleted transactions match", () => {
+    addTransaction(
+      db,
+      makeTransaction({
+        notificationTitle: "Átutalás elküldve",
+        notificationBody: "Kovács Jánosnak",
+        isDeleted: true,
+      })
+    );
+    expect(
+      findLastTransactionByTitleAndBody(
+        db,
+        "Átutalás elküldve",
+        "Kovács Jánosnak"
+      )
+    ).toBeNull();
+  });
+
+  it("returns the most recent non-deleted transaction matching title + stripped body", () => {
+    // Two transactions with same title and same recipient but different amounts.
+    // The stripped bodies match, so we get the most recent.
+    addTransaction(
+      db,
+      makeTransaction({
+        notificationTitle: "Átutalás elküldve",
+        notificationBody: "Átutalás elküldve 15 000 Ft Kovács Jánosnak",
+        receivedAt: "2024-01-01T08:00:00.000Z",
+      })
+    );
+    const latest = addTransaction(
+      db,
+      makeTransaction({
+        notificationTitle: "Átutalás elküldve",
+        notificationBody: "Átutalás elküldve 20 000 Ft Kovács Jánosnak",
+        receivedAt: "2024-01-01T12:00:00.000Z",
+      })
+    );
+
+    // Both bodies strip to "Átutalás elküldve  Ft Kovács Jánosnak" (same recipient)
+    const found = findLastTransactionByTitleAndBody(
+      db,
+      "Átutalás elküldve",
+      "Átutalás elküldve 20 000 Ft Kovács Jánosnak"
+    );
+    expect(found).not.toBeNull();
+    expect(found!.id).toBe(latest.id);
+  });
+
+  it("returns null when title matches but stripped bodies differ (different recipient)", () => {
+    // One transaction with recipient Kovács János
+    addTransaction(
+      db,
+      makeTransaction({
+        notificationTitle: "Átutalás elküldve",
+        notificationBody: "Átutalás elküldve 15 000 Ft Kovács Jánosnak",
+        receivedAt: "2024-01-01T08:00:00.000Z",
+      })
+    );
+
+    // Look up for a different recipient – stripped body differs, should NOT match
+    const found = findLastTransactionByTitleAndBody(
+      db,
+      "Átutalás elküldve",
+      "Átutalás elküldve 15 000 Ft Nagy Péternek"
+    );
+    expect(found).toBeNull();
+  });
+
+  it("handles null body: null body only matches a transaction with null body", () => {
+    // Bypass makeTransaction fixture because null coalesces to a default there.
+    addTransaction(db, {
+      rawContent: "raw",
+      jsonContent: null,
+      receivedAt: "2024-01-01T10:00:00.000Z",
+      notificationTitle: "PushPay",
+      notificationBody: null,
+      packageName: "com.pushpay",
+      isDeleted: false,
+      isCash: false,
+      amount: null,
+      currency: null,
+      isIncome: false,
+    });
+    const found = findLastTransactionByTitleAndBody(db, "PushPay", null);
+    expect(found).not.toBeNull();
+  });
+
+  it("eager-loads tags for the returned transaction", () => {
+    const tx = addTransaction(
+      db,
+      makeTransaction({
+        notificationTitle: "OTP Bank",
+        notificationBody: "OTP 500 Ft kifizetés",
+      })
+    );
+    db.run(
+      "INSERT INTO Tags (Name, LastUsedAt) VALUES ('banking', '2024-01-01T00:00:00.000Z')"
+    );
+    const r = db.exec("SELECT last_insert_rowid() AS id");
+    const tagId = r[0].values[0][0] as number;
+    db.run(
+      "INSERT INTO TransactionTags (TransactionId, TagId, CreatedAt) VALUES (?, ?, '2024-01-01T00:00:00.000Z')",
+      [tx.id, tagId]
+    );
+
+    const found = findLastTransactionByTitleAndBody(
+      db,
+      "OTP Bank",
+      "OTP 500 Ft kifizetés"
+    )!;
+    expect(found.transactionTags).toHaveLength(1);
+    expect(found.transactionTags[0].tagId).toBe(tagId);
   });
 });
 

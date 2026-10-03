@@ -9,8 +9,11 @@
  *    transaction when a soft-deleted transaction with the same title + body
  *    exists, preserving the user's prior intent to dismiss it.
  * 3. **Auto-tag by vendor** – copies tags (excluding "AddedManually") from the
- *    most recent previous transaction that shares the same title, so recurring
- *    vendor transactions are tagged automatically.
+ *    most recent previous transaction that shares the same title **and**
+ *    number-stripped body (prefer), falling back to title-only when no
+ *    stripped-body match exists, so same-recipient recurring transfers
+ *    (`Átutalás elküldve … Kovács Jánosnak`) inherit tags regardless of the
+ *    amount, while transfers to different recipients classify independently.
  * 4. **Manual-transaction auto-tag** – transactions created via
  *    `addManualTransaction` in `useTransactions` always receive the
  *    "AddedManually" tag (handled at the call-site in that hook).
@@ -24,6 +27,7 @@ import {
   existsDuplicateWithinSeconds,
   findSoftDeletedMatch,
   findLastTransactionByTitle,
+  findLastTransactionByTitleAndBody,
   getTransactionById,
   softDeleteTransaction,
 } from "../data/TransactionRepository";
@@ -49,7 +53,9 @@ const MANUAL_TAG = "AddedManually";
  * 4. If a soft-deleted match (same title + body) exists, soft-deletes the
  *    newly created transaction.
  * 5. Copies qualifying tags (all tags except "AddedManually") from the
- *    previous same-title transaction to the new one.
+ *    most recent previous transaction that matches on title + stripped body
+ *    (prefer), falling back to the title-only match when no stripped-body
+ *    match is found (so previously title-tagged transactions keep classifying).
  *
  * @param db          - sql.js Database instance (caller controls lifecycle).
  * @param txData      - The transaction to insert (id is not required).
@@ -80,7 +86,19 @@ export function ingestNotification(
   // -------------------------------------------------------------------------
   // 2. Snapshot the previous same-title transaction BEFORE inserting, so the
   //    new row does not shadow it in the auto-tag lookup.
+  //
+  //    We capture TWO candidates:
+  //      a) previousByTitleAndBody – most recent match on title AND
+  //         number-stripped body (preferred for tag propagation in step 5).
+  //      b) previousByTitle        – most recent match on title only
+  //         (fallback when no stripped-body match exists, preserving
+  //         backwards compatibility for previously title-tagged txns).
   // -------------------------------------------------------------------------
+  const previousByTitleAndBody = findLastTransactionByTitleAndBody(
+    db,
+    txData.notificationTitle,
+    txData.notificationBody
+  );
   const previousByTitle = findLastTransactionByTitle(db, txData.notificationTitle);
 
   // -------------------------------------------------------------------------
@@ -101,11 +119,24 @@ export function ingestNotification(
   }
 
   // -------------------------------------------------------------------------
-  // 5. Auto-tag by vendor – copy qualifying tags from the previous same-title
-  //    transaction (excluding "AddedManually")
+  // 5. Auto-tag by vendor – copy qualifying tags from the best previous
+  //    transaction for this vendor (excluding "AddedManually").
+  //
+  //    PREFER the title+stripped-body match so that same-recipient recurring
+  //    transfers (same title, different amounts) inherit tags from the most
+  //    recent transfer to the SAME recipient.
+  //
+  //    FALL BACK to the title-only match ONLY when the incoming body is null
+  //    (no body information means we cannot distinguish by content, so title
+  //    alone is the best available signal). When the incoming body is non-null
+  //    but no stripped-body match exists, the transaction is new to this
+  //    recipient/pattern and should NOT inherit from a different one.
   // -------------------------------------------------------------------------
-  if (previousByTitle !== null) {
-    const tagsToPropagate = previousByTitle.transactionTags.filter(
+  const previous =
+    previousByTitleAndBody ??
+    (txData.notificationBody === null ? previousByTitle : null);
+  if (previous !== null) {
+    const tagsToPropagate = previous.transactionTags.filter(
       (tt) => tt.tagName !== MANUAL_TAG
     );
 
