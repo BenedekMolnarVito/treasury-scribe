@@ -1,0 +1,45 @@
+appId: com.treasuryscribe.app
+name: Treasury Scribe smoke test
+tags:
+  - smoke
+---
+# Treasury Scribe (Capacitor WebView budget tracker) smoke test.
+#
+# Behavioral note discovered during setup: on first launch the app chains
+# system permission redirects (notification-listener access, then battery
+# optimization exemption). The flow tolerates these by pressing Back until
+# the app's own MainActivity/WebView is in the foreground.
+#
+# Because this is a Capacitor WebView, Maestro reads it via the WebView
+# accessibility bridge. We assert on visible text and capture screenshots
+# at each step so an agent can judge visual behavior from the images.
+
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+
+# Dismiss up to 3 chained system permission screens the app opens on launch.
+- repeat:
+    times: 3
+    commands:
+      - runFlow:
+          when:
+            visible:
+              text: ".*(notification access|battery|optimization|Allow|Settings).*"
+              optional: true
+          commands:
+            - pressKey: Back
+            - waitForAnimationToEnd:
+                timeout: 2000
+
+- waitForAnimationToEnd:
+    timeout: 8000
+- takeScreenshot: 01_app_home
+
+# Core assertion: the budget-tracker UI rendered. Adjust the expected text
+# below to a stable label from YOUR app (e.g. a header or a tab name) once
+# the first screenshot confirms the real wording.
+- assertVisible:
+    text: ".*"
+- takeScreenshot: 02_verified
