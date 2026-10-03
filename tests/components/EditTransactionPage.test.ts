@@ -688,6 +688,80 @@ describe("receivedAt field", () => {
 });
 
 // ---------------------------------------------------------------------------
+// FR7: OS swipe-back + visible Back button
+// ---------------------------------------------------------------------------
+
+// vi.mock is hoisted to module level by Vitest, so mock variables must be
+// declared with vi.hoisted() to be in scope when the factory runs.
+const { mockRemove, mockAddListener } = vi.hoisted(() => {
+  const mockRemove = vi.fn();
+  const mockAddListener = vi.fn(() => Promise.resolve({ remove: mockRemove }));
+  return { mockRemove, mockAddListener };
+});
+
+vi.mock("@capacitor/app", () => ({
+  App: {
+    addListener: mockAddListener,
+  },
+}));
+
+describe("FR7 – OS back-button listener and visible Back button", () => {
+  beforeEach(() => {
+    mockRemove.mockClear();
+    mockAddListener.mockClear();
+  });
+
+  it("renders a visible Back button with data-testid='edit-back-button'", async () => {
+    const id = insertTx();
+    renderPage(id);
+    await waitFor(() =>
+      expect(screen.getByTestId("edit-back-button")).toBeTruthy()
+    );
+  });
+
+  it("clicking the Back button navigates to /transactions", async () => {
+    const id = insertTx();
+    renderPage(id);
+    await waitFor(() =>
+      expect(screen.getByTestId("edit-back-button")).toBeTruthy()
+    );
+    act(() => {
+      fireEvent.click(screen.getByTestId("edit-back-button"));
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("transactions-page")).toBeTruthy()
+    );
+  });
+
+  it("registers a backButton listener on mount", async () => {
+    const id = insertTx();
+    renderPage(id);
+    await waitFor(() =>
+      expect(mockAddListener).toHaveBeenCalledWith(
+        "backButton",
+        expect.any(Function)
+      )
+    );
+  });
+
+  it("removes the backButton listener on unmount", async () => {
+    const id = insertTx();
+    renderPage(id);
+    // Wait for listener to be registered (and promise to resolve).
+    await waitFor(() =>
+      expect(mockAddListener).toHaveBeenCalledWith(
+        "backButton",
+        expect.any(Function)
+      )
+    );
+    // Flush microtasks so the addListener promise resolves and handle is stored.
+    await act(async () => {});
+    cleanup();
+    expect(mockRemove).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // FR8: Default / Exception toggle
 // ---------------------------------------------------------------------------
 

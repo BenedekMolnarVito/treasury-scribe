@@ -222,6 +222,33 @@ const EditTransactionPageContent: React.FC<
   const navigate = useNavigate();
   const [showSplitModal, setShowSplitModal] = useState(false);
 
+  // Register OS back-button listener (Android swipe-back / hardware back).
+  // Dynamic import guards against jsdom / web environments where the
+  // @capacitor/app native plugin is unavailable.
+  useEffect(() => {
+    let listenerHandle: { remove: () => void } | null = null;
+
+    const registerBackListener = async (): Promise<void> => {
+      try {
+        const { App } = await import("@capacitor/app");
+        listenerHandle = await App.addListener("backButton", () => {
+          void navigate("/transactions");
+        });
+      } catch {
+        // Native plugin unavailable (web / jsdom) — silently skip.
+      }
+    };
+
+    void registerBackListener();
+
+    return () => {
+      if (listenerHandle) {
+        listenerHandle.remove();
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const {
     title,
     description,
@@ -580,10 +607,28 @@ const EditTransactionPage: React.FC<EditTransactionPageProps> = ({
   onDatabaseChanged,
 }) => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const numericId = id !== undefined ? parseInt(id, 10) : NaN;
 
   return (
     <main style={STYLE.page}>
+      {/* Back button */}
+      <button
+        data-testid="edit-back-button"
+        aria-label="Back"
+        onClick={() => void navigate("/transactions")}
+        style={{
+          background: "transparent",
+          border: "none",
+          color: "#90CAF9",
+          fontSize: "1em",
+          cursor: "pointer",
+          padding: "0 0 12px 0",
+          display: "block",
+        }}
+      >
+        ← Back
+      </button>
       <h1 style={STYLE.heading}>Edit Transaction</h1>
 
       {db && !isNaN(numericId) ? (
