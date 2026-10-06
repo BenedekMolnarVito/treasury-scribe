@@ -27,6 +27,7 @@ import {
   existsDuplicate,
   findSoftDeletedMatch,
   findLastTransactionByTitle,
+  findLastTransactionByTitleAndBody,
   getActiveTagsWithCounts,
   getTransactionsByTagFilter,
 } from "../../src/data/TransactionRepository";
@@ -72,6 +73,7 @@ function makeTransaction(
     amount: number | null;
     currency: string | null;
     isIncome: boolean;
+    excludeFromAutoLearn: boolean;
   }> = {}
 ) {
   return {
@@ -86,6 +88,7 @@ function makeTransaction(
     amount: overrides.amount ?? 10.0,
     currency: overrides.currency ?? "EUR",
     isIncome: overrides.isIncome ?? false,
+    excludeFromAutoLearn: overrides.excludeFromAutoLearn ?? false,
   };
 }
 
@@ -478,6 +481,132 @@ describe("findLastTransactionByTitle", () => {
 });
 
 // ---------------------------------------------------------------------------
+// findLastTransactionByTitleAndBody
+// ---------------------------------------------------------------------------
+
+describe("findLastTransactionByTitleAndBody", () => {
+  it("returns null when no transaction has the given title", () => {
+    expect(
+      findLastTransactionByTitleAndBody(db, "Unknown", "some body")
+    ).toBeNull();
+  });
+
+  it("returns null when only soft-deleted transactions match", () => {
+    addTransaction(
+      db,
+      makeTransaction({
+        notificationTitle: "Átutalás elküldve",
+        notificationBody: "Kovács Jánosnak",
+        isDeleted: true,
+      })
+    );
+    expect(
+      findLastTransactionByTitleAndBody(
+        db,
+        "Átutalás elküldve",
+        "Kovács Jánosnak"
+      )
+    ).toBeNull();
+  });
+
+  it("returns the most recent non-deleted transaction matching title + stripped body", () => {
+    // Two transactions with same title and same recipient but different amounts.
+    // The stripped bodies match, so we get the most recent.
+    addTransaction(
+      db,
+      makeTransaction({
+        notificationTitle: "Átutalás elküldve",
+        notificationBody: "Átutalás elküldve 15 000 Ft Kovács Jánosnak",
+        receivedAt: "2024-01-01T08:00:00.000Z",
+      })
+    );
+    const latest = addTransaction(
+      db,
+      makeTransaction({
+        notificationTitle: "Átutalás elküldve",
+        notificationBody: "Átutalás elküldve 20 000 Ft Kovács Jánosnak",
+        receivedAt: "2024-01-01T12:00:00.000Z",
+      })
+    );
+
+    // Both bodies strip to "Átutalás elküldve  Ft Kovács Jánosnak" (same recipient)
+    const found = findLastTransactionByTitleAndBody(
+      db,
+      "Átutalás elküldve",
+      "Átutalás elküldve 20 000 Ft Kovács Jánosnak"
+    );
+    expect(found).not.toBeNull();
+    expect(found!.id).toBe(latest.id);
+  });
+
+  it("returns null when title matches but stripped bodies differ (different recipient)", () => {
+    // One transaction with recipient Kovács János
+    addTransaction(
+      db,
+      makeTransaction({
+        notificationTitle: "Átutalás elküldve",
+        notificationBody: "Átutalás elküldve 15 000 Ft Kovács Jánosnak",
+        receivedAt: "2024-01-01T08:00:00.000Z",
+      })
+    );
+
+    // Look up for a different recipient – stripped body differs, should NOT match
+    const found = findLastTransactionByTitleAndBody(
+      db,
+      "Átutalás elküldve",
+      "Átutalás elküldve 15 000 Ft Nagy Péternek"
+    );
+    expect(found).toBeNull();
+  });
+
+  it("handles null body: null body only matches a transaction with null body", () => {
+    // Bypass makeTransaction fixture because null coalesces to a default there.
+    addTransaction(db, {
+      rawContent: "raw",
+      jsonContent: null,
+      receivedAt: "2024-01-01T10:00:00.000Z",
+      notificationTitle: "PushPay",
+      notificationBody: null,
+      packageName: "com.pushpay",
+      isDeleted: false,
+      isCash: false,
+      amount: null,
+      currency: null,
+      isIncome: false,
+    });
+    const found = findLastTransactionByTitleAndBody(db, "PushPay", null);
+    expect(found).not.toBeNull();
+  });
+
+  it("eager-loads tags for the returned transaction", () => {
+    const tx = addTransaction(
+      db,
+      makeTransaction({
+        notificationTitle: "OTP Bank",
+        notificationBody: "OTP 500 Ft kifizetés",
+      })
+    );
+    db.run(
+      "INSERT INTO Tags (Name, LastUsedAt) VALUES ('banking', '2024-01-01T00:00:00.000Z')"
+    );
+    const r = db.exec("SELECT last_insert_rowid() AS id");
+    const tagId = r[0].values[0][0] as number;
+    db.run(
+      "INSERT INTO TransactionTags (TransactionId, TagId, CreatedAt) VALUES (?, ?, '2024-01-01T00:00:00.000Z')",
+      [tx.id, tagId]
+    );
+
+    const found = findLastTransactionByTitleAndBody(
+      db,
+      "OTP Bank",
+      "OTP 500 Ft kifizetés"
+    )!;
+    expect(found.transactionTags).toHaveLength(1);
+    expect(found.transactionTags[0].tagId).toBe(tagId);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // getActiveTagsWithCounts
 // ---------------------------------------------------------------------------
 
@@ -607,5 +736,115 @@ describe("getTransactionsByTagFilter", () => {
     const titles = result.map((t) => t.notificationTitle);
     expect(titles).toContain("Food TX");
     expect(titles).toContain("Transport TX");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FR8: ExcludeFromAutoLearn column, setTransactionException, lookup filters
+// ---------------------------------------------------------------------------
+
+import { setTransactionException } from "../../src/data/TransactionRepository";
+
+describe("FR8 – ExcludeFromAutoLearn column round-trip", () => {
+  it("defaults to false on insert", () => {
+    const tx = addTransaction(db, makeTransaction());
+    expect(tx.excludeFromAutoLearn).toBe(false);
+    // Re-fetch to confirm DB round-trip
+    const fetched = getTransactionById(db, tx.id)!;
+    expect(fetched.excludeFromAutoLearn).toBe(false);
+  });
+
+  it("persists true when inserted with excludeFromAutoLearn=true", () => {
+    const tx = addTransaction(db, { ...makeTransaction(), excludeFromAutoLearn: true });
+    const fetched = getTransactionById(db, tx.id)!;
+    expect(fetched.excludeFromAutoLearn).toBe(true);
+  });
+
+  it("updateTransaction persists excludeFromAutoLearn changes", () => {
+    const tx = addTransaction(db, makeTransaction());
+    expect(tx.excludeFromAutoLearn).toBe(false);
+
+    updateTransaction(db, { ...tx, excludeFromAutoLearn: true });
+    const fetched = getTransactionById(db, tx.id)!;
+    expect(fetched.excludeFromAutoLearn).toBe(true);
+  });
+});
+
+describe("FR8 – setTransactionException mutator", () => {
+  it("flips ExcludeFromAutoLearn to true", () => {
+    const tx = addTransaction(db, makeTransaction());
+    setTransactionException(db, tx.id, true);
+    const fetched = getTransactionById(db, tx.id)!;
+    expect(fetched.excludeFromAutoLearn).toBe(true);
+  });
+
+  it("flips ExcludeFromAutoLearn back to false", () => {
+    const tx = addTransaction(db, { ...makeTransaction(), excludeFromAutoLearn: true });
+    setTransactionException(db, tx.id, false);
+    const fetched = getTransactionById(db, tx.id)!;
+    expect(fetched.excludeFromAutoLearn).toBe(false);
+  });
+});
+
+describe("FR8 – findLastTransactionByTitle excludes ExcludeFromAutoLearn=1", () => {
+  it("returns null when only candidate is an exception", () => {
+    const tx = addTransaction(db, makeTransaction({ notificationTitle: "BankX" }));
+    setTransactionException(db, tx.id, true);
+
+    const result = findLastTransactionByTitle(db, "BankX");
+    expect(result).toBeNull();
+  });
+
+  it("returns the non-exception candidate, skipping the exception one", () => {
+    const older = addTransaction(db, {
+      ...makeTransaction({ notificationTitle: "BankX", receivedAt: "2024-01-01T09:00:00Z" }),
+      excludeFromAutoLearn: false,
+    });
+    const newer = addTransaction(db, {
+      ...makeTransaction({ notificationTitle: "BankX", receivedAt: "2024-01-02T09:00:00Z" }),
+      excludeFromAutoLearn: true,
+    });
+
+    const result = findLastTransactionByTitle(db, "BankX");
+    // The newer one is excluded → should get older
+    expect(result?.id).toBe(older.id);
+    void newer;
+  });
+});
+
+describe("FR8 – findLastTransactionByTitleAndBody excludes ExcludeFromAutoLearn=1", () => {
+  it("returns null when only candidate is an exception", () => {
+    const tx = addTransaction(db, makeTransaction({
+      notificationTitle: "MerchantY",
+      notificationBody: "You paid 5 000 HUF",
+    }));
+    setTransactionException(db, tx.id, true);
+
+    const result = findLastTransactionByTitleAndBody(db, "MerchantY", "You paid 5 000 HUF");
+    expect(result).toBeNull();
+  });
+
+  it("returns the non-exception candidate when both match stripped body", () => {
+    const older = addTransaction(db, {
+      ...makeTransaction({
+        notificationTitle: "MerchantY",
+        notificationBody: "You paid 5 000 HUF",
+        receivedAt: "2024-01-01T09:00:00Z",
+      }),
+      excludeFromAutoLearn: false,
+    });
+    const newer = addTransaction(db, {
+      ...makeTransaction({
+        notificationTitle: "MerchantY",
+        notificationBody: "You paid 10 000 HUF",
+        receivedAt: "2024-01-02T09:00:00Z",
+      }),
+      excludeFromAutoLearn: true,
+    });
+
+    // Same stripped body: "You paid  HUF" — newer is exception, should skip it
+    const result = findLastTransactionByTitleAndBody(db, "MerchantY", "You paid 5 000 HUF");
+    expect(result?.id).toBe(older.id);
+    void newer;
   });
 });

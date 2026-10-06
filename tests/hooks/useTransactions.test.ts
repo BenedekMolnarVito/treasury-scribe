@@ -297,7 +297,7 @@ describe("addManualTransaction", () => {
 // ---------------------------------------------------------------------------
 
 describe("exportTransactions('json')", () => {
-  it("produces indented JSON of non-deleted transactions", async () => {
+  it("produces indented JSON of all transactions including soft-deleted", async () => {
     const db = await makeDb();
     const shareMock = makeShareMock();
     const result = await setup(db, shareMock);
@@ -306,7 +306,7 @@ describe("exportTransactions('json')", () => {
       await result.current.addManualTransaction("Export me", "body");
     });
 
-    // Soft-delete a second transaction so we can verify it is excluded.
+    // Soft-delete a second transaction to verify it IS included with IsDeleted=1.
     await act(async () => {
       await result.current.addManualTransaction("Deleted", "body2");
     });
@@ -332,18 +332,26 @@ describe("exportTransactions('json')", () => {
     // Must be valid JSON.
     const parsed = JSON.parse(jsonContent) as unknown[];
     expect(Array.isArray(parsed)).toBe(true);
-    // Only the non-deleted transaction is exported.
-    expect(parsed.length).toBe(1);
+    // Both transactions are exported (active + soft-deleted).
+    expect(parsed.length).toBe(2);
     // Must be indented (contains newlines).
     expect(jsonContent).toContain("\n");
 
-    const row = parsed[0] as Record<string, unknown>;
+    const activeRow = (parsed as Record<string, unknown>[]).find(
+      (r) => r["NotificationTitle"] === "Export me"
+    );
+    expect(activeRow).toBeDefined();
     // All canonical CSV column names must appear in the JSON.
-    expect(row).toHaveProperty("Id");
-    expect(row).toHaveProperty("ReceivedAt");
-    expect(row).toHaveProperty("NotificationTitle", "Export me");
-    expect(row).toHaveProperty("PackageName", "Manual");
-    expect(row).toHaveProperty("IsDeleted", 0);
+    expect(activeRow).toHaveProperty("Id");
+    expect(activeRow).toHaveProperty("ReceivedAt");
+    expect(activeRow).toHaveProperty("PackageName", "Manual");
+    expect(activeRow).toHaveProperty("IsDeleted", 0);
+
+    const deletedRow = (parsed as Record<string, unknown>[]).find(
+      (r) => r["NotificationTitle"] === "Deleted"
+    );
+    expect(deletedRow).toBeDefined();
+    expect(deletedRow).toHaveProperty("IsDeleted", 1);
   });
 
   it("calls the share function with the json content", async () => {
@@ -442,7 +450,7 @@ describe("exportTransactions('csv')", () => {
 
     const headerLine = csvContent.split("\n")[0];
     expect(headerLine).toBe(
-      "Id,ReceivedAt,NotificationTitle,NotificationBody,PackageName,Amount,Currency,IsCash,Tags,IsDeleted"
+      "Id,ReceivedAt,NotificationTitle,NotificationBody,PackageName,Amount,Currency,IsCash,Tags,IsDeleted,ExcludeFromAutoLearn"
     );
   });
 
@@ -500,7 +508,7 @@ describe("exportTransactions('csv')", () => {
     });
 
     expect(csvContent).toBe(
-      "Id,ReceivedAt,NotificationTitle,NotificationBody,PackageName,Amount,Currency,IsCash,Tags,IsDeleted"
+      "Id,ReceivedAt,NotificationTitle,NotificationBody,PackageName,Amount,Currency,IsCash,Tags,IsDeleted,ExcludeFromAutoLearn"
     );
     expect(shareMock.fn).toHaveBeenCalledOnce();
   });
@@ -562,6 +570,52 @@ describe("exportTransactions('csv')", () => {
     expect(shareMock.fn).toHaveBeenCalledOnce();
     const [title] = shareMock.fn.mock.calls[0] as [string, string];
     expect(title).toMatch(/^treasury-scribe-transactions_\d{8}_\d{6}\.csv$/);
+  });
+
+  it("export includes soft-deleted rows with IsDeleted=1", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    // Add two transactions.
+    await act(async () => {
+      await result.current.addManualTransaction("Visible", "active body");
+      await result.current.addManualTransaction("Hidden", "deleted body");
+    });
+
+    // Soft-delete the second one.
+    await act(async () => {
+      await result.current.loadTransactions();
+    });
+    const hiddenId = result.current.transactions.find(
+      (t) => t.notificationTitle === "Hidden"
+    )?.id;
+    expect(hiddenId).toBeDefined();
+    await act(async () => {
+      await result.current.softDeleteTransaction(hiddenId!);
+    });
+
+    // Export CSV — the deleted row must appear with IsDeleted=1.
+    let csvContent = "";
+    await act(async () => {
+      csvContent = await result.current.exportTransactions("csv");
+    });
+
+    const lines = csvContent.split("\n");
+    // Header + 2 data rows (visible + deleted).
+    expect(lines.length).toBe(3);
+    // The deleted row contains IsDeleted=1 at column index 9 (0-based).
+    // Column 10 (index 10) is ExcludeFromAutoLearn — both rows default to 0.
+    const deletedLine = lines.find((l) => l.includes("Hidden")) ?? "";
+    expect(deletedLine).toBeTruthy();
+    const deletedFields = deletedLine.split(",");
+    expect(deletedFields[9]).toBe("1"); // IsDeleted
+    expect(deletedFields[10]).toBe("0"); // ExcludeFromAutoLearn (default)
+    // The active row contains IsDeleted=0.
+    const visibleLine = lines.find((l) => l.includes("Visible")) ?? "";
+    const visibleFields = visibleLine.split(",");
+    expect(visibleFields[9]).toBe("0"); // IsDeleted
+    expect(visibleFields[10]).toBe("0"); // ExcludeFromAutoLearn (default)
   });
 });
 
@@ -841,5 +895,291 @@ describe("addManualTransaction with isIncome", () => {
 
     const tx = result.current.transactions[0];
     expect(tx?.isIncome).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FR8: addManualTransaction excludeFromAutoLearn flag
+// ---------------------------------------------------------------------------
+
+describe("FR8 – addManualTransaction excludeFromAutoLearn flag", () => {
+  it("defaults excludeFromAutoLearn to false when not provided", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction("DefaultTx", "body");
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx?.excludeFromAutoLearn).toBe(false);
+  });
+
+  it("persists excludeFromAutoLearn=true when exception flag is passed", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "ExceptionTx", "body", 10, "HUF", false, false, undefined, true
+      );
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx?.excludeFromAutoLearn).toBe(true);
+  });
+
+  it("persists excludeFromAutoLearn=false when default flag is passed explicitly", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "DefaultExplicitTx", "body", 10, "HUF", false, false, undefined, false
+      );
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx?.excludeFromAutoLearn).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FR4: addManualTransaction with tagNames
+// ---------------------------------------------------------------------------
+
+describe("FR4 – addManualTransaction with tagNames", () => {
+  it("persists both AddedManually and a user-supplied tag", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "Groceries tx", "body", undefined, undefined, undefined, undefined, undefined, undefined,
+        ["Groceries"]
+      );
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx).toBeDefined();
+    const tagNames = tx!.transactionTags.map((tt) => tt.tagName);
+    expect(tagNames).toContain("AddedManually");
+    expect(tagNames).toContain("Groceries");
+    expect(tx!.transactionTags.length).toBe(2);
+  });
+
+  it("dedupes AddedManually when passed in tagNames", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "Dup tx", "body", undefined, undefined, undefined, undefined, undefined, undefined,
+        ["AddedManually", "Food"]
+      );
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx).toBeDefined();
+    const tagNames = tx!.transactionTags.map((tt) => tt.tagName);
+    expect(tagNames).toContain("AddedManually");
+    expect(tagNames).toContain("Food");
+    // AddedManually must appear only once despite being in both auto-tag and tagNames
+    const addedManuallyCount = tagNames.filter((n) => n === "AddedManually").length;
+    expect(addedManuallyCount).toBe(1);
+  });
+
+  it("still persists excludeFromAutoLearn alongside tagNames", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "Exception tx", "body", undefined, undefined, undefined, undefined, undefined, true,
+        ["Transport"]
+      );
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx).toBeDefined();
+    expect(tx!.excludeFromAutoLearn).toBe(true);
+    const tagNames = tx!.transactionTags.map((tt) => tt.tagName);
+    expect(tagNames).toContain("AddedManually");
+    expect(tagNames).toContain("Transport");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX 1 (I-2): ExcludeFromAutoLearn round-trip through CSV/JSON export
+// ---------------------------------------------------------------------------
+
+describe("FIX I-2 – ExcludeFromAutoLearn in CSV/JSON export", () => {
+  it("CSV header contains ExcludeFromAutoLearn column", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    // Add a transaction so there is something to export
+    await act(async () => {
+      await result.current.addManualTransaction("HeaderTest", "body");
+    });
+
+    let csv = "";
+    await act(async () => {
+      csv = await result.current.exportTransactions("csv");
+    });
+
+    const headerLine = csv.split("\n")[0]!;
+    expect(headerLine).toContain("ExcludeFromAutoLearn");
+  });
+
+  it("CSV row serializes excludeFromAutoLearn=true as 1", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "FlaggedTx", "body", 10, "HUF", false, false, undefined, true
+      );
+    });
+
+    let csv = "";
+    await act(async () => {
+      csv = await result.current.exportTransactions("csv");
+    });
+
+    const dataLine = csv.split("\n")[1]!;
+    // Last field should be 1 (excludeFromAutoLearn=true)
+    const fields = dataLine.split(",");
+    expect(fields[fields.length - 1]).toBe("1");
+  });
+
+  it("CSV row serializes excludeFromAutoLearn=false as 0", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "DefaultTx2", "body", 10, "HUF", false, false, undefined, false
+      );
+    });
+
+    let csv = "";
+    await act(async () => {
+      csv = await result.current.exportTransactions("csv");
+    });
+
+    const dataLine = csv.split("\n")[1]!;
+    const fields = dataLine.split(",");
+    expect(fields[fields.length - 1]).toBe("0");
+  });
+
+  it("JSON export includes ExcludeFromAutoLearn field as 1 for flagged transaction", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "JsonFlagged", "body", 10, "HUF", false, false, undefined, true
+      );
+    });
+
+    let json = "";
+    await act(async () => {
+      json = await result.current.exportTransactions("json");
+    });
+
+    const parsed = JSON.parse(json) as Array<Record<string, unknown>>;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]!["ExcludeFromAutoLearn"]).toBe(1);
+  });
+
+  it("JSON export includes ExcludeFromAutoLearn field as 0 for non-flagged transaction", async () => {
+    const db = await makeDb();
+    const shareMock = makeShareMock();
+    const result = await setup(db, shareMock);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "JsonDefault", "body", 10, "HUF", false, false, undefined, false
+      );
+    });
+
+    let json = "";
+    await act(async () => {
+      json = await result.current.exportTransactions("json");
+    });
+
+    const parsed = JSON.parse(json) as Array<Record<string, unknown>>;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]!["ExcludeFromAutoLearn"]).toBe(0);
+  });
+
+  it("JSON export includes IsIncome as 1 for income transactions", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "Salary", "Monthly payment", 931000, "HUF", false, true
+      );
+    });
+
+    let json = "";
+    await act(async () => {
+      json = await result.current.exportTransactions("json");
+    });
+
+    const parsed = JSON.parse(json) as Array<Record<string, unknown>>;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]!["IsIncome"]).toBe(1);
+  });
+
+  it("JSON export includes IsIncome as 0 for expense transactions", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "Groceries", "Market", 100, "HUF", false, false
+      );
+    });
+
+    let json = "";
+    await act(async () => {
+      json = await result.current.exportTransactions("json");
+    });
+
+    const parsed = JSON.parse(json) as Array<Record<string, unknown>>;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]!["IsIncome"]).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX 3 (MN-4): trim before AddedManually dedupe compare
+// ---------------------------------------------------------------------------
+
+describe("FIX MN-4 – trim before AddedManually dedupe in addManualTransaction", () => {
+  it("dedupes \" AddedManually \" (with surrounding spaces) — must not add a duplicate tag", async () => {
+    const db = await makeDb();
+    const result = await setup(db);
+
+    await act(async () => {
+      await result.current.addManualTransaction(
+        "SpaceDedupe", "body", undefined, undefined, undefined, undefined, undefined, undefined,
+        [" AddedManually "] // spaces around the name
+      );
+    });
+
+    const tx = result.current.transactions[0];
+    expect(tx).toBeDefined();
+    const tags = tx!.transactionTags.map((tt) => tt.tagName);
+    // AddedManually should appear exactly once (auto-tag), not duplicated by user tag
+    const count = tags.filter((n) => n === "AddedManually").length;
+    expect(count).toBe(1);
   });
 });

@@ -30,6 +30,13 @@ export interface SpendingByMonth {
   count: number;
 }
 
+/** Spending grouped by ISO week. */
+export interface SpendingByWeek {
+  week: string; // "YYYY-WW" format
+  total: number;
+  count: number;
+}
+
 /** Spending grouped by vendor (NotificationTitle). */
 export interface SpendingByVendor {
   vendor: string;
@@ -203,14 +210,18 @@ export function getSpendingByTag(
  *
  * @param db - sql.js Database instance.
  * @param startDate - Inclusive lower bound for ReceivedAt (ISO date string).
+ * @param endDate - Optional inclusive upper bound for ReceivedAt.
  * @param tagIds - Optional tag IDs to restrict results to.
  */
 export function getSpendingByMonth(
   db: Database,
   startDate: string,
+  endDate?: string,
   tagIds?: number[]
 ): SpendingByMonth[] {
   const tagFilter = buildTagFilterClause(tagIds);
+  const endClause = endDate !== undefined ? " AND t.ReceivedAt <= ?" : "";
+  const endParams = endDate !== undefined ? [endDate] : [];
   return queryRows<SpendingByMonth>(
     db,
     `SELECT strftime('%Y-%m', t.ReceivedAt) AS month,
@@ -218,10 +229,10 @@ export function getSpendingByMonth(
             COUNT(t.Id)   AS count
      FROM Transactions t
      WHERE ${EXPENSE_FILTER}
-       AND t.ReceivedAt >= ?${tagFilter.whereSql}
+       AND t.ReceivedAt >= ?${endClause}${tagFilter.whereSql}
      GROUP BY strftime('%Y-%m', t.ReceivedAt)
      ORDER BY month ASC`,
-    [startDate, ...tagFilter.params]
+    [startDate, ...endParams, ...tagFilter.params]
   );
 }
 
@@ -325,14 +336,18 @@ export function getIncomeSummary(
  *
  * @param db - sql.js Database instance.
  * @param startDate - Inclusive lower bound for ReceivedAt (ISO date string).
+ * @param endDate - Optional inclusive upper bound for ReceivedAt.
  * @param tagIds - Optional tag IDs to restrict results to.
  */
 export function getIncomeByMonth(
   db: Database,
   startDate: string,
+  endDate?: string,
   tagIds?: number[]
 ): SpendingByMonth[] {
   const tagFilter = buildTagFilterClause(tagIds);
+  const endClause = endDate !== undefined ? " AND t.ReceivedAt <= ?" : "";
+  const endParams = endDate !== undefined ? [endDate] : [];
   return queryRows<SpendingByMonth>(
     db,
     `SELECT strftime('%Y-%m', t.ReceivedAt) AS month,
@@ -340,10 +355,10 @@ export function getIncomeByMonth(
             COUNT(t.Id)   AS count
      FROM Transactions t
      WHERE t.IsDeleted = 0 AND t.IsIncome = 1 AND t.Amount IS NOT NULL
-       AND t.ReceivedAt >= ?${tagFilter.whereSql}
+       AND t.ReceivedAt >= ?${endClause}${tagFilter.whereSql}
      GROUP BY strftime('%Y-%m', t.ReceivedAt)
      ORDER BY month ASC`,
-    [startDate, ...tagFilter.params]
+    [startDate, ...endParams, ...tagFilter.params]
   );
 }
 
@@ -361,4 +376,66 @@ export function getUntaggedTransactionCount(db: Database): number {
      WHERE t.IsDeleted = 0 AND t.IsIncome = 0 AND tt.Id IS NULL`
   );
   return rows[0]?.cnt ?? 0;
+}
+
+/**
+ * Returns expense spending grouped by ISO week (strftime '%W'), ordered
+ * chronologically.  Used for the weekly trend chart within a single month.
+ *
+ * @param db - sql.js Database instance.
+ * @param startDate - Inclusive lower bound for ReceivedAt (ISO date string).
+ * @param endDate - Inclusive upper bound for ReceivedAt (ISO date string).
+ * @param tagIds - Optional tag IDs to restrict results to.
+ */
+export function getSpendingByWeek(
+  db: Database,
+  startDate: string,
+  endDate: string,
+  tagIds?: number[]
+): SpendingByWeek[] {
+  const tagFilter = buildTagFilterClause(tagIds);
+  return queryRows<SpendingByWeek>(
+    db,
+    `SELECT strftime('%Y-%W', t.ReceivedAt) AS week,
+            SUM(t.Amount) AS total,
+            COUNT(t.Id)   AS count
+     FROM Transactions t
+     WHERE ${EXPENSE_FILTER}
+       AND t.ReceivedAt >= ?
+       AND t.ReceivedAt <= ?${tagFilter.whereSql}
+     GROUP BY strftime('%Y-%W', t.ReceivedAt)
+     ORDER BY week ASC`,
+    [startDate, endDate, ...tagFilter.params]
+  );
+}
+
+/**
+ * Returns income grouped by ISO week, ordered chronologically.
+ * Used for the weekly trend chart within a single month.
+ *
+ * @param db - sql.js Database instance.
+ * @param startDate - Inclusive lower bound for ReceivedAt (ISO date string).
+ * @param endDate - Inclusive upper bound for ReceivedAt (ISO date string).
+ * @param tagIds - Optional tag IDs to restrict results to.
+ */
+export function getIncomeByWeek(
+  db: Database,
+  startDate: string,
+  endDate: string,
+  tagIds?: number[]
+): SpendingByWeek[] {
+  const tagFilter = buildTagFilterClause(tagIds);
+  return queryRows<SpendingByWeek>(
+    db,
+    `SELECT strftime('%Y-%W', t.ReceivedAt) AS week,
+            SUM(t.Amount) AS total,
+            COUNT(t.Id)   AS count
+     FROM Transactions t
+     WHERE t.IsDeleted = 0 AND t.IsIncome = 1 AND t.Amount IS NOT NULL
+       AND t.ReceivedAt >= ?
+       AND t.ReceivedAt <= ?${tagFilter.whereSql}
+     GROUP BY strftime('%Y-%W', t.ReceivedAt)
+     ORDER BY week ASC`,
+    [startDate, endDate, ...tagFilter.params]
+  );
 }

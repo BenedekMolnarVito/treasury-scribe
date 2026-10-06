@@ -1,0 +1,606 @@
+{
+  "title": "Treasury Scribe",
+  "url": "https://localhost/",
+  "count": 71,
+  "els": [
+    {
+      "i": 0,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "pill-month",
+      "text": "This Month",
+      "box": [
+        64,
+        247
+      ]
+    },
+    {
+      "i": 1,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "pill-lastMonth",
+      "text": "Last Month",
+      "box": [
+        169,
+        247
+      ]
+    },
+    {
+      "i": 2,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "pill-3months",
+      "text": "3 Mo",
+      "box": [
+        254,
+        247
+      ]
+    },
+    {
+      "i": 3,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "pill-6months",
+      "text": "6 Mo",
+      "box": [
+        321,
+        247
+      ]
+    },
+    {
+      "i": 4,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "pill-9months",
+      "text": "9 Mo",
+      "box": [
+        388,
+        247
+      ]
+    },
+    {
+      "i": 5,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "pill-12months",
+      "text": "12 Mo",
+      "box": [
+        458,
+        247
+      ]
+    },
+    {
+      "i": 6,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": "button",
+      "testid": null,
+      "text": "AddedManually (7)",
+      "box": [
+        86,
+        286
+      ]
+    },
+    {
+      "i": 7,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": "button",
+      "testid": null,
+      "text": "Bills (1)",
+      "box": [
+        197,
+        286
+      ]
+    },
+    {
+      "i": 8,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": "button",
+      "testid": null,
+      "text": "Car (1)",
+      "box": [
+        272,
+        286
+      ]
+    },
+    {
+      "i": 9,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": "button",
+      "testid": null,
+      "text": "Coffee (1)",
+      "box": [
+        59,
+        317
+      ]
+    },
+    {
+      "i": 10,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": "button",
+      "testid": null,
+      "text": "Discount (1)",
+      "box": [
+        158,
+        317
+      ]
+    },
+    {
+      "i": 11,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": "button",
+      "testid": null,
+      "text": "Entertainment (1)",
+      "box": [
+        280,
+        317
+      ]
+    },
+    {
+      "i": 12,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": "button",
+      "testid": null,
+      "text": "Food (1)",
+      "box": [
+        54,
+        349
+      ]
+    },
+    {
+      "i": 13,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": "button",
+      "testid": null,
+      "text": "Groceries (1)",
+      "box": [
+        150,
+        349
+      ]
+    },
+    {
+      "i": 14,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": "button",
+      "testid": "tag-filter-show-more",
+      "text": "show more (5)",
+      "box": [
+        265,
+        349
+      ]
+    },
+    {
+      "i": 15,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "nav-dashboard",
+      "text": "Dashboard",
+      "box": [
+        101,
+        879
+      ]
+    },
+    {
+      "i": 16,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "nav-transactions",
+      "text": "Transactions",
+      "box": [
+        307,
+        879
+      ]
+    },
+    {
+      "i": 17,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "This Month"
+    },
+    {
+      "i": 18,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Expenses"
+    },
+    {
+      "i": 19,
+      "kind": "text",
+      "tag": "div",
+      "testid": "hero-expenses",
+      "text": "\u25bc 208,990 HUF"
+    },
+    {
+      "i": 20,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Income"
+    },
+    {
+      "i": 21,
+      "kind": "text",
+      "tag": "div",
+      "testid": "hero-income",
+      "text": "\u25b2 0 HUF"
+    },
+    {
+      "i": 22,
+      "kind": "text",
+      "tag": "div",
+      "testid": "hero-net",
+      "text": "Net: -208,990 HUF"
+    },
+    {
+      "i": 23,
+      "kind": "text",
+      "tag": "div",
+      "testid": "hero-avg-day",
+      "text": "Avg spent/day: 69,663 HUF"
+    },
+    {
+      "i": 24,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Spending by Tag"
+    },
+    {
+      "i": 25,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "AddedManually"
+    },
+    {
+      "i": 26,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "34%"
+    },
+    {
+      "i": 27,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Housing"
+    },
+    {
+      "i": 28,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "29%"
+    },
+    {
+      "i": 29,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Bills"
+    },
+    {
+      "i": 30,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "29%"
+    },
+    {
+      "i": 31,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Transport"
+    },
+    {
+      "i": 32,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "2%"
+    },
+    {
+      "i": 33,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Car"
+    },
+    {
+      "i": 34,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "2%"
+    },
+    {
+      "i": 35,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Subscription"
+    },
+    {
+      "i": 36,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "1%"
+    },
+    {
+      "i": 37,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Entertainment"
+    },
+    {
+      "i": 38,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "1%"
+    },
+    {
+      "i": 39,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Groceries"
+    },
+    {
+      "i": 40,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "1%"
+    },
+    {
+      "i": 41,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Food"
+    },
+    {
+      "i": 42,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "1%"
+    },
+    {
+      "i": 43,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Discount"
+    },
+    {
+      "i": 44,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "1%"
+    },
+    {
+      "i": 45,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Health"
+    },
+    {
+      "i": 46,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "0%"
+    },
+    {
+      "i": 47,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Leisure"
+    },
+    {
+      "i": 48,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "0%"
+    },
+    {
+      "i": 49,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Coffee"
+    },
+    {
+      "i": 50,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "0%"
+    },
+    {
+      "i": 51,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Weekly Trend"
+    },
+    {
+      "i": 52,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Expenses"
+    },
+    {
+      "i": 53,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Income"
+    },
+    {
+      "i": 54,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Top Vendors"
+    },
+    {
+      "i": 55,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "1. Rent"
+    },
+    {
+      "i": 56,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "180,000"
+    },
+    {
+      "i": 57,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "2. Shell Fuel"
+    },
+    {
+      "i": 58,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "12,000"
+    },
+    {
+      "i": 59,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "3. Netflix"
+    },
+    {
+      "i": 60,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "4,990"
+    },
+    {
+      "i": 61,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "4. Spar Groceries"
+    },
+    {
+      "i": 62,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "4,500"
+    },
+    {
+      "i": 63,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "5. Lidl Shop"
+    },
+    {
+      "i": 64,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "3,200"
+    },
+    {
+      "i": 65,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "6. Pharmacy"
+    },
+    {
+      "i": 66,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "2,500"
+    },
+    {
+      "i": 67,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "7. Cafe"
+    },
+    {
+      "i": 68,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "1,800"
+    },
+    {
+      "i": 69,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Dashboard"
+    },
+    {
+      "i": 70,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Transactions"
+    }
+  ]
+}

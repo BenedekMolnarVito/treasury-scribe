@@ -8,7 +8,11 @@
 
 import type { Database } from "sql.js";
 import { createTransaction } from "../models/Transaction";
-import { addTransaction, existsDuplicate } from "../data/TransactionRepository";
+import {
+  addTransaction,
+  existsImportedDuplicate,
+  softDeleteTransaction,
+} from "../data/TransactionRepository";
 import { addTag, addTagToTransaction } from "../data/TagRepository";
 
 // ---------------------------------------------------------------------------
@@ -21,6 +25,10 @@ export interface ImportResult {
   errors: string[];
 }
 
+// Minimum accepted column count (old 10-column format). The 11th column
+// (ExcludeFromAutoLearn, added in FR8) is optional: rows with exactly 10
+// columns are still accepted; the importer defaults the flag to false.
+// Rows with fewer than 10 columns are rejected as malformed.
 const EXPECTED_COLUMN_COUNT = 10;
 
 // ---------------------------------------------------------------------------
@@ -87,8 +95,11 @@ interface ParsedRow {
   amount: number | null;
   currency: string | null;
   isCash: boolean;
+  isIncome: boolean;
   tags: string[];
   isDeleted: boolean;
+  /** FR8: false when absent (old 10-column exports) or when field value is "0". */
+  excludeFromAutoLearn: boolean;
 }
 
 function parseCSVRow(fields: string[]): ParsedRow {
@@ -103,6 +114,9 @@ function parseCSVRow(fields: string[]): ParsedRow {
 
   const rawIsCash = fields[7] ?? "0";
   const rawIsDeleted = fields[9] ?? "0";
+  // Column 11 (index 10) is optional: present in new-format exports (11 columns),
+  // absent in old exports (10 columns). Default to false when missing.
+  const rawExcludeFromAutoLearn = fields[10] ?? "0";
 
   return {
     receivedAt,
@@ -112,8 +126,10 @@ function parseCSVRow(fields: string[]): ParsedRow {
     amount,
     currency: fields[6] || null,
     isCash: rawIsCash === "1",
+    isIncome: false,
     tags: parseTagString(fields[8] ?? ""),
     isDeleted: rawIsDeleted === "1",
+    excludeFromAutoLearn: rawExcludeFromAutoLearn === "1",
   };
 }
 
@@ -148,11 +164,15 @@ function parseJSONRow(row: Record<string, unknown>): ParsedRow {
     amount,
     currency,
     isCash: row["IsCash"] === 1 || row["IsCash"] === true,
+    isIncome: row["IsIncome"] === 1 || row["IsIncome"] === true,
     tags: parseTagString(
       typeof row["Tags"] === "string" ? row["Tags"] : ""
     ),
     isDeleted:
       row["IsDeleted"] === 1 || row["IsDeleted"] === true,
+    // FR8: absent in old JSON exports — default false for backward-compat.
+    excludeFromAutoLearn:
+      row["ExcludeFromAutoLearn"] === 1 || row["ExcludeFromAutoLearn"] === true,
   };
 }
 
@@ -193,20 +213,6 @@ function parseTagString(raw: string): string[] {
 // ---------------------------------------------------------------------------
 
 function importParsedRow(db: Database, row: ParsedRow): "imported" | "skipped" {
-  if (row.isDeleted) return "skipped";
-
-  if (
-    existsDuplicate(
-      db,
-      row.notificationTitle,
-      row.notificationBody,
-      row.packageName,
-      row.receivedAt
-    )
-  ) {
-    return "skipped";
-  }
-
   const txData = createTransaction({
     receivedAt: row.receivedAt,
     notificationTitle: row.notificationTitle,
@@ -215,13 +221,23 @@ function importParsedRow(db: Database, row: ParsedRow): "imported" | "skipped" {
     amount: row.amount,
     currency: row.currency,
     isCash: row.isCash,
-    isDeleted: false,
-    isIncome: false,
+    isDeleted: row.isDeleted,
+    isIncome: row.isIncome,
+    excludeFromAutoLearn: row.excludeFromAutoLearn,
   });
+
+  if (existsImportedDuplicate(db, txData)) {
+    return "skipped";
+  }
 
   const savedTx = addTransaction(db, txData);
 
-  // Re-create original tags
+  // If the row was soft-deleted in the source, apply soft-delete now.
+  if (row.isDeleted) {
+    softDeleteTransaction(db, savedTx.id);
+  }
+
+  // Re-create original tags (regardless of isDeleted state).
   for (const tagName of row.tags) {
     const tag = addTag(db, tagName);
     addTagToTransaction(db, savedTx.id, tag.id);
