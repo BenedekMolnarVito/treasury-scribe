@@ -24,7 +24,7 @@ PATH="$(printf '%s' "$PATH" | awk -v RS=: -v ORS=: '!seen[$0]++' | sed 's/:$//')
 export PATH; unset -f _ts_prepend; unset _d
 
 # Never touch a physical phone: smoke tooling targets the emulator only.
-export ANDROID_SERIAL="${ANDROID_SERIAL:-emulator-5554}"
+export ANDROID_SERIAL=emulator-5554
 
 # TYPESAFE_API_KEY must be exported in your shell (e.g. ~/.zshrc); jev.py also
 # falls back to sourcing ~/.zshrc. Never commit the key.

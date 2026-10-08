@@ -99,12 +99,13 @@ export function createTransactionFromNotification(
  * Must run before tryParseEuropean, which would otherwise match the balance
  * amount on the second line ("HUF egyenlege: 26 249,55 Ft").
  */
-const HU_AMOUNT = String.raw`\d{1,3}(?:\s\d{3})+(?:,\d+)?|\d+(?:,\d+)?`;
+const HU_AMOUNT = String.raw`(?<!\d)\d{1,3}(?:[.\s]\d{3})+(?:,\d+)?|(?<!\d)\d+(?:,\d+)?`;
 const HU_CURRENCY = String.raw`Ft|[A-Z]{3}|[€£¥₹₽₣₩$]`;
 const REVOLUT_HU_AMOUNT_CLAUSE = new RegExp(
   String.raw`(${HU_AMOUNT})\s*(${HU_CURRENCY})` +
     String.raw`(?:\s*\(\s*(${HU_AMOUNT})\s*(${HU_CURRENCY})\s*\))?` +
-    String.raw`\s*összeg(?:et|ű)`
+    String.raw`\s*összeg(?:et|ű)`,
+  'i'
 );
 
 function tryParseHungarianPayment(text: string): ParsedAmountCurrency | null {
