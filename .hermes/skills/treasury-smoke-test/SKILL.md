@@ -146,11 +146,21 @@ expression (React re-renders after the tick, so the read sees stale DOM).
   in the log (`seeded N transactions`).
 - **WebView CDP socket PID changes** when the WebView respawns; `cdp.py`
   re-resolves and re-forwards on every call — do not cache the WS URL.
-- **File round-trips and notification ingestion are not UI-drivable** (Capacitor
-  Share/Filesystem + native picker; the listener only accepts its allow-listed
-  source package). These stay `kind: vitest` — do not fake on-device results.
+- **File round-trips are not UI-drivable** (Capacitor Share/Filesystem + native
+  picker). They stay `kind: vitest`. Do not fake on-device results. **Notification
+  ingestion IS drivable**: see the notification suite below.
 - **Maestro is not the DOM tool here.** `.maestro/smoke.yaml` is only for boot/
   launch; the WebView DOM is absent from the accessibility tree.
+
+## Notification ingestion suite (Windows + macOS)
+
+`.maestro/smoke/notif_runner.py` + `notif_scenarios.yaml` (21 scenarios: group
+summaries, autogroup, dedup windows, restart snapshot path, parser regressions,
+Android 15 OTP redaction). It posts real notifications from a smoke-only poster APK
+(`fixtures/poster`, built by `fixtures/build_poster.sh`). The suite was planned in
+`plans/notif_group_summary_suite.md`, and small-model executor steps are in
+`plans/EXECUTOR_group_summary.md`. Reports go to `out/notif/` (git-ignored).
+Delegated workflow: Hermes skill `tiered-emulator-smoke-test`.
 
 ## Verification
 
