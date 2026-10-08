@@ -79,27 +79,61 @@ export function createTransactionFromNotification(
 }
 
 /**
- * Matches the Hungarian Revolut payment sentence:
- *   "1 599 Ft összeget fizettél itt: OBI."
+ * Matches the amount clause of a Hungarian Revolut notification — the amount
+ * directly in front of "összeget" / "összegű" ("the sum"):
+ *   "1 599 Ft összeget fizettél itt: OBI."             — paid at <merchant>
+ *   "9 040 Ft összeget költöttél."                      — spent
+ *   "4 482,82 Ft (13,72 USD) összeget vettél fel itt:"  — charged, with FX
+ *   "10 USD (3 299,96 Ft) összeget vettél fel itt:"     — charged, with FX
+ *   "20 168 Ft összeget küldtél neki: …"                — sent
+ *   "… küldött, 20 168 Ft összegű átutalás teljesült."  — transfer completed
+ *
+ * Anchoring on the noun instead of the verb keeps working when Revolut
+ * rewords the verb (the "fizettél" → "költöttél" switch caused this bug).
+ * Revolut groups thousands with NBSP; JS `\s` covers it.
+ *
+ * FX charges carry two amounts. The Ft one is preferred (whichever side of
+ * the parenthesis it is on) because dashboard aggregates SUM(Amount) without
+ * currency conversion; the foreign amount is kept only if no Ft amount exists.
+ *
  * Must run before tryParseEuropean, which would otherwise match the balance
- * amount on the second line of the same notification.
+ * amount on the second line ("HUF egyenlege: 26 249,55 Ft").
  */
+const HU_AMOUNT = String.raw`\d{1,3}(?:\s\d{3})+(?:,\d+)?|\d+(?:,\d+)?`;
+const HU_CURRENCY = String.raw`Ft|[A-Z]{3}|[€£¥₹₽₣₩$]`;
+const REVOLUT_HU_AMOUNT_CLAUSE = new RegExp(
+  String.raw`(${HU_AMOUNT})\s*(${HU_CURRENCY})` +
+    String.raw`(?:\s*\(\s*(${HU_AMOUNT})\s*(${HU_CURRENCY})\s*\))?` +
+    String.raw`\s*összeg(?:et|ű)`
+);
+
 function tryParseHungarianPayment(text: string): ParsedAmountCurrency | null {
-  const match = text.match(/(\d+(?:\s\d+)*)\s*Ft\s+összeget\s+fizett/i);
+  const match = text.match(REVOLUT_HU_AMOUNT_CLAUSE);
   if (!match) return null;
 
-  const amountText = match[1];
-  if (!amountText) return null;
+  const [, chargedAmount, chargedCurrency, convertedAmount, convertedCurrency] =
+    match;
+  if (!chargedAmount || !chargedCurrency) return null;
 
-  const amount = parseFloat(amountText.replace(/\s/g, ""));
+  const useConverted =
+    resolveCurrencyToken(chargedCurrency) !== "HUF" &&
+    convertedAmount !== undefined &&
+    convertedCurrency !== undefined &&
+    resolveCurrencyToken(convertedCurrency) === "HUF";
+
+  const amountText = useConverted ? convertedAmount : chargedAmount;
+  const currencyToken = useConverted ? convertedCurrency : chargedCurrency;
+
+  const amount = parseFloat(amountText.replace(/\s/g, "").replace(",", "."));
   if (isNaN(amount)) return null;
 
-  return { amount, currency: "HUF" };
+  return { amount, currency: resolveCurrencyToken(currencyToken) };
 }
 
 function tryParseEuropean(text: string): ParsedAmountCurrency | null {
+  // Thousands may be grouped with "." or with (NB)space: "1.234,56" / "1 234,56".
   const match = text.match(
-    /(\d{1,3}(?:\.\d{3})*,\d+)\s*([A-Z]{2,4}|[€£¥₹₽₣₩$])/i
+    /(\d{1,3}(?:[.\s]\d{3})*,\d+)\s*([A-Z]{2,4}|[€£¥₹₽₣₩$])/i
   );
   if (!match) return null;
 
@@ -107,7 +141,7 @@ function tryParseEuropean(text: string): ParsedAmountCurrency | null {
   const currencyToken = match[2];
   if (!amountText || !currencyToken) return null;
 
-  const amount = parseFloat(amountText.replace(/\./g, "").replace(",", "."));
+  const amount = parseFloat(amountText.replace(/[.\s]/g, "").replace(",", "."));
   if (isNaN(amount)) return null;
 
   return { amount, currency: resolveCurrencyToken(currencyToken) };

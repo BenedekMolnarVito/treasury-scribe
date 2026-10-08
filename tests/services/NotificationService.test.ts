@@ -226,6 +226,98 @@ describe("parseAmountAndCurrency", () => {
       expect(result.currency).toBe("HUF");
     });
   });
+
+  // Regression — export treasury-scribe-transactions_20261008_153239.json.
+  // Revolut now says "összeget költöttél" (spent) instead of "fizettél"
+  // (paid). The old verb-specific matcher missed it, so tryParseEuropean
+  // captured the comma-decimal tail of the BALANCE line (e.g. "249,55 Ft"
+  // out of "26 249,55 Ft"). Real bodies use NBSP (\u00a0) digit grouping.
+  describe("Revolut Hungarian amount clause (… összeget <verb>)", () => {
+    const NB = "\u00a0";
+
+    it.each([
+      // [body, expected spend] — exact bodies of txns #1528, #1527, #1526
+      [`⚡ 9${NB}040${NB}Ft összeget költöttél.\nHUF egyenlege: 26${NB}249,55${NB}Ft`, 9040],
+      [`🍿 850${NB}Ft összeget költöttél.\nHUF egyenlege: 35${NB}289,55${NB}Ft`, 850],
+      [`🍽️ 3${NB}006${NB}Ft összeget költöttél.\nHUF egyenlege: 36${NB}139,55${NB}Ft`, 3006],
+      [`🚎️️ 6${NB}518${NB}Ft összeget költöttél.\nHUF egyenlege: 39${NB}145,55${NB}Ft`, 6518],
+      [`🛒 3${NB}051${NB}Ft összeget költöttél.\nA(z) HUF Zseb egyenlege: 53${NB}756,49${NB}Ft.`, 3051],
+      [`🛍 6${NB}639,22${NB}Ft összeget fizettél itt: SST.\nA(z) HUF Zseb egyenlege: 31${NB}463,32${NB}Ft.`, 6639.22],
+      [`🤑 5${NB}000${NB}Ft összeget vettél fel itt: ATM.\nHUF egyenlege: 1${NB}234,56${NB}Ft`, 5000],
+      [`20${NB}168${NB}Ft összeget küldtél neki: Fundamenta. Ma fog megérkezni.`, 20168],
+    ])("parses the spend, not the balance: %s", (body, expected) => {
+      const result = parseAmountAndCurrency(body);
+      expect(result.amount).toBeCloseTo(expected);
+      expect(result.currency).toBe("HUF");
+    });
+
+    it("ignores digits in the notification title prepended to the body", () => {
+      // createTransactionFromNotification parses `${title} ${body}`.
+      const result = parseAmountAndCurrency(
+        `Spar 2 ⚡ 9${NB}040${NB}Ft összeget költöttél.\nHUF egyenlege: 26${NB}249,55${NB}Ft`
+      );
+      expect(result.amount).toBeCloseTo(9040);
+      expect(result.currency).toBe("HUF");
+    });
+
+    it("takes the HUF spend when a foreign conversion follows in parentheses", () => {
+      const result = parseAmountAndCurrency(
+        `🛍 4${NB}482,82${NB}Ft (13,72${NB}USD) összeget vettél fel itt: Openrouter.\nA(z) HUF Zseb egyenlege: 45${NB}663,55${NB}Ft.`
+      );
+      expect(result.amount).toBeCloseTo(4482.82);
+      expect(result.currency).toBe("HUF");
+    });
+
+    it("takes the HUF conversion when the charge is in a foreign currency", () => {
+      // Dashboard sums Amount without FX conversion, so the HUF amount that
+      // actually left the HUF pocket is stored (matches user-corrected rows).
+      const result = parseAmountAndCurrency(
+        `🛍 10${NB}USD (3${NB}299,96${NB}Ft) összeget vettél fel itt: Vectorize Ai.\nA(z) HUF Zseb egyenlege: 51${NB}463,37${NB}Ft.`
+      );
+      expect(result.amount).toBeCloseTo(3299.96);
+      expect(result.currency).toBe("HUF");
+    });
+
+    it("takes the HUF conversion of a decimal foreign charge", () => {
+      const result = parseAmountAndCurrency(
+        `😎 29,10${NB}EUR (10${NB}401,61${NB}Ft) összeget vettél fel itt: driffle.\nA(z) HUF Zseb egyenlege: 41${NB}222,05${NB}Ft.`
+      );
+      expect(result.amount).toBeCloseTo(10401.61);
+      expect(result.currency).toBe("HUF");
+    });
+
+    it("keeps the foreign charge when no HUF conversion is given", () => {
+      const result = parseAmountAndCurrency(
+        `🛍 13,72${NB}USD összeget vettél fel itt: Openrouter.`
+      );
+      expect(result.amount).toBeCloseTo(13.72);
+      expect(result.currency).toBe("USD");
+    });
+
+    it("keeps the foreign charge when the conversion is not HUF", () => {
+      const result = parseAmountAndCurrency(
+        `🛍 10${NB}USD (9,20${NB}EUR) összeget vettél fel itt: Shop.`
+      );
+      expect(result.amount).toBeCloseTo(10);
+      expect(result.currency).toBe("USD");
+    });
+
+    it("parses the 'összegű átutalás' (transfer completed) clause", () => {
+      const result = parseAmountAndCurrency(
+        `A(z) Fundamenta-Lakáskassza Zrt. számára küldött, 20${NB}168${NB}Ft összegű átutalás teljesült.`
+      );
+      expect(result.amount).toBeCloseTo(20168);
+      expect(result.currency).toBe("HUF");
+    });
+  });
+
+  describe("European format with space-grouped thousands", () => {
+    it("keeps the thousands group of an NBSP-grouped decimal amount", () => {
+      const result = parseAmountAndCurrency("Fizetés: 12\u00a0345,67\u00a0Ft");
+      expect(result.amount).toBeCloseTo(12345.67);
+      expect(result.currency).toBe("HUF");
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -270,6 +362,17 @@ describe("createTransactionFromNotification", () => {
     );
     expect(tx.currency).toBe("EUR");
     expect(tx.amount).toBeCloseTo(1234.56);
+  });
+
+  it("captures the spend, not the balance, of a real 'költöttél' notification", () => {
+    // Exact capture #1528 from the 2026-10-08 export (previously 249.55).
+    const tx = createTransactionFromNotification(
+      "MVM Next",
+      "⚡ 9\u00a0040\u00a0Ft összeget költöttél.\nHUF egyenlege: 26\u00a0249,55\u00a0Ft",
+      "com.revolut.revolut"
+    );
+    expect(tx.amount).toBe(9040);
+    expect(tx.currency).toBe("HUF");
   });
 
   it("jsonContent contains title, body, packageName, timestamp, rawText, amount, currency", () => {
