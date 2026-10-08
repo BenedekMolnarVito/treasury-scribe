@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SMOKE-TEST ONLY. Translucent (not NoDisplay): Post finishes asynchronously after logging evidence. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <application android:label="TSSmokePoster">
+    <activity android:name="com.revolut.revolut.Post" android:exported="true"
+        android:excludeFromRecents="true" android:noHistory="true"
+        android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
+  </application>
+</manifest>

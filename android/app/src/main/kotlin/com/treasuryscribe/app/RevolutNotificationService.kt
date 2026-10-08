@@ -95,6 +95,10 @@ class RevolutNotificationService : NotificationListenerService() {
         sbn ?: return
         if (sbn.packageName != REVOLUT_PACKAGE) return
 
+        // Skip group summary notifications (Android creates these for 4+ notification groups)
+        // They typically have empty body and no useful transaction data.
+        if ((sbn.notification?.flags ?: 0) and Notification.FLAG_GROUP_SUMMARY != 0) return
+
         val extras = sbn.notification?.extras ?: return
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val body = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
