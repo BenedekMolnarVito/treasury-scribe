@@ -24,6 +24,10 @@ class RevolutNotificationService : NotificationListenerService() {
     companion object {
         const val REVOLUT_PACKAGE = "com.revolut.revolut"
         const val EVENT_NOTIFICATION_RECEIVED = "notificationReceived"
+        /** Body Android 15+ substitutes for OTP-looking content when the
+         * listener lacks RECEIVE_SENSITIVE_NOTIFICATIONS (signature-only).
+         * Mirrors REDACTED_NOTIFICATION_BODY in NotificationServiceCore.ts. */
+        const val REDACTED_BODY = "Sensitive notification content hidden"
         private const val CHANNEL_ID = "treasury_scribe_channel"
         private const val FOREGROUND_NOTIFICATION_ID = 1001
         private const val FOREGROUND_NOTIFICATION_TEXT =
@@ -209,6 +213,11 @@ class RevolutNotificationService : NotificationListenerService() {
         val extras = sbn.notification?.extras ?: return null
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val body = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+
+        // Android 15+ redaction: unrecoverable without the signature-level
+        // permission, so drop before queue/bridge. The TS ingestion guard
+        // (IngestionService step 0) is the backstop for the snapshot path.
+        if (body == REDACTED_BODY) return null
 
         return JSObject().apply {
             put("title", title)

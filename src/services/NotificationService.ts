@@ -1,5 +1,7 @@
 export {
   isRevolutNotification,
+  isRedactedNotification,
+  REDACTED_NOTIFICATION_BODY,
   parseAmountAndCurrency,
   createTransactionFromNotification,
 } from "./NotificationServiceCore";

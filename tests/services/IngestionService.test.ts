@@ -26,6 +26,7 @@ import {
   addTransaction,
   softDeleteTransaction,
   getTransactionById,
+  getAllTransactionsIncludingDeleted,
 } from "../../src/data/TransactionRepository";
 import { addTag, addTagToTransaction } from "../../src/data/TagRepository";
 import { createTransaction } from "../../src/models/Transaction";
@@ -613,5 +614,51 @@ describe("FR8 – exception transactions excluded from auto-tag learning", () =>
     const tagNames = result!.transactionTags.map((tt) => tt.tagName);
     // Default is included → new tx SHOULD have "DefaultTag"
     expect(tagNames).toContain("DefaultTag");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Android 15+ redaction guard (NG21): redacted bodies are dropped, never stored
+// ---------------------------------------------------------------------------
+
+describe("ingestNotification – redacted notification guard", () => {
+  it("returns null and persists nothing for the redaction sentinel body", () => {
+    const result = ingestNotification(
+      db,
+      makeTxData(
+        "Revolut",
+        "Sensitive notification content hidden",
+        "com.revolut.revolut",
+        makeTimestamp()
+      )
+    );
+
+    expect(result).toBeNull();
+    expect(getAllTransactionsIncludingDeleted(db)).toHaveLength(0);
+  });
+
+  it("still ingests a normal notification after a redacted one is dropped", () => {
+    const dropped = ingestNotification(
+      db,
+      makeTxData(
+        "Revolut",
+        "Sensitive notification content hidden",
+        "com.revolut.revolut",
+        makeTimestamp()
+      )
+    );
+    expect(dropped).toBeNull();
+
+    const kept = ingestNotification(
+      db,
+      makeTxData(
+        "OBI",
+        "1 599 Ft összeget fizettél itt: OBI.",
+        "com.revolut.revolut",
+        makeTimestamp(10)
+      )
+    );
+    expect(kept).not.toBeNull();
+    expect(getAllTransactionsIncludingDeleted(db)).toHaveLength(1);
   });
 });

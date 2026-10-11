@@ -34,6 +34,8 @@ import {
 
 import { addTag, addTagToTransaction } from "../data/TagRepository";
 
+import { isRedactedNotification } from "./NotificationServiceCore";
+
 /** Tag name excluded when propagating auto-tags from a previous transaction. */
 const MANUAL_TAG = "AddedManually";
 
@@ -46,6 +48,10 @@ const MANUAL_TAG = "AddedManually";
  * order.
  *
  * **Behaviour sequence**
+ * 0. If the body is Android 15+ redacted content
+ *    ("Sensitive notification content hidden"), returns `null` without
+ *    persisting — the real amount is unrecoverable without the
+ *    signature-level permission.
  * 1. If a duplicate exists within ±5 s, returns `null` without persisting.
  * 2. Captures the most-recent same-title transaction **before** inserting, so
  *    that the new row is not accidentally returned as the "previous" one.
@@ -60,13 +66,24 @@ const MANUAL_TAG = "AddedManually";
  * @param db          - sql.js Database instance (caller controls lifecycle).
  * @param txData      - The transaction to insert (id is not required).
  * @returns The persisted {@link Transaction} (possibly soft-deleted), or
- *          `null` when the notification was a duplicate and was skipped.
+ *          `null` when the notification was redacted or a duplicate and
+ *          was skipped.
  */
 export function ingestNotification(
   db: Database,
   txData: Omit<Transaction, "id" | "parsedAmount" | "parsedCurrency" | "transactionTags">,
   duplicateWindowSeconds = 5
 ): Transaction | null {
+  // -------------------------------------------------------------------------
+  // 0. Redaction guard (Android 15+): OTP-looking bodies arrive as
+  //    "Sensitive notification content hidden" without the signature-level
+  //    permission, so the real content is unrecoverable. Drop before any
+  //    persistence (dedup window, auto-tag learning) can observe it.
+  // -------------------------------------------------------------------------
+  if (isRedactedNotification(txData.notificationBody)) {
+    return null;
+  }
+
   // -------------------------------------------------------------------------
   // 1. Deduplication guard
   // -------------------------------------------------------------------------
