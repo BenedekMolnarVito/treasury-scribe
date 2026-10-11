@@ -64,7 +64,7 @@ Routes: `/`→Dashboard (home), `/transactions`→list, `/edit/:id`→edit, `/da
 
 ## GIT
 
-- Branch feat/<goal-slug>, auto by orchestrator.
+- Branch feat/<goal-slug> from develop (never main), auto by orchestrator. PR base = develop.
 - Commit = Conventional: feat(<scope>): <imperative>.
 - Never force-push. Never amend published. Never --no-verify.
 - PR auto when all acceptance met.
