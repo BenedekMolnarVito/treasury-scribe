@@ -18,11 +18,13 @@ const {
   loadPersistedDatabaseMock,
   persistDatabaseMock,
   notificationListenerMock,
+  ingestNotificationMock,
 } = vi.hoisted(() => ({
   mockDb: { close: vi.fn() },
   listenerHandle: { remove: vi.fn() },
   loadPersistedDatabaseMock: vi.fn(),
   persistDatabaseMock: vi.fn(),
+  ingestNotificationMock: vi.fn(),
   notificationListenerMock: {
     addListener: vi.fn(),
     isNotificationAccessGranted: vi.fn(),
@@ -50,6 +52,10 @@ vi.mock("../src/plugins/NotificationListenerPlugin", () => ({
   NotificationListener: notificationListenerMock,
 }));
 
+vi.mock("../src/services/IngestionService", () => ({
+  ingestNotification: ingestNotificationMock,
+}));
+
 vi.mock("../src/pages/TransactionsPage", () => ({
   default: () => <div>Transactions page mock</div>,
 }));
@@ -65,7 +71,23 @@ vi.mock("../src/pages/DashboardPage", () => ({
 describe("App notification lifecycle", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Deterministic localStorage: the jsdom build here does not provide a
+    // working one, and App/ProcessedNotifications access it defensively.
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string): string | null => store.get(key) ?? null,
+      setItem: (key: string, value: string): void => {
+        store.set(key, value);
+      },
+      removeItem: (key: string): void => {
+        store.delete(key);
+      },
+      clear: (): void => {
+        store.clear();
+      },
+    });
     loadPersistedDatabaseMock.mockResolvedValue(mockDb);
+    ingestNotificationMock.mockReturnValue({ id: "tx-1", transactionTags: [] });
     notificationListenerMock.addListener.mockResolvedValue(listenerHandle);
     notificationListenerMock.openNotificationAccessSettings.mockResolvedValue(
       undefined
@@ -197,6 +219,80 @@ describe("App notification lifecycle", () => {
     await waitFor(() => {
       expect(notificationListenerMock.getActiveNotifications).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("ingests a stale shade item only once across repeated polls", async () => {
+    localStorage.clear();
+    notificationListenerMock.isNotificationAccessGranted.mockResolvedValue({
+      granted: true,
+    });
+    ingestNotificationMock.mockReturnValue({ id: "tx-1", transactionTags: [] });
+    const staleNotif = {
+      title: "OBI",
+      body: "1 599 Ft összeget fizettél itt: OBI.",
+      packageName: "com.revolut.revolut",
+      // Posted long ago: far outside the ±seconds SQL dedup window.
+      postedAt: "2024-03-01T12:00:00.000Z",
+    };
+    notificationListenerMock.getActiveNotifications.mockResolvedValue({
+      notifications: [staleNotif],
+    });
+
+    render(<App />);
+
+    // Cold-start poll ingests it once.
+    await waitFor(() => {
+      expect(ingestNotificationMock).toHaveBeenCalledTimes(1);
+    });
+
+    // Repeated focus polls must not re-ingest the same stale item.
+    window.dispatchEvent(new Event("focus"));
+    await waitFor(() => {
+      expect(notificationListenerMock.getActiveNotifications).toHaveBeenCalledTimes(2);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(ingestNotificationMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-ingest on focus an item already delivered live", async () => {
+    localStorage.clear();
+    notificationListenerMock.isNotificationAccessGranted.mockResolvedValue({
+      granted: true,
+    });
+    ingestNotificationMock.mockReturnValue({ id: "tx-1", transactionTags: [] });
+    const liveNotif = {
+      title: "OBI",
+      body: "1 599 Ft összeget fizettél itt: OBI.",
+      packageName: "com.revolut.revolut",
+      postedAt: "2024-03-01T12:00:00.000Z",
+    };
+    notificationListenerMock.getActiveNotifications.mockResolvedValue({
+      notifications: [],
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(notificationListenerMock.startListening).toHaveBeenCalledOnce();
+    });
+
+    // Live delivery while the app is open.
+    const liveCallback = notificationListenerMock.addListener.mock.calls[0][1] as (
+      n: typeof liveNotif
+    ) => void;
+    liveCallback(liveNotif);
+    expect(ingestNotificationMock).toHaveBeenCalledTimes(1);
+
+    // The item is still visible in the shade; a focus poll must skip it.
+    notificationListenerMock.getActiveNotifications.mockResolvedValue({
+      notifications: [liveNotif],
+    });
+    window.dispatchEvent(new Event("focus"));
+    await waitFor(() => {
+      expect(notificationListenerMock.getActiveNotifications).toHaveBeenCalledTimes(2);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(ingestNotificationMock).toHaveBeenCalledTimes(1);
   });
 });
 

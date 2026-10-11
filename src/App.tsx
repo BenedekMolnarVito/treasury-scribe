@@ -26,6 +26,10 @@ import {
   isRevolutNotification,
 } from "./services/NotificationService";
 import { ingestNotification as ingestNotificationTransaction } from "./services/IngestionService";
+import {
+  isShadeNotificationProcessed,
+  markShadeNotificationProcessed,
+} from "./services/ProcessedNotifications";
 
 /** Safely reads a value from localStorage; returns null if unavailable. */
 function safeGetLocalStorage(key: string): string | null {
@@ -158,6 +162,12 @@ const App: React.FC = () => {
         if (!isRevolutNotification(packageName)) {
           continue;
         }
+        // The shade is a snapshot: skip items already offered to ingestion
+        // (SQL dedup only covers a ±seconds window, not stale shade items).
+        if (isShadeNotificationProcessed({ packageName, title, body, postedAt })) {
+          continue;
+        }
+        markShadeNotificationProcessed({ packageName, title, body, postedAt });
 
         const transaction = createTransactionFromNotification(
           title,
@@ -300,6 +310,9 @@ const App: React.FC = () => {
             if (!isRevolutNotification(packageName)) {
               return;
             }
+            // Record live deliveries too: a later shade poll of the same
+            // (still visible) item must not re-ingest it.
+            markShadeNotificationProcessed({ packageName, title, body, postedAt });
 
             const transaction = createTransactionFromNotification(
               title,
