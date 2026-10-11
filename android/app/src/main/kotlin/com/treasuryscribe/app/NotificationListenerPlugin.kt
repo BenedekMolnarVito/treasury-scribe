@@ -141,7 +141,7 @@ class NotificationListenerPlugin : Plugin() {
     fun getActiveNotifications(call: PluginCall) {
         val notifications = JSArray()
         val service = RevolutNotificationService.serviceInstance
-        val active = service?.activeNotifications.orEmpty()
+        val active = service?.getRevolutActiveNotifications().orEmpty()
         for (sbn in active) {
             val extras = sbn.notification?.extras ?: continue
             val title = extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() ?: ""

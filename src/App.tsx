@@ -351,6 +351,9 @@ const App: React.FC = () => {
     const handleFocus = (): void => {
       if (cancelled) return;
       void ensureNotificationMonitoring();
+      // Drain any notifications that arrived in the native shade while the
+      // app was paused (e.g. user switched away after a Revolut push came in).
+      void refreshActiveNotifications();
     };
 
     const handleVisibilityChange = (): void => {

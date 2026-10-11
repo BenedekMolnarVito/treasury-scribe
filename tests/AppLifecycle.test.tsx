@@ -151,5 +151,52 @@ describe("App notification lifecycle", () => {
     ).toHaveBeenCalledTimes(1);
     expect(persistDatabaseMock).not.toHaveBeenCalled();
   });
+
+  it("drains active notifications from the native queue on app focus (resume)", async () => {
+    notificationListenerMock.isNotificationAccessGranted.mockResolvedValue({
+      granted: true,
+    });
+
+    render(<App />);
+
+    // Wait for cold-start bootstrap to complete:
+    // addListener → ensureNotificationMonitoring → startListening → cold-start drain.
+    await waitFor(() => {
+      expect(notificationListenerMock.startListening).toHaveBeenCalledOnce();
+    });
+    await waitFor(() => {
+      expect(notificationListenerMock.getActiveNotifications).toHaveBeenCalledOnce();
+    });
+
+    // Simulate app returning to foreground.
+    window.dispatchEvent(new Event("focus"));
+
+    // Resume should trigger a second drain of the notification shade.
+    await waitFor(() => {
+      expect(notificationListenerMock.getActiveNotifications).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("drains active notifications from the native queue on visibility change to visible", async () => {
+    notificationListenerMock.isNotificationAccessGranted.mockResolvedValue({
+      granted: true,
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(notificationListenerMock.startListening).toHaveBeenCalledOnce();
+    });
+    await waitFor(() => {
+      expect(notificationListenerMock.getActiveNotifications).toHaveBeenCalledOnce();
+    });
+
+    // Simulate app returning to foreground via visibility change.
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    await waitFor(() => {
+      expect(notificationListenerMock.getActiveNotifications).toHaveBeenCalledTimes(2);
+    });
+  });
 });
 

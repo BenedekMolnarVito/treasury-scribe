@@ -91,24 +91,68 @@ class RevolutNotificationService : NotificationListenerService() {
         return super.onBind(intent)
     }
 
-    override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        sbn ?: return
-        if (sbn.packageName != REVOLUT_PACKAGE) return
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        // Re-process persistent notifications still sitting in the shade
+        // (e.g. service was killed and restarted while a Revolut push
+        // was never swiped away). Same path as live posts.
+        rescanActiveNotifications()
+    }
+
+    /**
+     * Actively visible Revolut notifications, excluding group summaries.
+     * Wraps [NotificationListenerService.getActiveNotifications], which is
+     * only callable once the listener is bound — returns empty otherwise.
+     */
+    fun getRevolutActiveNotifications(): List<StatusBarNotification> {
+        return try {
+            super.getActiveNotifications()
+                ?.filter { sbn ->
+                    sbn.packageName == REVOLUT_PACKAGE &&
+                        (sbn.notification?.flags ?: 0) and Notification.FLAG_GROUP_SUMMARY == 0
+                }
+                .orEmpty()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun rescanActiveNotifications() {
+        for (sbn in getRevolutActiveNotifications()) {
+            val data = toNotificationData(sbn) ?: continue
+            val plugin = pluginInstance
+            if (plugin != null) {
+                plugin.dispatchNotificationReceived(data)
+            } else {
+                synchronized(pendingNotifications) {
+                    pendingNotifications.add(data)
+                }
+            }
+        }
+    }
+
+    private fun toNotificationData(sbn: StatusBarNotification): JSObject? {
+        if (sbn.packageName != REVOLUT_PACKAGE) return null
 
         // Skip group summary notifications (Android creates these for 4+ notification groups)
         // They typically have empty body and no useful transaction data.
-        if ((sbn.notification?.flags ?: 0) and Notification.FLAG_GROUP_SUMMARY != 0) return
+        if ((sbn.notification?.flags ?: 0) and Notification.FLAG_GROUP_SUMMARY != 0) return null
 
-        val extras = sbn.notification?.extras ?: return
+        val extras = sbn.notification?.extras ?: return null
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val body = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
 
-        val data = JSObject().apply {
+        return JSObject().apply {
             put("title", title)
             put("body", body)
             put("packageName", REVOLUT_PACKAGE)
             put("postedAt", formatPostedAt(sbn.postTime))
         }
+    }
+
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        sbn ?: return
+        val data = toNotificationData(sbn) ?: return
 
         val plugin = pluginInstance
         if (plugin != null) {
