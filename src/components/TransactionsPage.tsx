@@ -35,6 +35,7 @@ import {
   getTransactionsByTagFilter,
 } from "../data/TransactionRepository";
 import type { TagWithCount } from "../data/TransactionRepository";
+import type { Tag } from "../models/Tag";
 import ToggleSwitch from "./ToggleSwitch";
 
 // ---------------------------------------------------------------------------
@@ -269,10 +270,14 @@ interface AddTransactionModalProps {
     currency?: string,
     isCash?: boolean,
     isIncome?: boolean,
-    receivedAt?: string
+    receivedAt?: string,
+    excludeFromAutoLearn?: boolean,
+    tagNames?: string[]
   ) => Promise<void>;
   /** Called when the modal should close (Cancel or backdrop click). */
   onClose: () => void;
+  /** Optional tag search function threaded in from the hook. */
+  searchTags?: (query: string) => Tag[];
 }
 
 /**
@@ -281,6 +286,7 @@ interface AddTransactionModalProps {
 const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   onAdd,
   onClose,
+  searchTags,
 }) => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -288,16 +294,75 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [currency, setCurrency] = useState("");
   const [isCash, setIsCash] = useState(false);
   const [isIncome, setIsIncome] = useState(false);
+  const [excludeFromAutoLearn, setExcludeFromAutoLearn] = useState(false);
+  const [tagNames, setTagNames] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   const [receivedAt, setReceivedAt] = useState(() => {
     const now = new Date();
     const pad = (n: number) => n.toString().padStart(2, "0");
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   });
 
+  /** Commit the current tag input value as a new pill. */
+  const commitTagInput = (): void => {
+    const trimmed = tagInput.trim();
+    if (trimmed !== "" && !tagNames.includes(trimmed)) {
+      setTagNames((prev) => [...prev, trimmed]);
+    }
+    setTagInput("");
+    setTagSuggestions([]);
+  };
+
+  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      commitTagInput();
+    } else if (e.key === "Backspace" && tagInput === "" && tagNames.length > 0) {
+      setTagNames((prev) => prev.slice(0, -1));
+    }
+  };
+
+  const handleTagInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const val = e.target.value;
+    // Auto-split on comma
+    if (val.includes(",")) {
+      const parts = val.split(",");
+      const toAdd = parts.slice(0, -1).map((p) => p.trim()).filter((p) => p !== "");
+      const remaining = parts[parts.length - 1] ?? "";
+      setTagNames((prev) => {
+        const merged = [...prev];
+        for (const t of toAdd) {
+          if (!merged.includes(t)) merged.push(t);
+        }
+        return merged;
+      });
+      setTagInput(remaining);
+      return;
+    }
+    setTagInput(val);
+    // Suggestions from searchTags if available
+    if (searchTags && val.length >= 2) {
+      const results = searchTags(val);
+      setTagSuggestions(results.map((t) => t.name ?? "").filter((n) => n !== ""));
+    } else {
+      setTagSuggestions([]);
+    }
+  };
+
+  const removeTag = (name: string): void => {
+    setTagNames((prev) => prev.filter((t) => t !== name));
+  };
+
   const handleSubmit = async (
     e: React.FormEvent<HTMLFormElement>
   ): Promise<void> => {
     e.preventDefault();
+    // Commit any un-submitted text in the tag input field
+    const finalTagNames = [...tagNames];
+    if (tagInput.trim() !== "" && !finalTagNames.includes(tagInput.trim())) {
+      finalTagNames.push(tagInput.trim());
+    }
     const numericAmount = amount !== "" ? parseFloat(amount) : undefined;
     await onAdd(
       title,
@@ -308,7 +373,9 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       currency !== "" ? currency : undefined,
       isCash,
       isIncome,
-      receivedAt ? new Date(receivedAt).toISOString() : undefined
+      receivedAt ? new Date(receivedAt).toISOString() : undefined,
+      excludeFromAutoLearn,
+      finalTagNames.length > 0 ? finalTagNames : undefined
     );
     onClose();
   };
@@ -429,6 +496,117 @@ const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             ariaLabel="Income"
             testId="toggle-add-income"
           />
+        </div>
+
+        {/* Tag input with removable pills */}
+        <div>
+          {/* Existing pills */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: tagNames.length > 0 ? 8 : 0 }}>
+            {tagNames.map((name) => (
+              <span
+                key={name}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  background: "#1565C0",
+                  color: "#FFFFFF",
+                  borderRadius: 12,
+                  padding: "3px 10px",
+                  fontSize: "0.85em",
+                }}
+              >
+                {name}
+                <button
+                  type="button"
+                  onClick={() => removeTag(name)}
+                  aria-label={`Remove tag ${name}`}
+                  style={{ background: "none", border: "none", color: "#FFF", cursor: "pointer", padding: 0, fontSize: "1em", lineHeight: 1 }}
+                >×</button>
+              </span>
+            ))}
+          </div>
+          {/* Tag text input */}
+          <input
+            type="text"
+            placeholder="Add tags (Enter or comma to confirm)"
+            value={tagInput}
+            onChange={handleTagInputChange}
+            onKeyDown={handleTagKeyDown}
+            aria-label="Add tags"
+            data-testid="add-txn-tag-input"
+            style={{
+              background: "#2A2A2A",
+              color: "#E0E0E0",
+              border: "1px solid #444",
+              borderRadius: 8,
+              padding: "10px 14px",
+              fontSize: "0.95em",
+              width: "100%",
+              boxSizing: "border-box",
+            }}
+          />
+          {/* Suggestions dropdown */}
+          {tagSuggestions.length > 0 && (
+            <div style={{ background: "#2A2A2A", border: "1px solid #444", borderRadius: 6, marginTop: 2 }}>
+              {tagSuggestions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => {
+                    if (!tagNames.includes(s)) setTagNames((prev) => [...prev, s]);
+                    setTagInput("");
+                    setTagSuggestions([]);
+                  }}
+                  style={{ display: "block", width: "100%", background: "none", border: "none", color: "#E0E0E0", padding: "8px 14px", textAlign: "left", cursor: "pointer", fontSize: "0.9em" }}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Default / Exception tag mode toggle */}
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 0 }}
+          data-testid="tag-mode-toggle"
+        >
+          <button
+            type="button"
+            data-testid="tag-mode-default"
+            aria-pressed={!excludeFromAutoLearn}
+            onClick={() => setExcludeFromAutoLearn(false)}
+            style={{
+              background: !excludeFromAutoLearn ? "#1565C0" : "#2A2A2A",
+              color: !excludeFromAutoLearn ? "#FFFFFF" : "#B0B0B0",
+              border: "1px solid " + (!excludeFromAutoLearn ? "#1565C0" : "#555"),
+              borderRadius: "6px 0 0 6px",
+              padding: "6px 14px",
+              cursor: "pointer",
+              fontSize: "0.88em",
+            }}
+          >
+            Default
+          </button>
+          <button
+            type="button"
+            data-testid="tag-mode-exception"
+            aria-pressed={excludeFromAutoLearn}
+            onClick={() => setExcludeFromAutoLearn(true)}
+            style={{
+              background: excludeFromAutoLearn ? "#B71C1C" : "#2A2A2A",
+              color: excludeFromAutoLearn ? "#FFFFFF" : "#B0B0B0",
+              border: "1px solid " + (excludeFromAutoLearn ? "#B71C1C" : "#555"),
+              borderRadius: "0 6px 6px 0",
+              padding: "6px 14px",
+              cursor: "pointer",
+              fontSize: "0.88em",
+              marginLeft: -1,
+            }}
+          >
+            Exception
+          </button>
         </div>
 
         <button type="submit" style={{
@@ -1000,6 +1178,21 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
   const [showRevolutImportModal, setShowRevolutImportModal] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [revolutImportResult, setRevolutImportResult] = useState<RevolutImportSummary | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+
+    if (toastTimeoutRef.current !== null) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 2000);
+  }, []);
 
   // Tag filter state
   const [availableTags, setAvailableTags] = useState<TagWithCount[]>([]);
@@ -1025,6 +1218,7 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
     softDeleteAllTransactions,
     addManualTransaction,
     exportTransactions,
+    searchTags,
   } = useTransactions(db, undefined, onDatabaseChanged);
 
   // Filtered transactions when tag filter is active
@@ -1070,9 +1264,13 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
   const handleExportSelection = useCallback(
     (format: "json" | "csv"): void => {
       setShowExportModal(false);
-      void exportTransactions(format);
+      void exportTransactions(format).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error("Failed to export transactions", error);
+        showToast(`Export failed: ${message}`);
+      });
     },
-    [exportTransactions]
+    [exportTransactions, showToast]
   );
 
   const handleImported = useCallback(
@@ -1128,22 +1326,6 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
   const PULL_THRESHOLD = 80;
 
   const [showTagFilter, setShowTagFilter] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
-
-    if (toastTimeoutRef.current !== null) {
-      clearTimeout(toastTimeoutRef.current);
-    }
-
-    toastTimeoutRef.current = setTimeout(() => {
-      setToast(null);
-      toastTimeoutRef.current = null;
-    }, 2000);
-  }, []);
-
   useEffect(() => {
     return () => {
       if (toastTimeoutRef.current !== null) {
@@ -1393,7 +1575,7 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
         style={{
           position: "fixed",
           bottom: 80,
-          right: 20,
+          left: 20,
           width: 56,
           height: 56,
           borderRadius: "50%",
@@ -1418,6 +1600,7 @@ const TransactionsPageContent: React.FC<TransactionsPageContentProps> = ({
         <AddTransactionModal
           onAdd={addManualTransaction}
           onClose={() => setShowModal(false)}
+          searchTags={searchTags}
         />
       )}
 

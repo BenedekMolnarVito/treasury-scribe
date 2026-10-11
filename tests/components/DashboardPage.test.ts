@@ -560,3 +560,333 @@ describe("pull-to-refresh", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// FR2: Tag cloud show-more
+// ---------------------------------------------------------------------------
+
+describe("tag cloud show-more", () => {
+  /**
+   * Creates N tags, each attached to a unique expense transaction.
+   * Tags are named "tag-1" .. "tag-N" with count 1 each.
+   */
+  function insertTaggedExpenses(n: number): void {
+    for (let i = 1; i <= n; i++) {
+      const txId = insertExpense({ amount: 1000 });
+      const tag = addTag(db, `tag-${i}`);
+      addTagToTransaction(db, txId, tag.id);
+    }
+  }
+
+  it("shows at most 8 chips initially when 20 tags exist", async () => {
+    insertTaggedExpenses(20);
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-filter")).toBeTruthy()
+    );
+
+    // The show-more button must be present
+    expect(screen.getByTestId("tag-filter-show-more")).toBeTruthy();
+
+    // Only 8 chip buttons (+ 1 show-more button) should be in the container
+    // (the clear button is absent because nothing is selected yet)
+    const tagFilter = screen.getByTestId("tag-filter");
+    const chipButtons = Array.from(tagFilter.querySelectorAll("button")).filter(
+      (btn) => btn.getAttribute("data-testid") !== "tag-filter-show-more"
+    );
+    expect(chipButtons.length).toBe(8);
+  });
+
+  it("reveals all chips after clicking show-more", async () => {
+    insertTaggedExpenses(20);
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-filter-show-more")).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-filter-show-more"));
+    });
+
+    await waitFor(() => {
+      const tagFilter = screen.getByTestId("tag-filter");
+      const chipButtons = Array.from(tagFilter.querySelectorAll("button")).filter(
+        (btn) =>
+          btn.getAttribute("data-testid") !== "tag-filter-show-more" &&
+          btn.getAttribute("data-testid") !== "tag-filter-clear"
+      );
+      expect(chipButtons.length).toBe(20);
+    });
+  });
+
+  it("shows 'show less' affordance after expanding", async () => {
+    insertTaggedExpenses(20);
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-filter-show-more")).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-filter-show-more"));
+    });
+
+    // After expanding the button should toggle to a 'show less' label
+    await waitFor(() => {
+      const btn = screen.getByTestId("tag-filter-show-more");
+      expect(btn.textContent?.toLowerCase()).toContain("less");
+    });
+  });
+
+  it("does not show the show-more button when 8 or fewer tags exist", async () => {
+    insertTaggedExpenses(8);
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-filter")).toBeTruthy()
+    );
+
+    expect(screen.queryByTestId("tag-filter-show-more")).toBeNull();
+  });
+
+  it("always shows a selected (hidden) chip even when collapsed", async () => {
+    // Insert 10 tags so show-more kicks in; then select the last one which
+    // would be hidden in the default view
+    insertTaggedExpenses(10);
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-filter-show-more")).toBeTruthy()
+    );
+
+    // Expand first, click the last chip, then collapse
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-filter-show-more")); // expand
+    });
+    await waitFor(() => {
+      const tagFilter = screen.getByTestId("tag-filter");
+      const chips = Array.from(tagFilter.querySelectorAll("button")).filter(
+        (btn) =>
+          btn.getAttribute("data-testid") !== "tag-filter-show-more" &&
+          btn.getAttribute("data-testid") !== "tag-filter-clear"
+      );
+      expect(chips.length).toBe(10);
+    });
+    // Click 10th chip (last one, which would be hidden in collapsed state)
+    const tagFilter = screen.getByTestId("tag-filter");
+    const chips = Array.from(tagFilter.querySelectorAll("button")).filter(
+      (btn) =>
+        btn.getAttribute("data-testid") !== "tag-filter-show-more" &&
+        btn.getAttribute("data-testid") !== "tag-filter-clear"
+    );
+    act(() => {
+      fireEvent.click(chips[chips.length - 1]!);
+    });
+    // Collapse
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-filter-show-more")); // show less → collapse
+    });
+
+    // The selected chip should still be visible (8 unselected top + 1 selected)
+    await waitFor(() => {
+      const tagFilterEl = screen.getByTestId("tag-filter");
+      const visibleChips = Array.from(tagFilterEl.querySelectorAll("button")).filter(
+        (btn) =>
+          btn.getAttribute("data-testid") !== "tag-filter-show-more" &&
+          btn.getAttribute("data-testid") !== "tag-filter-clear"
+      );
+      // Should show the 8 top unselected + at least the 1 selected
+      expect(visibleChips.length).toBeGreaterThanOrEqual(9);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FR1: Last Month tab + horizontal-scroll pill row
+// ---------------------------------------------------------------------------
+
+describe("FR1: Last Month tab and scrollable pill row", () => {
+  it("renders pill-lastMonth between pill-month and pill-3months", async () => {
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("period-pills")).toBeTruthy()
+    );
+
+    const pillsContainer = screen.getByTestId("period-pills");
+    const buttons = Array.from(pillsContainer.querySelectorAll("button"));
+    const testIds = buttons.map(b => b.getAttribute("data-testid"));
+
+    expect(testIds).toContain("pill-lastMonth");
+
+    const monthIdx = testIds.indexOf("pill-month");
+    const lastMonthIdx = testIds.indexOf("pill-lastMonth");
+    const threeMonthIdx = testIds.indexOf("pill-3months");
+
+    // lastMonth must be between month and 3months
+    expect(lastMonthIdx).toBeGreaterThan(monthIdx);
+    expect(lastMonthIdx).toBeLessThan(threeMonthIdx);
+  });
+
+  it("period-pills row has overflowX auto and flexWrap nowrap (carousel scroll)", async () => {
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("period-pills")).toBeTruthy()
+    );
+
+    const pillsContainer = screen.getByTestId("period-pills") as HTMLElement;
+    // The scroll container style must enable horizontal scrolling
+    expect(pillsContainer.style.overflowX).toBe("auto");
+    expect(pillsContainer.style.flexWrap).toBe("nowrap");
+  });
+
+  it("clicking pill-lastMonth sets period to lastMonth", async () => {
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("pill-lastMonth")).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("pill-lastMonth"));
+    });
+
+    // Hero card should still render without error after period change
+    await waitFor(() =>
+      expect(screen.getByTestId("hero-card")).toBeTruthy()
+    );
+  });
+
+  it("period label shows 'Last Month' after clicking the lastMonth pill", async () => {
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("pill-lastMonth")).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("pill-lastMonth"));
+    });
+
+    await waitFor(() => {
+      const card = screen.getByTestId("hero-card");
+      expect(card.textContent).toContain("Last Month");
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FR3: Weekly trend for single-month period
+// ---------------------------------------------------------------------------
+
+describe("FR3: weekly trend for single-month period", () => {
+  it("trend chart shows 'Weekly Trend' title when period is 'month'", async () => {
+    renderPage();
+
+    // period defaults to month
+    await waitFor(() =>
+      expect(screen.getByTestId("monthly-chart")).toBeTruthy()
+    );
+
+    const chart = screen.getByTestId("monthly-chart");
+    expect(chart.textContent).toContain("Weekly Trend");
+  });
+
+  it("trend chart has data-granularity=weekly for single-month period", async () => {
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("monthly-chart")).toBeTruthy()
+    );
+
+    const chart = screen.getByTestId("monthly-chart") as HTMLElement;
+    expect(chart.getAttribute("data-granularity")).toBe("weekly");
+  });
+
+  it("trend chart shows 'Monthly Trend' for multi-month period", async () => {
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("pill-3months")).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("pill-3months"));
+    });
+
+    await waitFor(() => {
+      const chart = screen.getByTestId("monthly-chart");
+      expect(chart.textContent).toContain("Monthly Trend");
+    });
+  });
+
+  it("trend chart has data-granularity=monthly for multi-month period", async () => {
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("pill-3months")).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("pill-3months"));
+    });
+
+    await waitFor(() => {
+      const chart = screen.getByTestId("monthly-chart") as HTMLElement;
+      expect(chart.getAttribute("data-granularity")).toBe("monthly");
+    });
+  });
+
+  it("trend chart switches to Weekly Trend when lastMonth is clicked", async () => {
+    renderPage();
+
+    // First switch to a multi-month to ensure round-trip works
+    await waitFor(() =>
+      expect(screen.getByTestId("pill-3months")).toBeTruthy()
+    );
+    act(() => {
+      fireEvent.click(screen.getByTestId("pill-3months"));
+    });
+    await waitFor(() => {
+      const chart = screen.getByTestId("monthly-chart");
+      expect(chart.textContent).toContain("Monthly Trend");
+    });
+
+    // Now switch to lastMonth
+    act(() => {
+      fireEvent.click(screen.getByTestId("pill-lastMonth"));
+    });
+
+    await waitFor(() => {
+      const chart = screen.getByTestId("monthly-chart");
+      expect(chart.textContent).toContain("Weekly Trend");
+    });
+  });
+
+  it("weekly trend x-axis labels are relative (W1, W2…), not calendar-week numbers", async () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    // Two expenses in distinct weeks of the current month → ≥2 week buckets.
+    insertExpense({ amount: 1000, receivedAt: `${y}-${m}-02T10:00:00.000Z` });
+    insertExpense({ amount: 2000, receivedAt: `${y}-${m}-20T10:00:00.000Z` });
+
+    renderPage();
+
+    await waitFor(() => {
+      const chart = screen.getByTestId("monthly-chart") as HTMLElement;
+      expect(chart.getAttribute("data-granularity")).toBe("weekly");
+    });
+
+    const chart = screen.getByTestId("monthly-chart") as HTMLElement;
+    const text = chart.textContent ?? "";
+    // Relative labels start at W1 and increment; the first week shown is W1.
+    expect(text).toContain("W1");
+    // Must NOT render a raw ISO calendar-week number (would be W02..W53 for
+    // dates this far into the year); relative labels never exceed the bucket count.
+    expect(text).not.toMatch(/W(?:[2-9]\d|\d{3,})/);
+  });
+});
+

@@ -331,3 +331,166 @@ describe("setSelectedTagIds", () => {
     expect(result.current.summary.total).toBe(8000);
   });
 });
+
+// ---------------------------------------------------------------------------
+// FR3: trendGranularity and week buckets
+// ---------------------------------------------------------------------------
+
+describe("FR3: trendGranularity", () => {
+  it("trendGranularity is 'weekly' for period=month", () => {
+    const { result } = renderHook(() => useDashboard(db));
+    act(() => result.current.refresh());
+    expect(result.current.trendGranularity).toBe("weekly");
+  });
+
+  it("trendGranularity is 'weekly' for period=lastMonth", () => {
+    const { result } = renderHook(() => useDashboard(db));
+    act(() => result.current.setPeriod("lastMonth"));
+    expect(result.current.trendGranularity).toBe("weekly");
+  });
+
+  it("trendGranularity is 'monthly' for period=3months", () => {
+    const { result } = renderHook(() => useDashboard(db));
+    act(() => result.current.setPeriod("3months"));
+    expect(result.current.trendGranularity).toBe("monthly");
+  });
+
+  it("trendGranularity is 'monthly' for period=12months", () => {
+    const { result } = renderHook(() => useDashboard(db));
+    act(() => result.current.setPeriod("12months"));
+    expect(result.current.trendGranularity).toBe("monthly");
+  });
+
+  it("trendBuckets (byWeek) are populated for single-month period", () => {
+    const now = new Date();
+    const currYear = now.getFullYear();
+    const currMonth = String(now.getMonth() + 1).padStart(2, "0");
+    // Use day 1 of the month to ensure it's always in the past within the range
+    insertExpense(db, { amount: 1500, receivedAt: `${currYear}-${currMonth}-01T10:00:00.000Z` });
+
+    const { result } = renderHook(() => useDashboard(db));
+    act(() => result.current.refresh()); // period=month
+
+    expect(result.current.byWeek.length).toBeGreaterThan(0);
+    const total = result.current.byWeek.reduce((s, b) => s + b.total, 0);
+    expect(total).toBe(1500);
+  });
+
+  it("byWeek refreshes when period changes from 3months to month", () => {
+    const now = new Date();
+    const currYear = now.getFullYear();
+    const currMonth = String(now.getMonth() + 1).padStart(2, "0");
+    // Use day 1 to ensure it's always within the range
+    insertExpense(db, { amount: 2000, receivedAt: `${currYear}-${currMonth}-01T10:00:00.000Z` });
+
+    const { result } = renderHook(() => useDashboard(db));
+
+    act(() => result.current.setPeriod("3months"));
+    expect(result.current.trendGranularity).toBe("monthly");
+
+    act(() => result.current.setPeriod("month"));
+    expect(result.current.trendGranularity).toBe("weekly");
+    expect(result.current.byWeek.length).toBeGreaterThan(0);
+  });
+
+  it("byWeek respects the active tag filter (single-month weekly trend)", () => {
+    const now = new Date();
+    const currYear = now.getFullYear();
+    const currMonth = String(now.getMonth() + 1).padStart(2, "0");
+    const taggedTx = insertExpense(db, { amount: 1500, receivedAt: `${currYear}-${currMonth}-01T10:00:00.000Z` });
+    const tag = addTag(db, "food");
+    addTagToTransaction(db, taggedTx, tag.id);
+    insertExpense(db, { amount: 4000, receivedAt: `${currYear}-${currMonth}-01T11:00:00.000Z` }); // untagged
+
+    const { result } = renderHook(() => useDashboard(db));
+    act(() => result.current.refresh()); // period=month, no filter
+    const unfilteredTotal = result.current.byWeek.reduce((s, b) => s + b.total, 0);
+    expect(unfilteredTotal).toBe(5500);
+
+    // Apply the "food" filter — the weekly trend must drop the untagged row too.
+    act(() => result.current.setSelectedTagIds([tag.id]));
+    const filteredTotal = result.current.byWeek.reduce((s, b) => s + b.total, 0);
+    expect(filteredTotal).toBe(1500);
+  });
+});
+
+describe("lastMonth period", () => {
+  it("setPeriod('lastMonth') changes the active period to lastMonth", () => {
+    const { result } = renderHook(() => useDashboard(db));
+
+    act(() => result.current.setPeriod("lastMonth"));
+
+    expect(result.current.period).toBe("lastMonth");
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("lastMonth byMonth is bounded to only the previous calendar month", () => {
+    const now = new Date();
+    // A transaction in the previous month
+    const prevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+    const prevMonth = now.getMonth() === 0 ? 12 : now.getMonth(); // 1-based
+    const prevMonthStr = String(prevMonth).padStart(2, "0");
+    const prevMonthDate = `${prevYear}-${prevMonthStr}-15`;
+
+    // A transaction in the current month (should NOT appear)
+    const currYear = now.getFullYear();
+    const currMonth = String(now.getMonth() + 1).padStart(2, "0");
+    const currMonthDate = `${currYear}-${currMonth}-01`;
+
+    insertExpense(db, { amount: 3000, receivedAt: `${prevMonthDate}T10:00:00.000Z` });
+    insertExpense(db, { amount: 7000, receivedAt: `${currMonthDate}T10:00:00.000Z` });
+
+    const { result } = renderHook(() => useDashboard(db));
+
+    act(() => result.current.setPeriod("lastMonth"));
+
+    // Only the prev month transaction should be counted
+    expect(result.current.summary.total).toBe(3000);
+  });
+
+  it("lastMonth summary excludes transactions from two months ago", () => {
+    const now = new Date();
+    const twoMonthsAgoYear = now.getMonth() <= 1
+      ? now.getFullYear() - 1
+      : now.getFullYear();
+    const twoMonthsAgoMonth = ((now.getMonth() - 2 + 12) % 12) + 1; // 1-based
+    const twoMonthsAgoStr = String(twoMonthsAgoMonth).padStart(2, "0");
+    const twoMonthsAgoDate = `${twoMonthsAgoYear}-${twoMonthsAgoStr}-15`;
+
+    const prevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+    const prevMonth = now.getMonth() === 0 ? 12 : now.getMonth();
+    const prevMonthStr = String(prevMonth).padStart(2, "0");
+    const prevMonthDate = `${prevYear}-${prevMonthStr}-15`;
+
+    insertExpense(db, { amount: 1000, receivedAt: `${twoMonthsAgoDate}T10:00:00.000Z` });
+    insertExpense(db, { amount: 5000, receivedAt: `${prevMonthDate}T10:00:00.000Z` });
+
+    const { result } = renderHook(() => useDashboard(db));
+    act(() => result.current.setPeriod("lastMonth"));
+
+    expect(result.current.summary.total).toBe(5000);
+  });
+
+  it("lastMonth includes a transaction timestamped on the LAST day of the previous month", () => {
+    // Regression: the endDate upper bound was date-only, so a same-day ISO
+    // timestamp string-compared FALSE against "<= YYYY-MM-DD" and the last
+    // day's transactions were silently dropped from the Last Month view.
+    const now = new Date();
+    const prevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+    const prevMonth = now.getMonth() === 0 ? 12 : now.getMonth(); // 1-based
+    const prevMonthStr = String(prevMonth).padStart(2, "0");
+    // Last day of the previous calendar month.
+    const lastDay = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+    const lastDayStr = String(lastDay).padStart(2, "0");
+
+    insertExpense(db, {
+      amount: 4200,
+      receivedAt: `${prevYear}-${prevMonthStr}-${lastDayStr}T14:30:00.000Z`,
+    });
+
+    const { result } = renderHook(() => useDashboard(db));
+    act(() => result.current.setPeriod("lastMonth"));
+
+    expect(result.current.summary.total).toBe(4200);
+  });
+});

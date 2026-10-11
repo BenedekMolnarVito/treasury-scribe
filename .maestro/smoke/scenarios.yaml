@@ -1,0 +1,192 @@
+# Treasury Scribe — behavioral smoke-test scenarios (declarative, extensible).
+#
+# HOW TO ADD/EDIT A SCENARIO (regression-friendly):
+#   - Add a list item under `scenarios`. Keep ids stable (they key the report).
+#   - `nav`: ordered deterministic actions the harness replays BEFORE asserting.
+#       launch                      -> foreground the app
+#       dismiss_perms               -> press Back up to 3x to clear OS perm screens
+#       tap_text: "<label>"         -> click the smallest element whose text == label
+#       tap_testid: "<testid>"      -> click [data-testid=...]
+#       set_input: {field, value}   -> set a React input by placeholder/aria/testid
+#       press_key: "<KEYCODE>"      -> Android system key (e.g. KEYCODE_BACK)
+#       sleep: <seconds>            -> settle animation/navigation
+#   - `code_assert`: HARD, deterministic checks (no model). All must pass.
+#       url_endswith / url_contains, testid_present (list), text_present (list),
+#       testid_absent, min_interactive, js: {expr, equals}  (raw CDP boolean/number)
+#   - `jev_assert`: semantic yes/no checks. ALL batched into ONE Jev request over
+#       the captured DOM. Each: {id, question, true, false}. Pass if noul >= threshold.
+#   - `kind: vitest` scenarios shell out to the Node test suite for paths the
+#       emulator UI cannot drive (file round-trips, notification ingestion).
+#
+# A scenario PASSES when every code_assert passes AND every jev_assert >= threshold.
+
+settings:
+  jev_pass_threshold: 0.8     # noul >= this => assertion holds
+  default_sleep: 1.3
+
+# Deterministic seed run through the app's own Add-Transaction modal so that
+# data-gated features (tag cloud, edit screen) have content. Idempotent-ish:
+# the harness can clear state first (see --fresh).
+seed:
+  transactions:
+    - {title: "Spar Groceries", amount: 4500, currency: HUF, tags: ["Groceries"], desc: "Kartyas vasarlas 4 500 Ft SPAR BUDAPEST"}
+    - {title: "Lidl Shop",     amount: 3200,  currency: HUF, tags: ["Food", "Discount"], desc: "Kartyas vasarlas 3 200 Ft LIDL"}
+    - {title: "Shell Fuel",    amount: 12000, currency: HUF, tags: ["Transport", "Car"], desc: "Kartyas vasarlas 12 000 Ft SHELL"}
+    - {title: "Netflix",       amount: 4990,  currency: HUF, tags: ["Entertainment", "Subscription"], desc: "Havi dij 4 990 Ft NETFLIX"}
+    - {title: "Rent",          amount: 180000, currency: HUF, tags: ["Housing", "Bills"], desc: "Atutalas elkuldve 180 000 Ft Lakber"}
+    - {title: "Pharmacy",      amount: 2500,  currency: HUF, tags: ["Health"], desc: "Kartyas vasarlas 2 500 Ft BENU"}
+    - {title: "Cafe",          amount: 1800,  currency: HUF, tags: ["Coffee", "Leisure"], desc: "Kartyas vasarlas 1 800 Ft STARBUCKS"}
+
+scenarios:
+  - id: FR0_launch
+    feature: "App launch + dashboard render"
+    nav: [launch, dismiss_perms, {sleep: 4}, launch, {sleep: 2}, {tap_testid: nav-dashboard}, {sleep: 1}]
+    code_assert:
+      url_endswith: "/"
+      testid_present: [nav-dashboard, nav-transactions]
+    jev_assert:
+      - {id: dashboard_rendered, question: "Does the screen show a budget dashboard with Dashboard/Transactions navigation and financial summary metrics (Expenses/Income/Net or HUF amounts)?", true: "Budget dashboard with nav and summary metrics is shown", false: "Blank, error, loading spinner, or only a system/permission screen"}
+
+  - id: FR1_lastmonth_tab
+    feature: "Last Month tab after This Month + scrollable month tabs"
+    nav: [{tap_testid: nav-dashboard}, {sleep: 1}]
+    code_assert:
+      text_present: ["This Month", "Last Month", "3 Mo", "6 Mo", "9 Mo", "12 Mo"]
+      # Last Month must sit immediately after This Month in DOM order.
+      js:
+        expr: >
+          (()=>{const t=[...document.querySelectorAll('button,[role=tab],[role=button]')]
+          .map(e=>(e.innerText||'').trim());const i=t.indexOf('This Month');
+          return i>=0 && t[i+1]==='Last Month';})()
+        equals: true
+    jev_assert:
+      - {id: lastmonth_present, question: "Is there a period tab labeled 'Last Month' placed right after 'This Month' among the month/period tabs?", true: "A 'Last Month' tab is present right after 'This Month'", false: "No Last Month tab, or it is not next to This Month"}
+
+  - id: FR1b_select_lastmonth
+    feature: "Selecting Last Month refreshes the dashboard"
+    nav: [{tap_testid: nav-dashboard}, {sleep: 1}, {tap_text: "Last Month"}, {sleep: 1}]
+    code_assert:
+      # "Last Month" present AND (data-level coverage) the hero expenses total is
+      # non-zero — the harness back-dates one seeded row into last month, so this
+      # exercises populated data, not just the selection flipping. Folded into a
+      # single boolean because the runner's code_assert supports one `js` slot.
+      js:
+        expr: >
+          (()=>{if(!document.body.innerText.includes('Last Month'))return false;
+          const el=document.querySelector('[data-testid=hero-expenses]');
+          if(!el)return false;
+          const n=parseInt((el.innerText||'').replace(/[^0-9]/g,''),10);
+          return Number.isFinite(n)&&n>0;})()
+        equals: true
+    jev_assert:
+      - {id: lastmonth_active, question: "Is the 'Last Month' period now the active/selected period for the dashboard summary?", true: "Last Month is the active selected period", false: "This Month or another period is still active"}
+
+  - id: FR2_tag_showmore
+    feature: "Tag cloud capped at 8 chips + show-more toggle"
+    nav: [{tap_testid: nav-dashboard}, {sleep: 1}]
+    code_assert:
+      testid_present: [tag-filter, tag-filter-show-more]
+      # exactly 8 tag chips visible before expanding (top-N cap). Count chips
+      # inside tag-filter whose label ends with a (count); the show-more button
+      # is excluded because it lives in its own node without a trailing (N) chip.
+      js:
+        expr: >
+          (()=>{const c=document.querySelector('[data-testid=tag-filter]');
+          if(!c)return -1;return [...c.querySelectorAll('button')].filter(e=>!e.getAttribute('data-testid')&&/\(\d+\)$/.test((e.innerText||'').trim())).length;})()
+        equals: 8
+    jev_assert:
+      - {id: showmore_present, question: "Is there a 'show more' control in the tag filter area that reveals additional tag chips?", true: "A show-more (or show-less) toggle is present", false: "No show-more control"}
+
+  - id: FR2b_showmore_expands
+    feature: "show-more reveals all chips and flips to show-less"
+    nav: [{tap_testid: nav-dashboard}, {sleep: 1}, {tap_testid: tag-filter-show-more}, {sleep: 1}]
+    code_assert:
+      js:
+        expr: >
+          (()=>{const b=document.querySelector('[data-testid=tag-filter-show-more]');
+          const c=document.querySelector('[data-testid=tag-filter]');
+          const chips=[...c.querySelectorAll('button')].filter(e=>/\(\d+\)$/.test((e.innerText||'').trim())).length;
+          return chips>8 && (b.innerText||'').toLowerCase().includes('less');})()
+        equals: true
+
+  - id: FR3_weekly_trend
+    feature: "Weekly trend when a single month is selected"
+    nav: [{tap_testid: nav-dashboard}, {sleep: 1}, {tap_text: "This Month"}, {sleep: 1}]
+    code_assert:
+      text_present: ["Weekly Trend"]
+    jev_assert:
+      - {id: weekly_trend, question: "With a single month selected, is the trend chart a WEEKLY trend (titled Weekly Trend or showing week buckets) rather than a monthly trend?", true: "Trend chart is weekly for the single-month selection", false: "Trend is still monthly while a single month is selected"}
+
+  - id: FR4_add_tag_input
+    feature: "Manual Add-Transaction modal has a tag input"
+    nav: [{tap_testid: nav-transactions}, {sleep: 1}, {tap_testid: fab-add}, {sleep: 1}]
+    code_assert:
+      testid_present: [add-txn-tag-input]
+    jev_assert:
+      - {id: add_tag_input, question: "Does the open Add Transaction modal include a tag input for adding tags to the new transaction?", true: "Add modal shows a tag input field", false: "No tag input in the add modal"}
+
+  - id: FR8_add_toggle
+    feature: "Default/Exception toggle in Add modal, defaults to Default"
+    nav: [{tap_testid: nav-transactions}, {sleep: 1}, {tap_testid: fab-add}, {sleep: 1}]
+    code_assert:
+      testid_present: [tag-mode-toggle, tag-mode-default, tag-mode-exception]
+      js:
+        expr: >
+          (()=>document.querySelector('[data-testid=tag-mode-default]').getAttribute('aria-pressed')==='true')()
+        equals: true
+
+  - id: FR7_edit_back
+    feature: "Visible Back + OS back from Edit Transaction"
+    # Opens the first transaction's edit screen, verifies back controls.
+    nav: [{tap_testid: nav-transactions}, {sleep: 1}, {tap_text: "Cafe"}, {sleep: 1}]
+    code_assert:
+      url_contains: "/edit/"
+      testid_present: [edit-back-button]
+    jev_assert:
+      - {id: edit_back_visible, question: "Does the Edit Transaction screen show a visible Back control in its header to return to the list?", true: "A visible Back button is present on the edit screen", false: "No visible Back control"}
+
+  - id: FR7b_os_back
+    feature: "Android system back navigates out of Edit"
+    nav: [{tap_testid: nav-transactions}, {sleep: 1}, {tap_text: "Cafe"}, {sleep: 1}, {press_key: KEYCODE_BACK}, {sleep: 1}]
+    code_assert:
+      url_endswith: "/transactions"
+
+  - id: FR8_edit_toggle_clears
+    feature: "Edit Exception toggle clears assigned tags, defaults Default"
+    # Open a freshly-seeded txn (Default + >=1 tag by seeding), flip to Exception
+    # via a nav step, settle for React re-render, THEN assert the tags cleared.
+    # (The flip is async; clicking and reading in one JS tick sees stale state.)
+    nav:
+      - {tap_testid: nav-transactions}
+      - {sleep: 1}
+      - {tap_text: "Netflix"}
+      - {sleep: 1}
+      - {tap_testid: tag-mode-exception}
+      - {sleep: 1}
+    code_assert:
+      url_contains: "/edit/"
+      testid_present: [tag-mode-toggle, tag-mode-default, tag-mode-exception]
+      # after flipping to Exception: it is pressed and all assigned tags cleared
+      # (assigned chips carry data-testid="remove-tag-<id>").
+      js:
+        expr: >
+          (()=>{const e=document.querySelector('[data-testid=tag-mode-exception]');
+          const remaining=document.querySelectorAll('[data-testid^="remove-tag-"]').length;
+          return e.getAttribute('aria-pressed')==='true' && remaining===0;})()
+        equals: true
+
+  # --- Non-UI paths: shelled out to the Node suite (file round-trips + ingestion) ---
+  - id: FR5_import_export_isdeleted
+    feature: "Export/import retains IsDeleted (re-import re-hides)"
+    kind: vitest
+    vitest_files: ["tests/services/ImportService.test.ts"]
+
+  - id: FR6_autoclassify_title_body
+    feature: "Auto-classify on title + number-stripped description"
+    kind: vitest
+    vitest_files: ["tests/services/IngestionService.test.ts", "tests/data/TransactionRepository.test.ts"]
+
+  - id: FR8_autolearn_optout
+    feature: "Exception excluded as auto-learn source for next same-merchant txn"
+    kind: vitest
+    vitest_files: ["tests/services/IngestionService.test.ts", "tests/data/TransactionRepository.test.ts"]

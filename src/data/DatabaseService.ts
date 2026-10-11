@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS Transactions (
   IsCash            INTEGER NOT NULL DEFAULT 0,
   Amount            REAL,
   Currency          TEXT,
-  IsIncome          INTEGER NOT NULL DEFAULT 0
+  IsIncome          INTEGER NOT NULL DEFAULT 0,
+  ExcludeFromAutoLearn INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS Tags (
@@ -113,6 +114,23 @@ async function createDatabase(
     ? new SQL.Database(persistedBytes)
     : new SQL.Database();
   db.run(CREATE_TABLES_SQL);
+
+  // Idempotent column migrations for databases created before schema updates.
+  // sql.js has no "ADD COLUMN IF NOT EXISTS" — we guard with a try/catch that
+  // swallows the "duplicate column name" error so running initDatabase twice
+  // (or on an already-migrated DB) never throws.
+  try {
+    db.run(
+      "ALTER TABLE Transactions ADD COLUMN ExcludeFromAutoLearn INTEGER NOT NULL DEFAULT 0"
+    );
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes("duplicate column name")) {
+      throw err;
+    }
+    // Column already exists — safe to ignore.
+  }
+
   return db;
 }
 

@@ -553,3 +553,62 @@ describe("loadRecentTags", () => {
     expect(result.current.recentTags).toHaveLength(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// FR8: excludeFromAutoLearn state and setExcludeFromAutoLearn action
+// ---------------------------------------------------------------------------
+
+import { getTransactionById, setTransactionException } from "../../src/data/TransactionRepository";
+
+describe("FR8 – useEditTransaction excludeFromAutoLearn state", () => {
+  it("exposes excludeFromAutoLearn=false by default after loadTransaction", () => {
+    const id = insertTransaction(db);
+    const { result } = renderHook(() => useEditTransaction(db));
+    act(() => result.current.loadTransaction(id));
+    expect(result.current.excludeFromAutoLearn).toBe(false);
+  });
+
+  it("exposes excludeFromAutoLearn=true when transaction was already marked exception", () => {
+    const id = insertTransaction(db);
+    setTransactionException(db, id, true);
+    const { result } = renderHook(() => useEditTransaction(db));
+    act(() => result.current.loadTransaction(id));
+    expect(result.current.excludeFromAutoLearn).toBe(true);
+  });
+
+  it("setExcludeFromAutoLearn(true) updates state and persists to DB", () => {
+    const id = insertTransaction(db);
+    const { result } = renderHook(() => useEditTransaction(db));
+    act(() => result.current.loadTransaction(id));
+    act(() => result.current.setExcludeFromAutoLearn(true));
+    expect(result.current.excludeFromAutoLearn).toBe(true);
+    expect(getTransactionById(db, id)!.excludeFromAutoLearn).toBe(true);
+  });
+
+  it("setExcludeFromAutoLearn(true) clears all tags from the transaction", () => {
+    const id = insertTransaction(db);
+    const tag = addTag(db, "TagToClear");
+    addTagToTransaction(db, id, tag.id);
+
+    const { result } = renderHook(() => useEditTransaction(db));
+    act(() => result.current.loadTransaction(id));
+
+    expect(result.current.currentTags).toHaveLength(1);
+
+    act(() => result.current.setExcludeFromAutoLearn(true));
+
+    expect(result.current.currentTags).toHaveLength(0);
+    // Persisted in DB too
+    expect(getTransactionById(db, id)!.transactionTags).toHaveLength(0);
+  });
+
+  it("setExcludeFromAutoLearn(false) sets state to false without restoring tags", () => {
+    const id = insertTransaction(db);
+    setTransactionException(db, id, true);
+    const { result } = renderHook(() => useEditTransaction(db));
+    act(() => result.current.loadTransaction(id));
+    act(() => result.current.setExcludeFromAutoLearn(false));
+    expect(result.current.excludeFromAutoLearn).toBe(false);
+    expect(result.current.currentTags).toHaveLength(0);
+  });
+});

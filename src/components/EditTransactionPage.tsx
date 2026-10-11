@@ -222,11 +222,48 @@ const EditTransactionPageContent: React.FC<
   const navigate = useNavigate();
   const [showSplitModal, setShowSplitModal] = useState(false);
 
+  // Register OS back-button listener (Android swipe-back / hardware back).
+  // Dynamic import guards against jsdom / web environments where the
+  // @capacitor/app native plugin is unavailable.
+  useEffect(() => {
+    let listenerHandle: { remove: () => void } | null = null;
+
+    const registerBackListener = async (): Promise<void> => {
+      try {
+        const { App } = await import("@capacitor/app");
+        listenerHandle = await App.addListener("backButton", () => {
+          void navigate("/transactions");
+        });
+      } catch (err) {
+        // The dynamic import fails in web/jsdom when the Capacitor native plugin
+        // is unavailable — silently skip in that case (expected environment).
+        // For genuine runtime failures (e.g. addListener throws), log a warning
+        // so the broken listener does not go completely undetected — but suppress
+        // it under the test runner (NODE_ENV==="test"), where @capacitor/app's web
+        // stub throws on addListener on every mount and would spam the test output.
+        if (process.env.NODE_ENV !== "test") {
+          // eslint-disable-next-line no-console
+          console.warn("backButton listener registration failed", err);
+        }
+      }
+    };
+
+    void registerBackListener();
+
+    return () => {
+      if (listenerHandle) {
+        listenerHandle.remove();
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const {
     title,
     description,
     isCash,
     isIncome,
+    excludeFromAutoLearn,
     amount,
     currency,
     newTagName,
@@ -237,6 +274,7 @@ const EditTransactionPageContent: React.FC<
     setDescription,
     setIsCash,
     setIsIncome,
+    setExcludeFromAutoLearn,
     setAmount,
     setCurrency,
     receivedAt,
@@ -397,6 +435,48 @@ const EditTransactionPageContent: React.FC<
         />
       </div>
 
+      {/* Default / Exception tag mode toggle */}
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 16, marginBottom: 4 }}
+        data-testid="tag-mode-toggle"
+      >
+        <button
+          type="button"
+          data-testid="tag-mode-default"
+          aria-pressed={!excludeFromAutoLearn}
+          onClick={() => setExcludeFromAutoLearn(false)}
+          style={{
+            background: !excludeFromAutoLearn ? "#1565C0" : "#2A2A2A",
+            color: !excludeFromAutoLearn ? "#FFFFFF" : "#B0B0B0",
+            border: "1px solid " + (!excludeFromAutoLearn ? "#1565C0" : "#555"),
+            borderRadius: "6px 0 0 6px",
+            padding: "6px 14px",
+            cursor: "pointer",
+            fontSize: "0.88em",
+          }}
+        >
+          Default
+        </button>
+        <button
+          type="button"
+          data-testid="tag-mode-exception"
+          aria-pressed={excludeFromAutoLearn}
+          onClick={() => setExcludeFromAutoLearn(true)}
+          style={{
+            background: excludeFromAutoLearn ? "#B71C1C" : "#2A2A2A",
+            color: excludeFromAutoLearn ? "#FFFFFF" : "#B0B0B0",
+            border: "1px solid " + (excludeFromAutoLearn ? "#B71C1C" : "#555"),
+            borderRadius: "0 6px 6px 0",
+            padding: "6px 14px",
+            cursor: "pointer",
+            fontSize: "0.88em",
+            marginLeft: -1,
+          }}
+        >
+          Exception
+        </button>
+      </div>
+
       {/* Current tags */}
       <p style={STYLE.sectionTitle}>Current Tags</p>
       <div style={STYLE.tagRow} data-testid="current-tags">
@@ -536,10 +616,28 @@ const EditTransactionPage: React.FC<EditTransactionPageProps> = ({
   onDatabaseChanged,
 }) => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const numericId = id !== undefined ? parseInt(id, 10) : NaN;
 
   return (
     <main style={STYLE.page}>
+      {/* Back button */}
+      <button
+        data-testid="edit-back-button"
+        aria-label="Back"
+        onClick={() => void navigate("/transactions")}
+        style={{
+          background: "transparent",
+          border: "none",
+          color: "#90CAF9",
+          fontSize: "1em",
+          cursor: "pointer",
+          padding: "0 0 12px 0",
+          display: "block",
+        }}
+      >
+        ← Back
+      </button>
       <h1 style={STYLE.heading}>Edit Transaction</h1>
 
       {db && !isNaN(numericId) ? (

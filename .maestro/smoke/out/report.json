@@ -1,0 +1,158 @@
+[
+  {
+    "id": "FR0_launch",
+    "feature": "App launch + dashboard render",
+    "kind": "ui",
+    "verdict": "PASS",
+    "url": "https://localhost/",
+    "code_fails": [],
+    "jev": {
+      "dashboard_rendered": 0.98
+    },
+    "jev_fails": []
+  },
+  {
+    "id": "FR1_lastmonth_tab",
+    "feature": "Last Month tab after This Month + scrollable month tabs",
+    "kind": "ui",
+    "verdict": "PASS",
+    "url": "https://localhost/",
+    "code_fails": [],
+    "jev": {
+      "lastmonth_present": 0.98
+    },
+    "jev_fails": []
+  },
+  {
+    "id": "FR1b_select_lastmonth",
+    "feature": "Selecting Last Month refreshes the dashboard",
+    "kind": "ui",
+    "verdict": "PASS",
+    "url": "https://localhost/",
+    "code_fails": [],
+    "jev": {
+      "lastmonth_active": 0.85
+    },
+    "jev_fails": []
+  },
+  {
+    "id": "FR2_tag_showmore",
+    "feature": "Tag cloud capped at 8 chips + show-more toggle",
+    "kind": "ui",
+    "verdict": "PASS",
+    "url": "https://localhost/",
+    "code_fails": [],
+    "jev": {
+      "showmore_present": 0.98
+    },
+    "jev_fails": []
+  },
+  {
+    "id": "FR2b_showmore_expands",
+    "feature": "show-more reveals all chips and flips to show-less",
+    "kind": "ui",
+    "verdict": "PASS",
+    "url": "https://localhost/",
+    "code_fails": [],
+    "jev": {},
+    "jev_fails": []
+  },
+  {
+    "id": "FR3_weekly_trend",
+    "feature": "Weekly trend when a single month is selected",
+    "kind": "ui",
+    "verdict": "PASS",
+    "url": "https://localhost/",
+    "code_fails": [],
+    "jev": {
+      "weekly_trend": 0.91
+    },
+    "jev_fails": []
+  },
+  {
+    "id": "FR4_add_tag_input",
+    "feature": "Manual Add-Transaction modal has a tag input",
+    "kind": "ui",
+    "verdict": "PASS",
+    "url": "https://localhost/transactions",
+    "code_fails": [],
+    "jev": {
+      "add_tag_input": 0.98
+    },
+    "jev_fails": []
+  },
+  {
+    "id": "FR8_add_toggle",
+    "feature": "Default/Exception toggle in Add modal, defaults to Default",
+    "kind": "ui",
+    "verdict": "PASS",
+    "url": "https://localhost/transactions",
+    "code_fails": [],
+    "jev": {},
+    "jev_fails": []
+  },
+  {
+    "id": "FR7_edit_back",
+    "feature": "Visible Back + OS back from Edit Transaction",
+    "kind": "ui",
+    "verdict": "PASS",
+    "url": "https://localhost/edit/7",
+    "code_fails": [],
+    "jev": {
+      "edit_back_visible": 0.95
+    },
+    "jev_fails": []
+  },
+  {
+    "id": "FR7b_os_back",
+    "feature": "Android system back navigates out of Edit",
+    "kind": "ui",
+    "verdict": "PASS",
+    "url": "https://localhost/transactions",
+    "code_fails": [],
+    "jev": {},
+    "jev_fails": []
+  },
+  {
+    "id": "FR8_edit_toggle_clears",
+    "feature": "Edit Exception toggle clears assigned tags, defaults Default",
+    "kind": "ui",
+    "verdict": "PASS",
+    "url": "https://localhost/edit/4",
+    "code_fails": [],
+    "jev": {},
+    "jev_fails": []
+  },
+  {
+    "id": "FR5_import_export_isdeleted",
+    "feature": "Export/import retains IsDeleted (re-import re-hides)",
+    "kind": "vitest",
+    "verdict": "PASS",
+    "vitest_files": [
+      "tests/services/ImportService.test.ts"
+    ],
+    "output_tail": "\u001b[1m\u001b[46m RUN \u001b[49m\u001b[22m \u001b[36mv4.0.18 \u001b[39m\u001b[90m/Users/C5418860/temp/treasury-scribe\u001b[39m\n\n \u001b[32m\u2713\u001b[39m tests/services/ImportService.test.ts \u001b[2m(\u001b[22m\u001b[2m26 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 46\u001b[2mms\u001b[22m\u001b[39m\n\n\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m1 passed\u001b[39m\u001b[22m\u001b[90m (1)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m26 passed\u001b[39m\u001b[22m\u001b[90m (26)\u001b[39m\n\u001b[2m   Start at \u001b[22m 16:19:25\n\u001b[2m   Duration \u001b[22m 496ms\u001b[2m (transform 98ms, setup 0ms, import 145ms, tests 46ms, environment 0ms)\u001b[22m"
+  },
+  {
+    "id": "FR6_autoclassify_title_body",
+    "feature": "Auto-classify on title + number-stripped description",
+    "kind": "vitest",
+    "verdict": "PASS",
+    "vitest_files": [
+      "tests/services/IngestionService.test.ts",
+      "tests/data/TransactionRepository.test.ts"
+    ],
+    "output_tail": "\u001b[1m\u001b[46m RUN \u001b[49m\u001b[22m \u001b[36mv4.0.18 \u001b[39m\u001b[90m/Users/C5418860/temp/treasury-scribe\u001b[39m\n\n \u001b[32m\u2713\u001b[39m tests/services/IngestionService.test.ts \u001b[2m(\u001b[22m\u001b[2m20 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 47\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m\u2713\u001b[39m tests/data/TransactionRepository.test.ts \u001b[2m(\u001b[22m\u001b[2m66 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 68\u001b[2mms\u001b[22m\u001b[39m\n\n\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m2 passed\u001b[39m\u001b[22m\u001b[90m (2)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m86 passed\u001b[39m\u001b[22m\u001b[90m (86)\u001b[39m\n\u001b[2m   Start at \u001b[22m 16:19:26\n\u001b[2m   Duration \u001b[22m 260ms\u001b[2m (transform 84ms, setup 0ms, import 183ms, tests 115ms, environment 0ms)\u001b[22m"
+  },
+  {
+    "id": "FR8_autolearn_optout",
+    "feature": "Exception excluded as auto-learn source for next same-merchant txn",
+    "kind": "vitest",
+    "verdict": "PASS",
+    "vitest_files": [
+      "tests/services/IngestionService.test.ts",
+      "tests/data/TransactionRepository.test.ts"
+    ],
+    "output_tail": "\u001b[1m\u001b[46m RUN \u001b[49m\u001b[22m \u001b[36mv4.0.18 \u001b[39m\u001b[90m/Users/C5418860/temp/treasury-scribe\u001b[39m\n\n \u001b[32m\u2713\u001b[39m tests/services/IngestionService.test.ts \u001b[2m(\u001b[22m\u001b[2m20 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 49\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m\u2713\u001b[39m tests/data/TransactionRepository.test.ts \u001b[2m(\u001b[22m\u001b[2m66 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 68\u001b[2mms\u001b[22m\u001b[39m\n\n\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m2 passed\u001b[39m\u001b[22m\u001b[90m (2)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m86 passed\u001b[39m\u001b[22m\u001b[90m (86)\u001b[39m\n\u001b[2m   Start at \u001b[22m 16:19:27\n\u001b[2m   Duration \u001b[22m 245ms\u001b[2m (transform 82ms, setup 0ms, import 180ms, tests 117ms, environment 0ms)\u001b[22m"
+  }
+]

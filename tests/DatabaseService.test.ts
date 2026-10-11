@@ -431,3 +431,93 @@ describe("DatabaseService – initDatabase", () => {
     restoredDb.close();
   });
 });
+
+// ---------------------------------------------------------------------------
+// FR8: ExcludeFromAutoLearn migration
+// ---------------------------------------------------------------------------
+
+import initSqlJs from "sql.js";
+
+describe("FR8 – ExcludeFromAutoLearn idempotent migration", () => {
+  it("adds ExcludeFromAutoLearn column to an old-schema DB (no column)", async () => {
+    // Build a DB from the OLD schema — without ExcludeFromAutoLearn.
+    const SQL = await initSqlJs({ locateFile: () => WASM_PATH });
+    const oldDb = new SQL.Database();
+    oldDb.run(`
+      CREATE TABLE IF NOT EXISTS Transactions (
+        Id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        RawContent        TEXT,
+        JsonContent       TEXT,
+        ReceivedAt        TEXT NOT NULL,
+        NotificationTitle TEXT,
+        NotificationBody  TEXT,
+        PackageName       TEXT,
+        IsDeleted         INTEGER NOT NULL DEFAULT 0,
+        IsCash            INTEGER NOT NULL DEFAULT 0,
+        Amount            REAL,
+        Currency          TEXT,
+        IsIncome          INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+    // Verify column is absent before migration
+    const before = oldDb
+      .exec("PRAGMA table_info(Transactions)")
+      .flatMap((r) => r.values.map((v) => v[1] as string));
+    expect(before).not.toContain("ExcludeFromAutoLearn");
+
+    // Insert a row to confirm default applies
+    oldDb.run("INSERT INTO Transactions (ReceivedAt) VALUES (?)", ["2024-01-01T00:00:00Z"]);
+
+    // Export old DB bytes, then run initDatabase with the persisted bytes —
+    // this simulates opening an existing user DB (pre-migration).
+    const bytes = oldDb.export();
+    oldDb.close();
+
+    const migratedDb = await loadPersistedDatabase(wasmBinary, {
+      getItem: () => Buffer.from(bytes).toString("base64"),
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    });
+
+    // Column should now exist
+    const after = migratedDb
+      .exec("PRAGMA table_info(Transactions)")
+      .flatMap((r) => r.values.map((v) => v[1] as string));
+    expect(after).toContain("ExcludeFromAutoLearn");
+
+    // The pre-existing row should default to 0
+    const row = queryOne<{ ExcludeFromAutoLearn: number }>(
+      migratedDb,
+      "SELECT ExcludeFromAutoLearn FROM Transactions LIMIT 1"
+    );
+    expect(row?.ExcludeFromAutoLearn).toBe(0);
+
+    migratedDb.close();
+  });
+
+  it("running initDatabase twice on the same DB never throws", async () => {
+    // First call creates the DB
+    const firstDb = await initDatabase(wasmBinary);
+    // Export and reimport to simulate reopening the same DB
+    const bytes = firstDb.export();
+    firstDb.close();
+
+    // Second call via loadPersistedDatabase should not throw
+    await expect(
+      loadPersistedDatabase(wasmBinary, {
+        getItem: () => Buffer.from(bytes).toString("base64"),
+        setItem: () => undefined,
+        removeItem: () => undefined,
+      })
+    ).resolves.toBeDefined();
+  });
+
+  it("fresh DB created by initDatabase includes ExcludeFromAutoLearn column", async () => {
+    const freshDb = await initDatabase(wasmBinary);
+    const cols = freshDb
+      .exec("PRAGMA table_info(Transactions)")
+      .flatMap((r) => r.values.map((v) => v[1] as string));
+    expect(cols).toContain("ExcludeFromAutoLearn");
+    freshDb.close();
+  });
+});

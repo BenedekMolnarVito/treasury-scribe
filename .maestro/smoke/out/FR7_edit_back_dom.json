@@ -1,0 +1,410 @@
+{
+  "title": "Treasury Scribe",
+  "url": "https://localhost/edit/7",
+  "count": 37,
+  "els": [
+    {
+      "i": 0,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "edit-back-button",
+      "text": "\u2190 Back",
+      "box": [
+        44,
+        68
+      ]
+    },
+    {
+      "i": 1,
+      "kind": "interactive",
+      "tag": "input",
+      "role": null,
+      "type": null,
+      "testid": "input-title",
+      "text": "Cafe",
+      "box": [
+        206,
+        198
+      ]
+    },
+    {
+      "i": 2,
+      "kind": "interactive",
+      "tag": "textarea",
+      "role": null,
+      "type": null,
+      "testid": "input-description",
+      "text": "Kartyas vasarlas 1 800 Ft STARBUCKS",
+      "box": [
+        206,
+        288
+      ]
+    },
+    {
+      "i": 3,
+      "kind": "interactive",
+      "tag": "input",
+      "role": null,
+      "type": "number",
+      "testid": "input-amount",
+      "text": "1800",
+      "box": [
+        206,
+        382
+      ]
+    },
+    {
+      "i": 4,
+      "kind": "interactive",
+      "tag": "input",
+      "role": null,
+      "type": null,
+      "testid": "input-currency",
+      "text": "HUF",
+      "box": [
+        206,
+        450
+      ]
+    },
+    {
+      "i": 5,
+      "kind": "interactive",
+      "tag": "input",
+      "role": null,
+      "type": "datetime-local",
+      "testid": "input-received-at",
+      "text": "2026-10-03T14:18",
+      "box": [
+        206,
+        519
+      ]
+    },
+    {
+      "i": 6,
+      "kind": "interactive",
+      "tag": "span",
+      "role": "switch",
+      "type": null,
+      "testid": "toggle-cash",
+      "text": "Cash Transaction",
+      "box": [
+        38,
+        562
+      ]
+    },
+    {
+      "i": 7,
+      "kind": "interactive",
+      "tag": "span",
+      "role": "switch",
+      "type": null,
+      "testid": "toggle-income",
+      "text": "Income",
+      "box": [
+        38,
+        600
+      ]
+    },
+    {
+      "i": 8,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": "button",
+      "testid": "tag-mode-default",
+      "text": "Default",
+      "box": [
+        53,
+        643
+      ]
+    },
+    {
+      "i": 9,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": "button",
+      "testid": "tag-mode-exception",
+      "text": "Exception",
+      "box": [
+        143,
+        643
+      ]
+    },
+    {
+      "i": 10,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "remove-tag-1",
+      "text": "Remove",
+      "box": [
+        149,
+        712
+      ]
+    },
+    {
+      "i": 11,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "remove-tag-12",
+      "text": "Remove",
+      "box": [
+        266,
+        712
+      ]
+    },
+    {
+      "i": 12,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "remove-tag-13",
+      "text": "Remove",
+      "box": [
+        99,
+        743
+      ]
+    },
+    {
+      "i": 13,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "quick-tag-1",
+      "text": "AddedManually",
+      "box": [
+        75,
+        810
+      ]
+    },
+    {
+      "i": 14,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "quick-tag-10",
+      "text": "Bills",
+      "box": [
+        164,
+        810
+      ]
+    },
+    {
+      "i": 15,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "quick-tag-6",
+      "text": "Car",
+      "box": [
+        218,
+        810
+      ]
+    },
+    {
+      "i": 16,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "quick-tag-12",
+      "text": "Coffee",
+      "box": [
+        278,
+        810
+      ]
+    },
+    {
+      "i": 17,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "quick-tag-4",
+      "text": "Discount",
+      "box": [
+        355,
+        810
+      ]
+    },
+    {
+      "i": 18,
+      "kind": "interactive",
+      "tag": "input",
+      "role": null,
+      "type": null,
+      "testid": "input-tag-search",
+      "text": "Tag search",
+      "box": [
+        206,
+        882
+      ]
+    },
+    {
+      "i": 19,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "btn-add-tag",
+      "text": "Add Tag",
+      "box": [
+        63,
+        939
+      ]
+    },
+    {
+      "i": 20,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "btn-split",
+      "text": "Split Transaction",
+      "box": [
+        196,
+        939
+      ]
+    },
+    {
+      "i": 21,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "btn-save",
+      "text": "Save Changes",
+      "box": [
+        84,
+        986
+      ]
+    },
+    {
+      "i": 22,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "nav-dashboard",
+      "text": "Dashboard",
+      "box": [
+        101,
+        879
+      ]
+    },
+    {
+      "i": 23,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "nav-transactions",
+      "text": "Transactions",
+      "box": [
+        307,
+        879
+      ]
+    },
+    {
+      "i": 24,
+      "kind": "text",
+      "tag": "h1",
+      "testid": null,
+      "text": "Edit Transaction"
+    },
+    {
+      "i": 25,
+      "kind": "text",
+      "tag": "label",
+      "testid": null,
+      "text": "Title"
+    },
+    {
+      "i": 26,
+      "kind": "text",
+      "tag": "label",
+      "testid": null,
+      "text": "Description"
+    },
+    {
+      "i": 27,
+      "kind": "text",
+      "tag": "label",
+      "testid": null,
+      "text": "Amount"
+    },
+    {
+      "i": 28,
+      "kind": "text",
+      "tag": "label",
+      "testid": null,
+      "text": "Currency"
+    },
+    {
+      "i": 29,
+      "kind": "text",
+      "tag": "label",
+      "testid": null,
+      "text": "Date & Time"
+    },
+    {
+      "i": 30,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Cash Transaction"
+    },
+    {
+      "i": 31,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Income"
+    },
+    {
+      "i": 32,
+      "kind": "text",
+      "tag": "p",
+      "testid": null,
+      "text": "Current Tags"
+    },
+    {
+      "i": 33,
+      "kind": "text",
+      "tag": "p",
+      "testid": null,
+      "text": "Quick Add"
+    },
+    {
+      "i": 34,
+      "kind": "text",
+      "tag": "p",
+      "testid": null,
+      "text": "Search Tags"
+    },
+    {
+      "i": 35,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Dashboard"
+    },
+    {
+      "i": 36,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Transactions"
+    }
+  ]
+}

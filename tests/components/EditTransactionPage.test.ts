@@ -681,8 +681,184 @@ describe("receivedAt field", () => {
     // Confirm the updated value is persisted in the database.
     const saved = getTransactionById(db, id);
     expect(saved).not.toBeNull();
-    // Verify both the date and time are correctly persisted.
-    expect(saved!.receivedAt).toContain("2024-06-20");
-    expect(saved!.receivedAt).toContain("08:45");
+    // The datetime-local field is a wall-clock value with no timezone; the
+    // component stores it as UTC via `new Date(local).toISOString()`. Assert
+    // against that exact conversion so the test is deterministic in any
+    // timezone (a literal "08:45" only holds when the runner's TZ is UTC).
+    const expectedIso = new Date("2024-06-20T08:45").toISOString();
+    expect(saved!.receivedAt).toBe(expectedIso);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FR7: OS swipe-back + visible Back button
+// ---------------------------------------------------------------------------
+
+// vi.mock is hoisted to module level by Vitest, so mock variables must be
+// declared with vi.hoisted() to be in scope when the factory runs.
+const { mockRemove, mockAddListener } = vi.hoisted(() => {
+  const mockRemove = vi.fn();
+  const mockAddListener = vi.fn(() => Promise.resolve({ remove: mockRemove }));
+  return { mockRemove, mockAddListener };
+});
+
+vi.mock("@capacitor/app", () => ({
+  App: {
+    addListener: mockAddListener,
+  },
+}));
+
+describe("FR7 – OS back-button listener and visible Back button", () => {
+  beforeEach(() => {
+    mockRemove.mockClear();
+    mockAddListener.mockClear();
+  });
+
+  it("renders a visible Back button with data-testid='edit-back-button'", async () => {
+    const id = insertTx();
+    renderPage(id);
+    await waitFor(() =>
+      expect(screen.getByTestId("edit-back-button")).toBeTruthy()
+    );
+  });
+
+  it("clicking the Back button navigates to /transactions", async () => {
+    const id = insertTx();
+    renderPage(id);
+    await waitFor(() =>
+      expect(screen.getByTestId("edit-back-button")).toBeTruthy()
+    );
+    act(() => {
+      fireEvent.click(screen.getByTestId("edit-back-button"));
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("transactions-page")).toBeTruthy()
+    );
+  });
+
+  it("registers a backButton listener on mount", async () => {
+    const id = insertTx();
+    renderPage(id);
+    await waitFor(() =>
+      expect(mockAddListener).toHaveBeenCalledWith(
+        "backButton",
+        expect.any(Function)
+      )
+    );
+  });
+
+  it("removes the backButton listener on unmount", async () => {
+    const id = insertTx();
+    renderPage(id);
+    // Wait for listener to be registered (and promise to resolve).
+    await waitFor(() =>
+      expect(mockAddListener).toHaveBeenCalledWith(
+        "backButton",
+        expect.any(Function)
+      )
+    );
+    // Flush microtasks so the addListener promise resolves and handle is stored.
+    await act(async () => {});
+    cleanup();
+    expect(mockRemove).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FR8: Default / Exception toggle
+// ---------------------------------------------------------------------------
+
+import { setTransactionException } from "../../src/data/TransactionRepository";
+
+describe("FR8 – Default/Exception toggle on EditTransactionPage", () => {
+  it("renders the tag-mode-toggle, tag-mode-default, tag-mode-exception elements", async () => {
+    const id = insertTx();
+    renderPage(id);
+    await waitFor(() => expect(screen.getByTestId("tag-mode-toggle")).toBeTruthy());
+    expect(screen.getByTestId("tag-mode-default")).toBeTruthy();
+    expect(screen.getByTestId("tag-mode-exception")).toBeTruthy();
+  });
+
+  it("defaults to Default mode (tag-mode-default aria-pressed=true)", async () => {
+    const id = insertTx();
+    renderPage(id);
+    await waitFor(() => {
+      const defaultBtn = screen.getByTestId("tag-mode-default") as HTMLButtonElement;
+      expect(defaultBtn.getAttribute("aria-pressed")).toBe("true");
+    });
+    const exceptionBtn = screen.getByTestId("tag-mode-exception") as HTMLButtonElement;
+    expect(exceptionBtn.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("reflects existing exception state when transaction already has ExcludeFromAutoLearn=true", async () => {
+    const id = insertTx();
+    // Set exception mode in DB before rendering
+    setTransactionException(db, id, true);
+    renderPage(id);
+    await waitFor(() => {
+      const exceptionBtn = screen.getByTestId("tag-mode-exception") as HTMLButtonElement;
+      expect(exceptionBtn.getAttribute("aria-pressed")).toBe("true");
+    });
+  });
+
+  it("flipping to Exception clears assigned tags and persists", async () => {
+    const id = insertTx();
+    // Add a tag to the transaction
+    const { addTag: repoAddTag, addTagToTransaction: repoAddTagToTx } = await import(
+      "../../src/data/TagRepository"
+    );
+    const tag = repoAddTag(db, "TestTag");
+    repoAddTagToTx(db, id, tag.id);
+
+    renderPage(id);
+
+    await waitFor(() => expect(screen.getByTestId("tag-mode-exception")).toBeTruthy());
+
+    // Click Exception
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-mode-exception"));
+    });
+
+    // Tags should be cleared from the UI
+    await waitFor(() => {
+      const currentTagsDiv = screen.getByTestId("current-tags");
+      // No tag chips for TestTag
+      expect(currentTagsDiv.querySelectorAll("[data-testid^='tag-chip-']").length).toBe(0);
+    });
+
+    // DB should also have no tags for this transaction
+    const fetched = getTransactionById(db, id)!;
+    expect(fetched.excludeFromAutoLearn).toBe(true);
+    expect(fetched.transactionTags).toHaveLength(0);
+  });
+
+  it("flipping back to Default does NOT restore tags", async () => {
+    const id = insertTx();
+    const { addTag: repoAddTag, addTagToTransaction: repoAddTagToTx } = await import(
+      "../../src/data/TagRepository"
+    );
+    const tag = repoAddTag(db, "AnotherTag");
+    repoAddTagToTx(db, id, tag.id);
+
+    renderPage(id);
+    await waitFor(() => expect(screen.getByTestId("tag-mode-exception")).toBeTruthy());
+
+    // Flip to Exception (clears tags)
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-mode-exception"));
+    });
+    await waitFor(() => {
+      expect(getTransactionById(db, id)!.transactionTags).toHaveLength(0);
+    });
+
+    // Flip back to Default
+    act(() => {
+      fireEvent.click(screen.getByTestId("tag-mode-default"));
+    });
+
+    // Tags remain empty (not restored)
+    await waitFor(() => {
+      expect(getTransactionById(db, id)!.transactionTags).toHaveLength(0);
+    });
   });
 });

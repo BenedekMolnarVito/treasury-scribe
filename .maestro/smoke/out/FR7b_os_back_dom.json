@@ -1,0 +1,481 @@
+{
+  "title": "Treasury Scribe",
+  "url": "https://localhost/transactions",
+  "count": 54,
+  "els": [
+    {
+      "i": 0,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "btn-toggle-tag-filter",
+      "text": "Toggle tag filter",
+      "box": [
+        35,
+        67
+      ]
+    },
+    {
+      "i": 1,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": null,
+      "text": "Export",
+      "box": [
+        78,
+        67
+      ]
+    },
+    {
+      "i": 2,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": null,
+      "text": "Import",
+      "box": [
+        122,
+        67
+      ]
+    },
+    {
+      "i": 3,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": null,
+      "text": "Revolut Import",
+      "box": [
+        165,
+        67
+      ]
+    },
+    {
+      "i": 4,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": null,
+      "text": "Clear All",
+      "box": [
+        209,
+        67
+      ]
+    },
+    {
+      "i": 5,
+      "kind": "interactive",
+      "tag": "span",
+      "role": "switch",
+      "type": null,
+      "testid": "toggle-show-deleted",
+      "text": "Show deleted entries",
+      "box": [
+        312,
+        67
+      ]
+    },
+    {
+      "i": 6,
+      "kind": "interactive",
+      "tag": "div",
+      "role": "button",
+      "type": null,
+      "testid": null,
+      "text": "Spar Groceries\nKartyas vasarlas 4 500 Ft SPAR BUDAPEST\n4500 HUF\n10. 03. 16:18\nTa",
+      "box": [
+        206,
+        150
+      ]
+    },
+    {
+      "i": 7,
+      "kind": "interactive",
+      "tag": "div",
+      "role": "button",
+      "type": null,
+      "testid": null,
+      "text": "Lidl Shop\nKartyas vasarlas 3 200 Ft LIDL\n3200 HUF\n10. 03. 16:18\nTags: AddedManua",
+      "box": [
+        206,
+        270
+      ]
+    },
+    {
+      "i": 8,
+      "kind": "interactive",
+      "tag": "div",
+      "role": "button",
+      "type": null,
+      "testid": null,
+      "text": "Shell Fuel\nKartyas vasarlas 12 000 Ft SHELL\n12000 HUF\n10. 03. 16:18\nTags: AddedM",
+      "box": [
+        206,
+        390
+      ]
+    },
+    {
+      "i": 9,
+      "kind": "interactive",
+      "tag": "div",
+      "role": "button",
+      "type": null,
+      "testid": null,
+      "text": "Netflix\nHavi dij 4 990 Ft NETFLIX\n4990 HUF\n10. 03. 16:18\nTags: AddedManually, En",
+      "box": [
+        206,
+        510
+      ]
+    },
+    {
+      "i": 10,
+      "kind": "interactive",
+      "tag": "div",
+      "role": "button",
+      "type": null,
+      "testid": null,
+      "text": "Rent\nAtutalas elkuldve 180 000 Ft Lakber\n180000 HUF\n10. 03. 16:18\nTags: AddedMan",
+      "box": [
+        206,
+        630
+      ]
+    },
+    {
+      "i": 11,
+      "kind": "interactive",
+      "tag": "div",
+      "role": "button",
+      "type": null,
+      "testid": null,
+      "text": "Pharmacy\nKartyas vasarlas 2 500 Ft BENU\n2500 HUF\n10. 03. 16:18\nTags: AddedManual",
+      "box": [
+        206,
+        750
+      ]
+    },
+    {
+      "i": 12,
+      "kind": "interactive",
+      "tag": "div",
+      "role": "button",
+      "type": null,
+      "testid": null,
+      "text": "Cafe\nKartyas vasarlas 1 800 Ft STARBUCKS\n1800 HUF\n10. 03. 16:18\nTags: AddedManua",
+      "box": [
+        206,
+        870
+      ]
+    },
+    {
+      "i": 13,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "fab-add",
+      "text": "+",
+      "box": [
+        48,
+        807
+      ]
+    },
+    {
+      "i": 14,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "nav-dashboard",
+      "text": "Dashboard",
+      "box": [
+        101,
+        879
+      ]
+    },
+    {
+      "i": 15,
+      "kind": "interactive",
+      "tag": "button",
+      "role": null,
+      "type": null,
+      "testid": "nav-transactions",
+      "text": "Transactions",
+      "box": [
+        307,
+        879
+      ]
+    },
+    {
+      "i": 16,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Deleted"
+    },
+    {
+      "i": 17,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Spar Groceries"
+    },
+    {
+      "i": 18,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Kartyas vasarlas 4 500 Ft SPAR BUDAPEST"
+    },
+    {
+      "i": 19,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "4500 HUF"
+    },
+    {
+      "i": 20,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "10. 03. 16:18"
+    },
+    {
+      "i": 21,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Tags: AddedManually, Groceries"
+    },
+    {
+      "i": 22,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Lidl Shop"
+    },
+    {
+      "i": 23,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Kartyas vasarlas 3 200 Ft LIDL"
+    },
+    {
+      "i": 24,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "3200 HUF"
+    },
+    {
+      "i": 25,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "10. 03. 16:18"
+    },
+    {
+      "i": 26,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Tags: AddedManually, Food, Discount"
+    },
+    {
+      "i": 27,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Shell Fuel"
+    },
+    {
+      "i": 28,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Kartyas vasarlas 12 000 Ft SHELL"
+    },
+    {
+      "i": 29,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "12000 HUF"
+    },
+    {
+      "i": 30,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "10. 03. 16:18"
+    },
+    {
+      "i": 31,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Tags: AddedManually, Transport, Car"
+    },
+    {
+      "i": 32,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Netflix"
+    },
+    {
+      "i": 33,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Havi dij 4 990 Ft NETFLIX"
+    },
+    {
+      "i": 34,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "4990 HUF"
+    },
+    {
+      "i": 35,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "10. 03. 16:18"
+    },
+    {
+      "i": 36,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Tags: AddedManually, Entertainment, Subscription"
+    },
+    {
+      "i": 37,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Rent"
+    },
+    {
+      "i": 38,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Atutalas elkuldve 180 000 Ft Lakber"
+    },
+    {
+      "i": 39,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "180000 HUF"
+    },
+    {
+      "i": 40,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "10. 03. 16:18"
+    },
+    {
+      "i": 41,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Tags: AddedManually, Housing, Bills"
+    },
+    {
+      "i": 42,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Pharmacy"
+    },
+    {
+      "i": 43,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Kartyas vasarlas 2 500 Ft BENU"
+    },
+    {
+      "i": 44,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "2500 HUF"
+    },
+    {
+      "i": 45,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "10. 03. 16:18"
+    },
+    {
+      "i": 46,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Tags: AddedManually, Health"
+    },
+    {
+      "i": 47,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Cafe"
+    },
+    {
+      "i": 48,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Kartyas vasarlas 1 800 Ft STARBUCKS"
+    },
+    {
+      "i": 49,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "1800 HUF"
+    },
+    {
+      "i": 50,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "10. 03. 16:18"
+    },
+    {
+      "i": 51,
+      "kind": "text",
+      "tag": "div",
+      "testid": null,
+      "text": "Tags: AddedManually, Coffee, Leisure"
+    },
+    {
+      "i": 52,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Dashboard"
+    },
+    {
+      "i": 53,
+      "kind": "text",
+      "tag": "span",
+      "testid": null,
+      "text": "Transactions"
+    }
+  ]
+}

@@ -5,12 +5,12 @@
  * Wraps TransactionRepository and TagRepository behind a clean stateful API.
  *
  * The optional `share` parameter allows callers (and tests) to inject a
- * custom share handler.  In production the default falls back to the
- * Capacitor Share plugin loaded via a dynamic import so that no hard
- * dependency on `@capacitor/share` is needed at module load time.
+ * custom share handler. Native exports are written to a temporary file before
+ * sharing so large transaction histories are not retained in activity state.
  */
 
 import { useState, useCallback } from "react";
+import { Capacitor } from "@capacitor/core";
 import type { Database } from "sql.js";
 import type { Transaction } from "../models/Transaction";
 import type { Tag } from "../models/Tag";
@@ -77,10 +77,12 @@ export interface UseTransactionsResult {
     currency?: string,
     isCash?: boolean,
     isIncome?: boolean,
-    receivedAt?: string
+    receivedAt?: string,
+    excludeFromAutoLearn?: boolean,
+    tagNames?: string[]
   ) => Promise<void>;
   /**
-   * Serialize non-deleted transactions and share them.
+   * Serialize all transactions (including soft-deleted) and share them.
    *
    * @param format - "json" produces indented JSON; "csv" produces a
    *   comma-delimited file with tags semicolon-separated inside each cell.
@@ -149,6 +151,9 @@ const CSV_HEADERS = [
   "IsCash",
   "Tags",
   "IsDeleted",
+  // Column 11 (index 10): added in FR8 to persist the auto-learn exclusion flag.
+  // Old export files (10 columns) remain importable — the importer treats this as optional.
+  "ExcludeFromAutoLearn",
 ] as const;
 
 /**
@@ -197,6 +202,7 @@ function transactionsToCSV(transactions: Transaction[]): string {
       csvEscape(tx.isCash ? 1 : 0),
       csvEscape(tagNames),
       csvEscape(tx.isDeleted ? 1 : 0),
+      csvEscape(tx.excludeFromAutoLearn ? 1 : 0),
     ].join(",");
   });
 
@@ -216,8 +222,11 @@ interface ExportRow {
   Amount: number | null;
   Currency: string | null;
   IsCash: 0 | 1;
+  IsIncome: 0 | 1;
   Tags: string;
   IsDeleted: 0 | 1;
+  /** FR8: persists the auto-learn exclusion flag (column 11, index 10 in CSV). */
+  ExcludeFromAutoLearn: 0 | 1;
 }
 
 /**
@@ -237,10 +246,12 @@ function transactionsToJSON(transactions: Transaction[]): string {
     Amount: tx.amount,
     Currency: tx.currency,
     IsCash: tx.isCash ? 1 : 0,
+    IsIncome: tx.isIncome ? 1 : 0,
     Tags: tx.transactionTags
       .map((tt) => getTagDisplayName(tt).replace(/;/g, "\\;"))
       .join(";"),
     IsDeleted: tx.isDeleted ? 1 : 0,
+    ExcludeFromAutoLearn: tx.excludeFromAutoLearn ? 1 : 0,
   }));
   return JSON.stringify(rows, null, 2);
 }
@@ -255,8 +266,12 @@ function transactionsToJSON(transactions: Transaction[]): string {
  * where Capacitor is not available (e.g., unit-test Node process).
  */
 async function downloadExportFile(title: string, text: string): Promise<void> {
-  if (typeof document === "undefined" || typeof URL === "undefined") {
-    return;
+  if (
+    typeof document === "undefined" ||
+    typeof URL === "undefined" ||
+    typeof URL.createObjectURL !== "function"
+  ) {
+    throw new Error("File downloads are unavailable in this environment.");
   }
 
   const blob = new Blob([text], {
@@ -275,18 +290,28 @@ async function downloadExportFile(title: string, text: string): Promise<void> {
 }
 
 const capacitorShare: ShareFn = async (title: string, text: string) => {
-  try {
-    const { Share } = await import("@capacitor/share");
-    await (
-      Share as unknown as { share?: (opts: Record<string, string>) => Promise<unknown> }
-    ).share?.({
+  if (Capacitor.isNativePlatform()) {
+    const [{ Directory, Encoding, Filesystem }, { Share }] = await Promise.all([
+      import("@capacitor/filesystem"),
+      import("@capacitor/share"),
+    ]);
+    const { uri } = await Filesystem.writeFile({
+      path: title,
+      data: text,
+      directory: Directory.Cache,
+      encoding: Encoding.UTF8,
+    });
+    await Share.share({
       title,
-      text,
+      files: [uri],
       dialogTitle: title,
     });
     return;
-  } catch {
-    // Fall through to the browser download fallback below.
+  }
+
+  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+    await navigator.share({ title, text });
+    return;
   }
 
   await downloadExportFile(title, text);
@@ -363,7 +388,9 @@ export function useTransactions(
       currency?: string,
       isCash?: boolean,
       isIncome?: boolean,
-      receivedAt?: string
+      receivedAt?: string,
+      excludeFromAutoLearn?: boolean,
+      tagNames?: string[]
     ): Promise<void> => {
       const now = receivedAt ?? new Date().toISOString();
 
@@ -376,13 +403,24 @@ export function useTransactions(
           currency: currency ?? null,
           isCash: isCash ?? false,
           isIncome: isIncome ?? false,
+          excludeFromAutoLearn: excludeFromAutoLearn ?? false,
           receivedAt: now,
         }),
       });
 
       // Auto-tag with "AddedManually".
-      const tag = addTag(db, "AddedManually");
-      repoAddTagToTx(db, newTx.id, tag.id);
+      const autoTag = addTag(db, "AddedManually");
+      repoAddTagToTx(db, newTx.id, autoTag.id);
+
+      // Add user-supplied tags, deduped against "AddedManually".
+      if (tagNames && tagNames.length > 0) {
+        for (const name of tagNames) {
+          if (name.trim() === "" || name.trim() === "AddedManually") continue;
+          const userTag = addTag(db, name.trim());
+          repoAddTagToTx(db, newTx.id, userTag.id);
+        }
+      }
+
       onDatabaseChanged(db);
 
       await loadTransactions();
@@ -396,7 +434,7 @@ export function useTransactions(
 
   const exportTransactions = useCallback(
     async (format: "json" | "csv"): Promise<string> => {
-      const rows = getAllTransactions(db); // always non-deleted
+      const rows = getAllTransactionsIncludingDeleted(db); // includes soft-deleted for full round-trip fidelity
 
       const now = new Date();
       const timestamp = [
@@ -496,6 +534,9 @@ export function useTransactions(
         isDeleted: false,
         isCash: false,
         isIncome: false,
+        // New captures are always Default mode (feed auto-learning); the user
+        // can later flip to Exception on the Edit screen (FR8).
+        excludeFromAutoLearn: false,
       });
       if (result !== null) {
         onDatabaseChanged(db);

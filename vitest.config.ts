@@ -19,6 +19,10 @@ export default defineConfig({
         __dirname,
         "src/__mocks__/@capacitor/share.ts"
       ),
+      "@capacitor/filesystem": resolve(
+        __dirname,
+        "src/__mocks__/@capacitor/filesystem.ts"
+      ),
     },
   },
 });

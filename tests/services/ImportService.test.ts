@@ -18,6 +18,7 @@ import {
 } from "../../src/services/ImportService";
 import {
   getAllTransactions,
+  getAllTransactionsIncludingDeleted,
 } from "../../src/data/TransactionRepository";
 import { getTagsForTransaction } from "../../src/data/TagRepository";
 
@@ -183,7 +184,7 @@ describe("importFromCSV", () => {
     expect(transactions).toHaveLength(1);
   });
 
-  it("skips IsDeleted=1 rows", () => {
+  it("imports IsDeleted=1 rows and soft-deletes them", () => {
     const deletedRow = csvLine(
       3,
       "2026-02-01T08:00:00.000Z",
@@ -199,9 +200,16 @@ describe("importFromCSV", () => {
     const csv = [CSV_HEADERS, deletedRow].join("\n");
     const result = importFromCSV(db, csv);
 
-    expect(result.imported).toBe(0);
-    expect(result.skipped).toBe(1);
+    // The row must be imported (count=1), not skipped.
+    expect(result.imported).toBe(1);
+    expect(result.skipped).toBe(0);
+    // The row is hidden from the regular view (isDeleted=0 filter).
     expect(getAllTransactions(db)).toHaveLength(0);
+    // But it exists when we include deleted rows.
+    const allRows = getAllTransactionsIncludingDeleted(db);
+    expect(allRows).toHaveLength(1);
+    expect(allRows[0]!.isDeleted).toBe(true);
+    expect(allRows[0]!.notificationTitle).toBe("DeletedVendor");
   });
 
   it("handles empty CSV (headers only)", () => {
@@ -287,6 +295,70 @@ describe("importFromJSON", () => {
     expect(getAllTransactions(db)).toHaveLength(1);
   });
 
+  it("imports nearby distinct transactions and only skips exact re-imports", () => {
+    const nearbyRows = JSON.stringify([
+      {
+        ReceivedAt: "2026-01-15T10:00:00.000Z",
+        NotificationTitle: "Madis",
+        NotificationBody: "",
+        PackageName: "Manual",
+        Amount: 931000,
+        Currency: "HUF",
+        IsCash: 0,
+        Tags: "",
+        IsDeleted: 0,
+      },
+      {
+        ReceivedAt: "2026-01-15T10:00:03.000Z",
+        NotificationTitle: "Madis",
+        NotificationBody: "",
+        PackageName: "Manual",
+        Amount: 931000,
+        Currency: "HUF",
+        IsCash: 0,
+        Tags: "",
+        IsDeleted: 0,
+      },
+    ]);
+
+    const firstImport = importFromJSON(db, nearbyRows);
+    expect(firstImport.imported).toBe(2);
+    expect(firstImport.skipped).toBe(0);
+    expect(getAllTransactions(db)).toHaveLength(2);
+
+    const secondImport = importFromJSON(db, nearbyRows);
+    expect(secondImport.imported).toBe(0);
+    expect(secondImport.skipped).toBe(2);
+    expect(getAllTransactions(db)).toHaveLength(2);
+  });
+
+  it("imports IsIncome=1 JSON rows and defaults missing IsIncome to false", () => {
+    const json = JSON.stringify([
+      {
+        ReceivedAt: "2026-01-15T10:00:00.000Z",
+        NotificationTitle: "Salary",
+        PackageName: "Manual",
+        Amount: 931000,
+        Currency: "HUF",
+        IsIncome: 1,
+      },
+      {
+        ReceivedAt: "2026-01-16T10:00:00.000Z",
+        NotificationTitle: "Old export",
+        PackageName: "Manual",
+        Amount: 100,
+        Currency: "HUF",
+      },
+    ]);
+
+    const result = importFromJSON(db, json);
+    expect(result.imported).toBe(2);
+
+    const transactions = getAllTransactions(db);
+    expect(transactions.find((tx) => tx.notificationTitle === "Salary")!.isIncome).toBe(true);
+    expect(transactions.find((tx) => tx.notificationTitle === "Old export")!.isIncome).toBe(false);
+  });
+
   it("handles empty array", () => {
     const result = importFromJSON(db, "[]");
 
@@ -312,7 +384,7 @@ describe("importFromJSON", () => {
     expect(result.errors[0]).toContain("Item 0");
   });
 
-  it("skips IsDeleted=1 rows in JSON", () => {
+  it("imports IsDeleted=1 rows in JSON and soft-deletes them", () => {
     const jsonWithDeleted = JSON.stringify([
       {
         Id: 5,
@@ -329,9 +401,16 @@ describe("importFromJSON", () => {
     ]);
     const result = importFromJSON(db, jsonWithDeleted);
 
-    expect(result.imported).toBe(0);
-    expect(result.skipped).toBe(1);
+    // The row must be imported (count=1), not skipped.
+    expect(result.imported).toBe(1);
+    expect(result.skipped).toBe(0);
+    // The row is hidden from the regular view.
     expect(getAllTransactions(db)).toHaveLength(0);
+    // But it exists when we include deleted rows.
+    const allRows = getAllTransactionsIncludingDeleted(db);
+    expect(allRows).toHaveLength(1);
+    expect(allRows[0]!.isDeleted).toBe(true);
+    expect(allRows[0]!.notificationTitle).toBe("Deleted");
   });
 });
 
@@ -360,5 +439,144 @@ describe("importTransactions", () => {
 
     expect(result.imported).toBe(1);
     expect(result.errors).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round-trip: export (with deleted) → re-import → hidden in fresh DB
+// ---------------------------------------------------------------------------
+
+describe("IsDeleted round-trip (export → import)", () => {
+  it("a soft-deleted row is hidden after re-import into a fresh DB", async () => {
+    // Simulate an export file that contains a deleted row (IsDeleted=1).
+    // This is what the fixed export will produce after FR5.
+    const exportedCsv = [
+      CSV_HEADERS,
+      // Non-deleted row
+      csvLine(1, "2026-03-01T09:00:00.000Z", "ActiveVendor", "Active body", "com.app", 500, "HUF", 0, "", 0),
+      // Deleted row
+      csvLine(2, "2026-03-02T10:00:00.000Z", "GoneVendor", "Gone body", "com.app", 999, "HUF", 0, "OldTag", 1),
+    ].join("\n");
+
+    // Re-import into a fresh DB (db is reset per test via beforeEach).
+    const result = importFromCSV(db, exportedCsv);
+    expect(result.imported).toBe(2);
+    expect(result.skipped).toBe(0);
+    expect(result.errors).toHaveLength(0);
+
+    // Active row visible in normal view.
+    const visible = getAllTransactions(db);
+    expect(visible).toHaveLength(1);
+    expect(visible[0]!.notificationTitle).toBe("ActiveVendor");
+
+    // Deleted row hidden from normal view but present when including deleted.
+    const all = getAllTransactionsIncludingDeleted(db);
+    expect(all).toHaveLength(2);
+    const gone = all.find((t) => t.notificationTitle === "GoneVendor");
+    expect(gone).toBeDefined();
+    expect(gone!.isDeleted).toBe(true);
+
+    // Tags on the deleted row are still re-created.
+    const tags = tagNames(db, gone!.id);
+    expect(tags).toContain("OldTag");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX 1 (I-2): ExcludeFromAutoLearn round-trip in ImportService
+// ---------------------------------------------------------------------------
+
+describe("FIX I-2 – ExcludeFromAutoLearn import (CSV)", () => {
+  const NEW_CSV_HEADERS =
+    "Id,ReceivedAt,NotificationTitle,NotificationBody,PackageName,Amount,Currency,IsCash,Tags,IsDeleted,ExcludeFromAutoLearn";
+
+  it("(a) new-format row with ExcludeFromAutoLearn=1 imports with flag=true", () => {
+    const row11Col = "1,2026-01-15T10:00:00.000Z,Shell,Card payment,com.revolut.revolut,200,HUF,0,,0,1";
+    const csv = [NEW_CSV_HEADERS, row11Col].join("\n");
+    importFromCSV(db, csv);
+
+    const txs = getAllTransactionsIncludingDeleted(db);
+    expect(txs).toHaveLength(1);
+    expect(txs[0]!.excludeFromAutoLearn).toBe(true);
+  });
+
+  it("(b) old-format 10-column row still imports fine with flag defaulting to false (backward-compat)", () => {
+    const OLD_HEADERS = "Id,ReceivedAt,NotificationTitle,NotificationBody,PackageName,Amount,Currency,IsCash,Tags,IsDeleted";
+    const row10Col = "1,2026-01-15T10:00:00.000Z,Shell,Card payment,com.revolut.revolut,200,HUF,0,,0";
+    const csv = [OLD_HEADERS, row10Col].join("\n");
+    const result = importFromCSV(db, csv);
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.imported).toBe(1);
+
+    const txs = getAllTransactionsIncludingDeleted(db);
+    expect(txs).toHaveLength(1);
+    expect(txs[0]!.excludeFromAutoLearn).toBe(false);
+  });
+
+  it("(c) a row with ExcludeFromAutoLearn=0 in new-format imports with flag=false", () => {
+    const row11Col = "1,2026-01-15T10:00:00.000Z,Shell,Card payment,com.revolut.revolut,200,HUF,0,,0,0";
+    const csv = [NEW_CSV_HEADERS, row11Col].join("\n");
+    importFromCSV(db, csv);
+
+    const txs = getAllTransactionsIncludingDeleted(db);
+    expect(txs).toHaveLength(1);
+    expect(txs[0]!.excludeFromAutoLearn).toBe(false);
+  });
+
+  it("genuinely malformed row (< 10 columns) still gets an error", () => {
+    const csv = [NEW_CSV_HEADERS, "only,three,columns"].join("\n");
+    const result = importFromCSV(db, csv);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toContain("Row 1");
+  });
+});
+
+describe("FIX I-2 – ExcludeFromAutoLearn import (JSON)", () => {
+  it("(a) JSON row with ExcludeFromAutoLearn=1 imports with flag=true", () => {
+    const json = JSON.stringify([
+      {
+        Id: 1,
+        ReceivedAt: "2026-01-15T10:00:00.000Z",
+        NotificationTitle: "Shell",
+        NotificationBody: "Card payment",
+        PackageName: "com.revolut.revolut",
+        Amount: 200,
+        Currency: "HUF",
+        IsCash: 0,
+        Tags: "",
+        IsDeleted: 0,
+        ExcludeFromAutoLearn: 1,
+      },
+    ]);
+    importFromJSON(db, json);
+
+    const txs = getAllTransactionsIncludingDeleted(db);
+    expect(txs).toHaveLength(1);
+    expect(txs[0]!.excludeFromAutoLearn).toBe(true);
+  });
+
+  it("(b) JSON row without ExcludeFromAutoLearn field imports with flag=false (backward-compat)", () => {
+    const json = JSON.stringify([
+      {
+        Id: 1,
+        ReceivedAt: "2026-01-15T10:00:00.000Z",
+        NotificationTitle: "Shell",
+        NotificationBody: "Card payment",
+        PackageName: "com.revolut.revolut",
+        Amount: 200,
+        Currency: "HUF",
+        IsCash: 0,
+        Tags: "",
+        IsDeleted: 0,
+        // No ExcludeFromAutoLearn field
+      },
+    ]);
+    const result = importFromJSON(db, json);
+
+    expect(result.errors).toHaveLength(0);
+    const txs = getAllTransactionsIncludingDeleted(db);
+    expect(txs).toHaveLength(1);
+    expect(txs[0]!.excludeFromAutoLearn).toBe(false);
   });
 });

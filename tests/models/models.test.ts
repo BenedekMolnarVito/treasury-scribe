@@ -34,6 +34,19 @@ describe("createTransaction – defaults", () => {
     expect(tx.isIncome).toBe(false);
   });
 
+  it("sets excludeFromAutoLearn to false by default (FR8)", () => {
+    const tx = createTransaction({ receivedAt: "2024-01-01T00:00:00.000Z" });
+    expect(tx.excludeFromAutoLearn).toBe(false);
+  });
+
+  it("respects excludeFromAutoLearn=true when explicitly set (FR8)", () => {
+    const tx = createTransaction({
+      receivedAt: "2024-01-01T00:00:00.000Z",
+      excludeFromAutoLearn: true,
+    });
+    expect(tx.excludeFromAutoLearn).toBe(true);
+  });
+
   it("sets rawContent to null by default", () => {
     const tx = createTransaction({ receivedAt: "2024-01-01T00:00:00.000Z" });
     expect(tx.rawContent).toBeNull();
@@ -243,6 +256,7 @@ describe("withComputedProps", () => {
       amount: 77,
       currency: "EUR",
       isIncome: false,
+      excludeFromAutoLearn: false,
       transactionTags: [],
       parsedAmount: null,
       parsedCurrency: null,
@@ -266,6 +280,7 @@ describe("withComputedProps", () => {
       amount: null,
       currency: null,
       isIncome: false,
+      excludeFromAutoLearn: false,
       transactionTags: [],
       parsedAmount: null,
       parsedCurrency: null,
