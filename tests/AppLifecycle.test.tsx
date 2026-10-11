@@ -281,6 +281,7 @@ describe("App notification lifecycle", () => {
       n: typeof liveNotif
     ) => void;
     liveCallback(liveNotif);
+    liveCallback(liveNotif);
     expect(ingestNotificationMock).toHaveBeenCalledTimes(1);
 
     // The item is still visible in the shade; a focus poll must skip it.

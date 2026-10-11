@@ -16,6 +16,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import org.json.JSONArray
+import org.json.JSONObject
 
 class RevolutNotificationService : NotificationListenerService() {
 
@@ -27,6 +29,8 @@ class RevolutNotificationService : NotificationListenerService() {
         private const val FOREGROUND_NOTIFICATION_TEXT =
             "Treasury Scribe — Monitoring notifications"
         private const val RESTART_DELAY_MS = 5_000L
+        private const val PENDING_PREFS = "revolut_pending_queue"
+        private const val PENDING_KEY = "queue"
 
         @Volatile
         var pluginInstance: NotificationListenerPlugin? = null
@@ -46,6 +50,10 @@ class RevolutNotificationService : NotificationListenerService() {
     override fun onCreate() {
         super.onCreate()
         serviceInstance = this
+        // Recover notifications queued while the app was closed, even if the
+        // service process died in between. Queued items survive swipes —
+        // only a dead service at post time loses anything.
+        restorePending()
         createNotificationChannel()
         startForeground(FOREGROUND_NOTIFICATION_ID, buildForegroundNotification())
     }
@@ -120,14 +128,74 @@ class RevolutNotificationService : NotificationListenerService() {
     private fun rescanActiveNotifications() {
         for (sbn in getRevolutActiveNotifications()) {
             val data = toNotificationData(sbn) ?: continue
-            val plugin = pluginInstance
-            if (plugin != null) {
-                plugin.dispatchNotificationReceived(data)
-            } else {
-                synchronized(pendingNotifications) {
-                    pendingNotifications.add(data)
+            deliverOrQueue(data)
+        }
+    }
+
+    /**
+     * Dispatches to the WebView when it is alive, otherwise queues for later.
+     * The queue is persisted so items survive a service restart — a Revolut
+     * push swiped away 1s after display is still captured on next app open.
+     */
+    private fun deliverOrQueue(data: JSObject) {
+        val plugin = pluginInstance
+        if (plugin != null) {
+            plugin.dispatchNotificationReceived(data)
+        } else {
+            synchronized(pendingNotifications) {
+                pendingNotifications.add(data)
+                persistPendingLocked()
+            }
+        }
+    }
+
+    private fun prefs() = getSharedPreferences(PENDING_PREFS, MODE_PRIVATE)
+
+    private fun persistPendingLocked() {
+        try {
+            val arr = JSONArray()
+            for (data in pendingNotifications) {
+                arr.put(
+                    JSONObject().apply {
+                        put("title", data.optString("title"))
+                        put("body", data.optString("body"))
+                        put("packageName", data.optString("packageName"))
+                        put("postedAt", data.optString("postedAt"))
+                    }
+                )
+            }
+            prefs().edit().putString(PENDING_KEY, arr.toString()).apply()
+        } catch (_: Exception) {
+            // Persistence is best-effort; the in-memory queue still works.
+        }
+    }
+
+    private fun restorePending() {
+        try {
+            val raw = prefs().getString(PENDING_KEY, null) ?: return
+            val arr = JSONArray(raw)
+            synchronized(pendingNotifications) {
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    pendingNotifications.add(
+                        JSObject().apply {
+                            put("title", o.optString("title"))
+                            put("body", o.optString("body"))
+                            put("packageName", o.optString("packageName"))
+                            put("postedAt", o.optString("postedAt"))
+                        }
+                    )
                 }
             }
+        } catch (_: Exception) {
+            // Corrupt store: start with an empty queue.
+        }
+    }
+
+    private fun clearPersistedPending() {
+        try {
+            prefs().edit().remove(PENDING_KEY).apply()
+        } catch (_: Exception) {
         }
     }
 
@@ -153,15 +221,7 @@ class RevolutNotificationService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
         val data = toNotificationData(sbn) ?: return
-
-        val plugin = pluginInstance
-        if (plugin != null) {
-            plugin.dispatchNotificationReceived(data)
-        } else {
-            synchronized(pendingNotifications) {
-                pendingNotifications.add(data)
-            }
-        }
+        deliverOrQueue(data)
     }
 
     fun flushPendingNotifications(plugin: NotificationListenerPlugin) {
@@ -170,6 +230,7 @@ class RevolutNotificationService : NotificationListenerService() {
             queued = pendingNotifications.toList()
             pendingNotifications.clear()
         }
+        clearPersistedPending()
         for (data in queued) {
             plugin.dispatchNotificationReceived(data)
         }

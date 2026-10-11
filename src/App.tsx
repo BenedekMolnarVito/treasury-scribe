@@ -311,7 +311,11 @@ const App: React.FC = () => {
               return;
             }
             // Record live deliveries too: a later shade poll of the same
-            // (still visible) item must not re-ingest it.
+            // (still visible) item must not re-ingest it. Skip items the
+            // native queue already delivered (restore + rescan overlap).
+            if (isShadeNotificationProcessed({ packageName, title, body, postedAt })) {
+              return;
+            }
             markShadeNotificationProcessed({ packageName, title, body, postedAt });
 
             const transaction = createTransactionFromNotification(

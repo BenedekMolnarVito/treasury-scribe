@@ -16,10 +16,10 @@
  */
 
 export interface ShadeNotificationIdentity {
-  packageName: string;
-  title: string;
-  body: string;
-  postedAt: string;
+  packageName: string | undefined;
+  title: string | undefined;
+  body: string | undefined;
+  postedAt?: string | undefined;
 }
 
 interface StoredEntry {
