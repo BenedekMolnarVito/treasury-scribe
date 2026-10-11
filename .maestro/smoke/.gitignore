@@ -1,2 +1,7 @@
 # Smoke-test run artifacts (DOM dumps, report.json) — regenerated each run.
 out/
+# Python + Gradle volatile outputs — regenerated each run, never commit.
+__pycache__/
+*.pyc
+.gradle/
+build/

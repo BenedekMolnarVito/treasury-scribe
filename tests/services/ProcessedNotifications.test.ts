@@ -89,4 +89,37 @@ describe("processed set", () => {
     expect(() => markShadeNotificationProcessed(ITEM)).not.toThrow();
     expect(isShadeNotificationProcessed(ITEM)).toBe(true);
   });
+
+  it("treats a throwing localStorage as empty instead of crashing", () => {
+    vi.stubGlobal("localStorage", {
+      getItem: (): string | null => {
+        throw new Error("denied");
+      },
+      setItem: (): void => {
+        throw new Error("denied");
+      },
+      removeItem: (): void => {},
+      clear: (): void => {},
+    });
+    expect(isShadeNotificationProcessed(ITEM)).toBe(false);
+    expect(() => markShadeNotificationProcessed(ITEM)).not.toThrow();
+  });
+
+  it("ignores entries with wrong types instead of throwing", () => {
+    localStorage.setItem(
+      "treasuryScribe.processedShadeNotifications.v1",
+      JSON.stringify([{ key: 123, at: "x" }, null, { key: "k" }])
+    );
+    expect(isShadeNotificationProcessed(ITEM)).toBe(false);
+    markShadeNotificationProcessed(ITEM);
+    expect(isShadeNotificationProcessed(ITEM)).toBe(true);
+  });
+
+  it("ignores non-array JSON payloads", () => {
+    localStorage.setItem(
+      "treasuryScribe.processedShadeNotifications.v1",
+      '"just-a-string"'
+    );
+    expect(isShadeNotificationProcessed(ITEM)).toBe(false);
+  });
 });

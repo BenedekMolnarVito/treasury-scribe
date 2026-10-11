@@ -469,6 +469,31 @@ describe("ingestNotification – auto-tag by title + stripped body (FR6)", () =>
     expect(tagNames).toContain("GenericVendor");
   });
 
+  it("falls back to title-only tags when incoming body is null and no null-body match exists", () => {
+    // Previous transaction with the same title but a real body — tagged "BankTag"
+    const prev = addTransaction(
+      db,
+      createTransaction({
+        notificationTitle: "Generic Bank",
+        notificationBody: "Monthly statement ready",
+        packageName: "com.bank",
+        receivedAt: makeTimestamp(-120),
+      })
+    );
+    addTagToTransaction(db, prev.id, addTag(db, "BankTag").id);
+
+    // Ingest with null body — no null-to-null title+body match exists, so the
+    // title-only fallback (IngestionService step 5) must propagate tags
+    const result = ingestNotification(
+      db,
+      makeTxData("Generic Bank", null, "com.bank", makeTimestamp())
+    );
+
+    expect(result).not.toBeNull();
+    const tagNames = result!.transactionTags.map((tt) => tt.tagName);
+    expect(tagNames).toContain("BankTag");
+  });
+
   it("prefers title+body match over title-only match when both exist", () => {
     // An older transaction with a different body — tagged "OldTag"
     const older = addTransaction(

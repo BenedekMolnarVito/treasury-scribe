@@ -49,6 +49,9 @@ function safeSetLocalStorage(key: string, value: string): void {
   }
 }
 
+/** Dedup window (s) for shade-refresh polling — tighter than the 5 s live default. */
+const REFRESH_DEDUP_WINDOW_SECONDS = 1;
+
 // ---------------------------------------------------------------------------
 // Bottom Navigation Bar
 // ---------------------------------------------------------------------------
@@ -175,7 +178,11 @@ const App: React.FC = () => {
           packageName,
           postedAt
         );
-        const result = ingestNotificationTransaction(db, transaction, 1);
+        const result = ingestNotificationTransaction(
+          db,
+          transaction,
+          REFRESH_DEDUP_WINDOW_SECONDS
+        );
         if (result !== null) {
           addedCount += 1;
         }

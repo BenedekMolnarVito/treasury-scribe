@@ -58,6 +58,11 @@ class RevolutNotificationService : NotificationListenerService() {
         // service process died in between. Queued items survive swipes —
         // only a dead service at post time loses anything.
         restorePending()
+        // The plugin may have loaded (no-op flushing to a dead service) while
+        // this service was dead: deliver restored items now so they arrive
+        // this open, not the next. Shade-rescan overlap is deduped by the
+        // TS-side processed-shade guard.
+        pluginInstance?.let { flushPendingNotifications(it) }
         createNotificationChannel()
         startForeground(FOREGROUND_NOTIFICATION_ID, buildForegroundNotification())
     }

@@ -10,8 +10,9 @@
  *    exists, preserving the user's prior intent to dismiss it.
  * 3. **Auto-tag by vendor** – copies tags (excluding "AddedManually") from the
  *    most recent previous transaction that shares the same title **and**
- *    number-stripped body (prefer), falling back to title-only when no
- *    stripped-body match exists, so same-recipient recurring transfers
+ *    number-stripped body (prefer), falling back to the title-only match
+ *    only when the incoming body is null and no title+body match exists,
+ *    so same-recipient recurring transfers
  *    (`Átutalás elküldve … Kovács Jánosnak`) inherit tags regardless of the
  *    amount, while transfers to different recipients classify independently.
  * 4. **Manual-transaction auto-tag** – transactions created via
@@ -146,7 +147,8 @@ export function ingestNotification(
   //    (including the null-body case).
   //
   //    FALL BACK to previousByTitle ONLY when previousByTitleAndBody is null
-  //    (i.e. no previous transaction matched on title + stripped body).
+  //    AND the incoming body is null (i.e. no previous transaction matched on
+  //    title + stripped body and the incoming row has no body to match on).
   //    This preserves tag propagation for title-only patterns while keeping
   //    different-recipient transfers classified independently.
   // -------------------------------------------------------------------------
