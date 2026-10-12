@@ -4,3 +4,6 @@ dist/
 *.iml
 coverage/
 .github/workflows/copilot-setup-steps.yml
+.maestro/smoke_out/*
+.maestro/undelete_button/*
+
