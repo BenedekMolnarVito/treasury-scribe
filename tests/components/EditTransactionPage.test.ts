@@ -33,7 +33,11 @@ import {
 import type { Database } from "sql.js";
 
 import { initDatabase } from "../../src/data/DatabaseService";
-import { addTransaction, getTransactionById } from "../../src/data/TransactionRepository";
+import {
+  addTransaction,
+  getTransactionById,
+  softDeleteTransaction,
+} from "../../src/data/TransactionRepository";
 import { addTag, addTagToTransaction } from "../../src/data/TagRepository";
 import { createTransaction } from "../../src/models/Transaction";
 import EditTransactionPage from "../../src/components/EditTransactionPage.tsx";
@@ -860,5 +864,51 @@ describe("FR8 – Default/Exception toggle on EditTransactionPage", () => {
     await waitFor(() => {
       expect(getTransactionById(db, id)!.transactionTags).toHaveLength(0);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Undelete button
+// ---------------------------------------------------------------------------
+
+describe("Undelete button", () => {
+  it("renders the deleted banner and Undelete button for a soft-deleted txn", async () => {
+    const id = insertTx();
+    softDeleteTransaction(db, id);
+    renderPage(id);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("deleted-banner")).toBeTruthy();
+      expect(screen.getByTestId("btn-undelete")).toBeTruthy();
+    });
+  });
+
+  it("does NOT render the banner or Undelete button for an active txn", async () => {
+    const id = insertTx();
+    renderPage(id);
+
+    await waitFor(() => expect(screen.getByTestId("btn-save")).toBeTruthy());
+    expect(screen.queryByTestId("deleted-banner")).toBeNull();
+    expect(screen.queryByTestId("btn-undelete")).toBeNull();
+  });
+
+  it("clicking Undelete hides the banner/button and restores the txn in the DB", async () => {
+    const id = insertTx();
+    softDeleteTransaction(db, id);
+    renderPage(id);
+
+    await waitFor(() => expect(screen.getByTestId("btn-undelete")).toBeTruthy());
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("btn-undelete"));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("deleted-banner")).toBeNull();
+      expect(screen.queryByTestId("btn-undelete")).toBeNull();
+    });
+
+    // DB-level confirmation.
+    expect(getTransactionById(db, id)!.isDeleted).toBe(false);
   });
 });

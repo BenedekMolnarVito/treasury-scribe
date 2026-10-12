@@ -24,6 +24,7 @@ import {
   deleteTransaction,
   softDeleteTransaction,
   softDeleteAllTransactions,
+  undeleteTransaction,
   existsDuplicate,
   findSoftDeletedMatch,
   findLastTransactionByTitle,
@@ -333,6 +334,67 @@ describe("softDeleteAllTransactions", () => {
     addTransaction(db, makeTransaction());
     softDeleteAllTransactions(db);
     expect(getAllTransactions(db)).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// undeleteTransaction
+// ---------------------------------------------------------------------------
+
+describe("undeleteTransaction", () => {
+  it("sets IsDeleted = 0 for the target row", () => {
+    const tx = addTransaction(
+      db,
+      makeTransaction({ notificationTitle: "WillRestore", isDeleted: true })
+    );
+    expect(tx.isDeleted).toBe(true);
+
+    undeleteTransaction(db, tx.id);
+
+    const restored = getTransactionById(db, tx.id)!;
+    expect(restored.isDeleted).toBe(false);
+  });
+
+  it("re-appears in getAllTransactions after undelete", () => {
+    const tx = addTransaction(
+      db,
+      makeTransaction({ notificationTitle: "Hidden", isDeleted: true })
+    );
+
+    expect(getAllTransactions(db)).toHaveLength(0);
+
+    undeleteTransaction(db, tx.id);
+
+    const active = getAllTransactions(db);
+    expect(active).toHaveLength(1);
+    expect(active[0].id).toBe(tx.id);
+  });
+
+  it("soft-delete -> undelete round-trip", () => {
+    const tx = addTransaction(db, makeTransaction({ notificationTitle: "Bounce" }));
+
+    softDeleteTransaction(db, tx.id);
+    expect(getTransactionById(db, tx.id)!.isDeleted).toBe(true);
+
+    undeleteTransaction(db, tx.id);
+    expect(getTransactionById(db, tx.id)!.isDeleted).toBe(false);
+  });
+
+  it("is a no-op when the row does not exist", () => {
+    expect(() => undeleteTransaction(db, 99999)).not.toThrow();
+  });
+
+  it("does not affect other rows", () => {
+    const active = addTransaction(db, makeTransaction({ notificationTitle: "Active" }));
+    const deleted = addTransaction(
+      db,
+      makeTransaction({ notificationTitle: "Deleted", isDeleted: true })
+    );
+
+    undeleteTransaction(db, deleted.id);
+
+    expect(getTransactionById(db, active.id)!.isDeleted).toBe(false);
+    expect(getTransactionById(db, deleted.id)!.isDeleted).toBe(false);
   });
 });
 

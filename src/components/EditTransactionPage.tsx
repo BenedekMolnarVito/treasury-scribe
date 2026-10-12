@@ -168,6 +168,25 @@ const STYLE = {
     cursor: "pointer",
     marginTop: "8px",
   } as React.CSSProperties,
+  deletedBanner: {
+    background: "#2D1B00",
+    border: "1px solid #B36A00",
+    borderRadius: "6px",
+    padding: "10px 12px",
+    color: "#FFEBB5",
+    fontSize: "0.9em",
+    marginBottom: "8px",
+  } as React.CSSProperties,
+  undeleteBtn: {
+    background: "#FFA000",
+    color: "#1A1A1A",
+    border: "none",
+    borderRadius: "6px",
+    padding: "10px 18px",
+    fontSize: "1em",
+    cursor: "pointer",
+    marginTop: "8px",
+  } as React.CSSProperties,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -282,10 +301,12 @@ const EditTransactionPageContent: React.FC<
     setNewTagName,
     loadTransaction,
     save,
+    undelete,
     addTag,
     removeTag,
     searchTags,
     loadRecentTags,
+    isDeleted,
   } = useEditTransaction(db, onDatabaseChanged);
 
   // Load transaction and recent tags on mount.
@@ -575,6 +596,23 @@ const EditTransactionPageContent: React.FC<
           onSplit={handleSplit}
           onClose={() => setShowSplitModal(false)}
         />
+      )}
+
+      {/* Undelete (only visible for soft-deleted transactions) */}
+      {isDeleted && (
+        <>
+          <div data-testid="deleted-banner" style={STYLE.deletedBanner}>
+            This transaction is deleted
+          </div>
+          <button
+            style={STYLE.undeleteBtn}
+            onClick={undelete}
+            aria-label="Undelete"
+            data-testid="btn-undelete"
+          >
+            Undelete
+          </button>
+        </>
       )}
 
       {/* Save Changes button */}

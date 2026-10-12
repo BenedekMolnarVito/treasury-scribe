@@ -558,7 +558,7 @@ describe("loadRecentTags", () => {
 // FR8: excludeFromAutoLearn state and setExcludeFromAutoLearn action
 // ---------------------------------------------------------------------------
 
-import { getTransactionById, setTransactionException } from "../../src/data/TransactionRepository";
+import { getTransactionById, setTransactionException, softDeleteTransaction, undeleteTransaction } from "../../src/data/TransactionRepository";
 
 describe("FR8 – useEditTransaction excludeFromAutoLearn state", () => {
   it("exposes excludeFromAutoLearn=false by default after loadTransaction", () => {
@@ -610,5 +610,52 @@ describe("FR8 – useEditTransaction excludeFromAutoLearn state", () => {
     act(() => result.current.setExcludeFromAutoLearn(false));
     expect(result.current.excludeFromAutoLearn).toBe(false);
     expect(result.current.currentTags).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FR9: undelete
+// ---------------------------------------------------------------------------
+
+describe("FR9 – useEditTransaction undelete", () => {
+  it("exposes isDeleted=true when the loaded transaction is soft-deleted", () => {
+    const id = insertTransaction(db);
+    softDeleteTransaction(db, id);
+
+    const { result } = renderHook(() => useEditTransaction(db));
+    act(() => result.current.loadTransaction(id));
+
+    expect(result.current.isDeleted).toBe(true);
+  });
+
+  it("exposes isDeleted=false when the loaded transaction is active", () => {
+    const id = insertTransaction(db);
+
+    const { result } = renderHook(() => useEditTransaction(db));
+    act(() => result.current.loadTransaction(id));
+
+    expect(result.current.isDeleted).toBe(false);
+  });
+
+  it("undelete() flips isDeleted to false and persists to DB", () => {
+    const id = insertTransaction(db);
+    softDeleteTransaction(db, id);
+
+    const { result } = renderHook(() => useEditTransaction(db));
+    act(() => result.current.loadTransaction(id));
+    expect(result.current.isDeleted).toBe(true);
+
+    act(() => result.current.undelete());
+    expect(result.current.isDeleted).toBe(false);
+
+    // Persist: re-load via a fresh hook instance.
+    const { result: result2 } = renderHook(() => useEditTransaction(db));
+    act(() => result2.current.loadTransaction(id));
+    expect(result2.current.isDeleted).toBe(false);
+  });
+
+  it("is a no-op when no transaction has been loaded", () => {
+    const { result } = renderHook(() => useEditTransaction(db));
+    expect(() => act(() => result.current.undelete())).not.toThrow();
   });
 });

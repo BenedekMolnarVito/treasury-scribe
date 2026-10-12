@@ -13,7 +13,7 @@ import type { Database } from "sql.js";
 import type { Tag } from "../models/Tag";
 import type { DatabaseChangedFn } from "./useTransactions";
 
-import { getTransactionById, updateTransaction, setTransactionException } from "../data/TransactionRepository";
+import { getTransactionById, updateTransaction, setTransactionException, undeleteTransaction } from "../data/TransactionRepository";
 import {
   addTag as repoAddTag,
   addTagToTransaction,
@@ -53,6 +53,8 @@ export interface UseEditTransactionResult {
   isIncome: boolean;
   /** Editable copy of `excludeFromAutoLearn`. */
   excludeFromAutoLearn: boolean;
+  /** Whether the loaded transaction is currently soft-deleted. */
+  isDeleted: boolean;
   /** Editable copy of `amount`. */
   amount: number | null;
   /** Editable copy of `currency`. */
@@ -104,6 +106,12 @@ export interface UseEditTransactionResult {
    * No-op when no transaction has been loaded yet.
    */
   save: () => void;
+  /**
+   * Restore a soft-deleted transaction by setting `IsDeleted = 0`.
+   * Sets `isDeleted` to false and fires `onDatabaseChanged` so the UI
+   * can re-render. No-op when no transaction has been loaded.
+   */
+  undelete: () => void;
 
   /**
    * Create or find a tag with the given name, link it to the current
@@ -162,6 +170,7 @@ export function useEditTransaction(
   const [isCash, setIsCash] = useState<boolean>(false);
   const [isIncome, setIsIncome] = useState<boolean>(false);
   const [excludeFromAutoLearn, setExcludeFromAutoLearnState] = useState<boolean>(false);
+  const [isDeleted, setIsDeleted] = useState<boolean>(false);
   const [amount, setAmount] = useState<number | null>(null);
   const [currency, setCurrency] = useState<string | null>(null);
   const [receivedAt, setReceivedAt] = useState<string>("");
@@ -192,6 +201,7 @@ export function useEditTransaction(
       setIsCash(tx.isCash);
       setIsIncome(tx.isIncome);
       setExcludeFromAutoLearnState(tx.excludeFromAutoLearn);
+      setIsDeleted(tx.isDeleted);
       setAmount(tx.amount);
       setCurrency(tx.currency ?? null);
       setReceivedAt(tx.receivedAt ?? "");
@@ -228,6 +238,18 @@ export function useEditTransaction(
     });
     onDatabaseChanged(db);
   }, [db, title, description, isCash, isIncome, excludeFromAutoLearn, amount, currency, receivedAt, onDatabaseChanged]);
+
+  // -------------------------------------------------------------------------
+  // undelete
+  // -------------------------------------------------------------------------
+  const undelete = useCallback((): void => {
+    const id = transactionIdRef.current;
+    if (id === null) return;
+
+    undeleteTransaction(db, id);
+    setIsDeleted(false);
+    onDatabaseChanged(db);
+  }, [db, onDatabaseChanged]);
 
   // -------------------------------------------------------------------------
   // addTag
@@ -356,9 +378,11 @@ export function useEditTransaction(
 
     loadTransaction,
     save,
+    undelete,
     addTag,
     removeTag,
     searchTags,
     loadRecentTags,
+    isDeleted,
   };
 }
