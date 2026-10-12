@@ -1,0 +1,111 @@
+# Undelete button smoke suite (semi-deterministic, CDP-DOM asserts).
+# Env: ANDROID_SERIAL=emulator-5554, -s everywhere; git-bash at
+# C:/Program Files/Git/bin/bash.exe for cdp._adb; fresh debug APK.
+# Maestro = boot/launch only; asserts via CDP DOM dump (url + testids).
+# Jev = batched semantic yes/no only. Trust dumped DOM over Jev scores.
+# Re-resolve webview socket + re-forward each CDP call.
+# Reset: localStorage removeItem DATABASE_STORAGE_KEY + reload
+#   (UNSPECIFIED: exact key string - read const in DatabaseService.ts).
+# Seeding: Add modal via fab-add (native setter + input event); soft-delete
+#   via CDP JS-eval of repo softDeleteTransaction path
+#   (UNSPECIFIED: window exposure; fallback = localStorage base64 fixture).
+#   Only in-app delete path is swipe-right + window.confirm
+#   (TransactionsPage.tsx:13,157-158); adb swipes unreliable - never invent
+#   a DOM delete button.
+# Nav to deleted txn: CDP JS eval to /edit/:id (router App.tsx:447;
+#   getTransactionById returns deleted rows, no IsDeleted filter).
+# Out of scope: re-ingest re-soft-delete via IngestionService step 3
+#   findSoftDeletedMatch - by design, no scenario.
+suites:
+  - id: UD1
+    purpose: deleted txn shows banner + Undelete button
+    reset: clear storage + reload; seed 1 txn; soft-delete via JS-eval
+    steps:
+      - eval_location: /edit/<id>
+      - wait_ms: 1500
+      - dump_dom: out/ud1.json
+    asserts:
+      - url_contains: /edit/
+      - testid_present: deleted-banner
+      - testid_present: btn-undelete
+      - text_contains: This transaction is deleted
+    if_fail: EditTransactionPage.tsx:602-616
+
+  - id: UD2
+    purpose: active txn shows no banner or button
+    reset: clear storage + reload; seed 1 txn without delete
+    steps:
+      - eval_location: /edit/<id>
+      - wait_ms: 1500
+      - dump_dom: out/ud2.json
+    asserts:
+      - url_contains: /edit/
+      - testid_present: btn-save
+      - testid_absent: deleted-banner
+      - testid_absent: btn-undelete
+    if_fail: EditTransactionPage.tsx:602 or useEditTransaction.ts:204
+
+  - id: UD3
+    purpose: click Undelete restores txn (banner gone + list membership)
+    reset: clear storage + reload; seed 1 txn; soft-delete via JS-eval
+    steps:
+      - eval_location: /edit/<id>
+      - wait_ms: 1500
+      - assert_present: btn-undelete
+      - cdp_click_testid: btn-undelete
+      - wait_ms: 1500
+      - dump_dom: out/ud3-edit.json
+      - eval_location: /transactions
+      - wait_ms: 1500
+      - dump_dom: out/ud3-list.json
+    asserts:
+      - absent_in_dump: deleted-banner in out/ud3-edit.json
+      - absent_in_dump: btn-undelete in out/ud3-edit.json
+      - list_contains_seeded_title: true
+    if_fail: useEditTransaction.ts:245-252 or TransactionRepository.ts:163
+
+  - id: UD4
+    purpose: double-click Undelete stays consistent (idempotent)
+    reset: clear storage + reload; seed 1 txn; soft-delete via JS-eval
+    steps:
+      - eval_location: /edit/<id>
+      - wait_ms: 1500
+      - cdp_click_testid: btn-undelete
+      - wait_ms: 800
+      - cdp_click_testid_if_present: btn-undelete
+      - wait_ms: 1000
+      - dump_dom: out/ud4.json
+    asserts:
+      - url_contains: /edit/
+      - testid_present: btn-save
+      - testid_absent: deleted-banner
+      - testid_absent: btn-undelete
+    if_fail: useEditTransaction.ts:246-247 or TransactionRepository.ts:342
+
+  - id: UD5
+    purpose: regression - edit plus save active txn works, no banner
+    reset: clear storage + reload; seed 1 txn without delete
+    steps:
+      - eval_location: /edit/<id>
+      - wait_ms: 1500
+      - edit_title_via_native_setter: suffix R2
+      - cdp_click_testid: btn-save
+      - wait_ms: 1500
+      - dump_dom: out/ud5.json
+    asserts:
+      - testid_absent: deleted-banner
+      - title_persisted_on_reload: true
+    if_fail: useEditTransaction save path (outside diff)
+
+  - id: UD6
+    purpose: regression - Back returns to transactions list
+    reset: clear storage + reload; seed 1 txn without delete
+    steps:
+      - eval_location: /edit/<id>
+      - wait_ms: 1500
+      - cdp_click_testid: edit-back-button
+      - wait_ms: 1500
+      - dump_dom: out/ud6.json
+    asserts:
+      - url_is: /transactions
+    if_fail: EditTransactionPage.tsx:666
