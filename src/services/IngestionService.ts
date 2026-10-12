@@ -10,8 +10,9 @@
  *    exists, preserving the user's prior intent to dismiss it.
  * 3. **Auto-tag by vendor** – copies tags (excluding "AddedManually") from the
  *    most recent previous transaction that shares the same title **and**
- *    number-stripped body (prefer), falling back to title-only when no
- *    stripped-body match exists, so same-recipient recurring transfers
+ *    number-stripped body (prefer), falling back to the title-only match
+ *    only when the incoming body is null and no title+body match exists,
+ *    so same-recipient recurring transfers
  *    (`Átutalás elküldve … Kovács Jánosnak`) inherit tags regardless of the
  *    amount, while transfers to different recipients classify independently.
  * 4. **Manual-transaction auto-tag** – transactions created via
@@ -34,6 +35,8 @@ import {
 
 import { addTag, addTagToTransaction } from "../data/TagRepository";
 
+import { isRedactedNotification } from "./NotificationServiceCore";
+
 /** Tag name excluded when propagating auto-tags from a previous transaction. */
 const MANUAL_TAG = "AddedManually";
 
@@ -46,6 +49,10 @@ const MANUAL_TAG = "AddedManually";
  * order.
  *
  * **Behaviour sequence**
+ * 0. If the body is Android 15+ redacted content
+ *    ("Sensitive notification content hidden"), returns `null` without
+ *    persisting — the real amount is unrecoverable without the
+ *    signature-level permission.
  * 1. If a duplicate exists within ±5 s, returns `null` without persisting.
  * 2. Captures the most-recent same-title transaction **before** inserting, so
  *    that the new row is not accidentally returned as the "previous" one.
@@ -60,13 +67,24 @@ const MANUAL_TAG = "AddedManually";
  * @param db          - sql.js Database instance (caller controls lifecycle).
  * @param txData      - The transaction to insert (id is not required).
  * @returns The persisted {@link Transaction} (possibly soft-deleted), or
- *          `null` when the notification was a duplicate and was skipped.
+ *          `null` when the notification was redacted or a duplicate and
+ *          was skipped.
  */
 export function ingestNotification(
   db: Database,
   txData: Omit<Transaction, "id" | "parsedAmount" | "parsedCurrency" | "transactionTags">,
   duplicateWindowSeconds = 5
 ): Transaction | null {
+  // -------------------------------------------------------------------------
+  // 0. Redaction guard (Android 15+): OTP-looking bodies arrive as
+  //    "Sensitive notification content hidden" without the signature-level
+  //    permission, so the real content is unrecoverable. Drop before any
+  //    persistence (dedup window, auto-tag learning) can observe it.
+  // -------------------------------------------------------------------------
+  if (isRedactedNotification(txData.notificationBody)) {
+    return null;
+  }
+
   // -------------------------------------------------------------------------
   // 1. Deduplication guard
   // -------------------------------------------------------------------------
@@ -129,7 +147,8 @@ export function ingestNotification(
   //    (including the null-body case).
   //
   //    FALL BACK to previousByTitle ONLY when previousByTitleAndBody is null
-  //    (i.e. no previous transaction matched on title + stripped body).
+  //    AND the incoming body is null (i.e. no previous transaction matched on
+  //    title + stripped body and the incoming row has no body to match on).
   //    This preserves tag propagation for title-only patterns while keeping
   //    different-recipient transfers classified independently.
   // -------------------------------------------------------------------------

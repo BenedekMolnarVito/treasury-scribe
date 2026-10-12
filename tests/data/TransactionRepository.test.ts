@@ -399,6 +399,36 @@ describe("existsDuplicate", () => {
     }));
     expect(existsDuplicate(db, TITLE, BODY, PKG, BASE_TIME)).toBe(true);
   });
+
+  it("does NOT block re-delivery when only a soft-deleted duplicate exists", () => {
+    const tx = addTransaction(db, makeTransaction({
+      notificationTitle: TITLE,
+      notificationBody: BODY,
+      packageName: PKG,
+      receivedAt: BASE_TIME,
+    }));
+    softDeleteTransaction(db, tx.id);
+    expect(existsDuplicate(db, TITLE, BODY, PKG, BASE_TIME)).toBe(false);
+  });
+
+  it("still blocks when a live duplicate exists within the 5-second window", () => {
+    addTransaction(db, makeTransaction({
+      notificationTitle: TITLE,
+      notificationBody: BODY,
+      packageName: PKG,
+      receivedAt: "2024-03-01T12:00:03.000Z",
+      isDeleted: true,
+    }));
+    // soft-deleted near-match must not block the live one
+    addTransaction(db, makeTransaction({
+      notificationTitle: TITLE,
+      notificationBody: BODY,
+      packageName: PKG,
+      receivedAt: "2024-03-01T12:00:04.000Z",
+      isDeleted: false,
+    }));
+    expect(existsDuplicate(db, TITLE, BODY, PKG, BASE_TIME)).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

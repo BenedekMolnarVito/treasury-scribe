@@ -7,6 +7,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   isRevolutNotification,
+  isRedactedNotification,
+  REDACTED_NOTIFICATION_BODY,
   parseAmountAndCurrency,
   createTransactionFromNotification,
 } from "../../src/services/NotificationService";
@@ -437,5 +439,35 @@ describe("createTransactionFromNotification", () => {
 
     const json = JSON.parse(tx.jsonContent as string);
     expect(json.timestamp).toBe("2024-06-15T11:59:00.000Z");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isRedactedNotification (Android 15+ sensitive-content redaction)
+// ---------------------------------------------------------------------------
+
+describe("isRedactedNotification", () => {
+  it("returns true for the exact Android 15 redaction sentinel", () => {
+    expect(isRedactedNotification(REDACTED_NOTIFICATION_BODY)).toBe(true);
+  });
+
+  it("returns false for a normal Revolut body", () => {
+    expect(
+      isRedactedNotification("1 599 Ft összeget fizettél itt: OBI.")
+    ).toBe(false);
+  });
+
+  it("returns false for null", () => {
+    expect(isRedactedNotification(null)).toBe(false);
+  });
+
+  it("returns false for a near-miss with extra punctuation", () => {
+    expect(isRedactedNotification(REDACTED_NOTIFICATION_BODY + ".")).toBe(
+      false
+    );
+  });
+
+  it("returns false for an empty string", () => {
+    expect(isRedactedNotification("")).toBe(false);
   });
 });

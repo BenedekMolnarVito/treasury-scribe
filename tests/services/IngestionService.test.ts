@@ -26,6 +26,7 @@ import {
   addTransaction,
   softDeleteTransaction,
   getTransactionById,
+  getAllTransactionsIncludingDeleted,
 } from "../../src/data/TransactionRepository";
 import { addTag, addTagToTransaction } from "../../src/data/TagRepository";
 import { createTransaction } from "../../src/models/Transaction";
@@ -468,6 +469,31 @@ describe("ingestNotification – auto-tag by title + stripped body (FR6)", () =>
     expect(tagNames).toContain("GenericVendor");
   });
 
+  it("falls back to title-only tags when incoming body is null and no null-body match exists", () => {
+    // Previous transaction with the same title but a real body — tagged "BankTag"
+    const prev = addTransaction(
+      db,
+      createTransaction({
+        notificationTitle: "Generic Bank",
+        notificationBody: "Monthly statement ready",
+        packageName: "com.bank",
+        receivedAt: makeTimestamp(-120),
+      })
+    );
+    addTagToTransaction(db, prev.id, addTag(db, "BankTag").id);
+
+    // Ingest with null body — no null-to-null title+body match exists, so the
+    // title-only fallback (IngestionService step 5) must propagate tags
+    const result = ingestNotification(
+      db,
+      makeTxData("Generic Bank", null, "com.bank", makeTimestamp())
+    );
+
+    expect(result).not.toBeNull();
+    const tagNames = result!.transactionTags.map((tt) => tt.tagName);
+    expect(tagNames).toContain("BankTag");
+  });
+
   it("prefers title+body match over title-only match when both exist", () => {
     // An older transaction with a different body — tagged "OldTag"
     const older = addTransaction(
@@ -613,5 +639,51 @@ describe("FR8 – exception transactions excluded from auto-tag learning", () =>
     const tagNames = result!.transactionTags.map((tt) => tt.tagName);
     // Default is included → new tx SHOULD have "DefaultTag"
     expect(tagNames).toContain("DefaultTag");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Android 15+ redaction guard (NG21): redacted bodies are dropped, never stored
+// ---------------------------------------------------------------------------
+
+describe("ingestNotification – redacted notification guard", () => {
+  it("returns null and persists nothing for the redaction sentinel body", () => {
+    const result = ingestNotification(
+      db,
+      makeTxData(
+        "Revolut",
+        "Sensitive notification content hidden",
+        "com.revolut.revolut",
+        makeTimestamp()
+      )
+    );
+
+    expect(result).toBeNull();
+    expect(getAllTransactionsIncludingDeleted(db)).toHaveLength(0);
+  });
+
+  it("still ingests a normal notification after a redacted one is dropped", () => {
+    const dropped = ingestNotification(
+      db,
+      makeTxData(
+        "Revolut",
+        "Sensitive notification content hidden",
+        "com.revolut.revolut",
+        makeTimestamp()
+      )
+    );
+    expect(dropped).toBeNull();
+
+    const kept = ingestNotification(
+      db,
+      makeTxData(
+        "OBI",
+        "1 599 Ft összeget fizettél itt: OBI.",
+        "com.revolut.revolut",
+        makeTimestamp(10)
+      )
+    );
+    expect(kept).not.toBeNull();
+    expect(getAllTransactionsIncludingDeleted(db)).toHaveLength(1);
   });
 });

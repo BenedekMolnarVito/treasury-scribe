@@ -26,6 +26,10 @@ import {
   isRevolutNotification,
 } from "./services/NotificationService";
 import { ingestNotification as ingestNotificationTransaction } from "./services/IngestionService";
+import {
+  isShadeNotificationProcessed,
+  markShadeNotificationProcessed,
+} from "./services/ProcessedNotifications";
 
 /** Safely reads a value from localStorage; returns null if unavailable. */
 function safeGetLocalStorage(key: string): string | null {
@@ -44,6 +48,9 @@ function safeSetLocalStorage(key: string, value: string): void {
     // Silently ignore (e.g., private browsing, test environments)
   }
 }
+
+/** Dedup window (s) for shade-refresh polling — tighter than the 5 s live default. */
+const REFRESH_DEDUP_WINDOW_SECONDS = 1;
 
 // ---------------------------------------------------------------------------
 // Bottom Navigation Bar
@@ -158,6 +165,12 @@ const App: React.FC = () => {
         if (!isRevolutNotification(packageName)) {
           continue;
         }
+        // The shade is a snapshot: skip items already offered to ingestion
+        // (SQL dedup only covers a ±seconds window, not stale shade items).
+        if (isShadeNotificationProcessed({ packageName, title, body, postedAt })) {
+          continue;
+        }
+        markShadeNotificationProcessed({ packageName, title, body, postedAt });
 
         const transaction = createTransactionFromNotification(
           title,
@@ -165,7 +178,11 @@ const App: React.FC = () => {
           packageName,
           postedAt
         );
-        const result = ingestNotificationTransaction(db, transaction, 1);
+        const result = ingestNotificationTransaction(
+          db,
+          transaction,
+          REFRESH_DEDUP_WINDOW_SECONDS
+        );
         if (result !== null) {
           addedCount += 1;
         }
@@ -300,6 +317,13 @@ const App: React.FC = () => {
             if (!isRevolutNotification(packageName)) {
               return;
             }
+            // Record live deliveries too: a later shade poll of the same
+            // (still visible) item must not re-ingest it. Skip items the
+            // native queue already delivered (restore + rescan overlap).
+            if (isShadeNotificationProcessed({ packageName, title, body, postedAt })) {
+              return;
+            }
+            markShadeNotificationProcessed({ packageName, title, body, postedAt });
 
             const transaction = createTransactionFromNotification(
               title,
@@ -351,6 +375,9 @@ const App: React.FC = () => {
     const handleFocus = (): void => {
       if (cancelled) return;
       void ensureNotificationMonitoring();
+      // Drain any notifications that arrived in the native shade while the
+      // app was paused (e.g. user switched away after a Revolut push came in).
+      void refreshActiveNotifications();
     };
 
     const handleVisibilityChange = (): void => {

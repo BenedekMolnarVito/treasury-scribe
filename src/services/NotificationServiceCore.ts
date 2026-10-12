@@ -19,6 +19,22 @@ export function isRevolutNotification(packageName: string | null): boolean {
   return packageName === REVOLUT_PACKAGE;
 }
 
+/**
+ * Body text Android 15+ substitutes for OTP-looking notification content
+ * (4+ contiguous digits) when the listener lacks
+ * android.permission.RECEIVE_SENSITIVE_NOTIFICATIONS (signature-level,
+ * not grantable to store apps). Persisting it would store a junk
+ * amount-null row and pollute auto-tag learning. Real Revolut bodies
+ * group thousands with NBSP ("4 500 Ft"), so only unusual ungrouped
+ * formats ever hit this.
+ */
+export const REDACTED_NOTIFICATION_BODY =
+  "Sensitive notification content hidden";
+
+export function isRedactedNotification(body: string | null): boolean {
+  return body === REDACTED_NOTIFICATION_BODY;
+}
+
 export interface ParsedAmountCurrency {
   amount: number | null;
   currency: string | null;

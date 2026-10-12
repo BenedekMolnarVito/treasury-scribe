@@ -362,6 +362,7 @@ export function existsDuplicateWithinSeconds(
      WHERE NotificationTitle IS ?
        AND NotificationBody  IS ?
        AND PackageName       IS ?
+       AND IsDeleted         = 0
        AND ABS(
              (julianday(ReceivedAt) - julianday(?)) * 86400.0
            ) <= ?`,

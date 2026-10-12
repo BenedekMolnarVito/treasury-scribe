@@ -66,7 +66,7 @@ class Suite(unittest.TestCase):
         with open(nr.SCENARIOS, encoding="utf-8") as f:
             spec = yaml.safe_load(f)
         self.assertEqual(nr.validate(spec), [])
-        self.assertEqual(len(spec["scenarios"]), 21)
+        self.assertEqual(len(spec["scenarios"]), 22)
         self.assertTrue(all(s.get("hint") for s in spec["scenarios"]))
 
     def test_nbsp_decoded(self):
