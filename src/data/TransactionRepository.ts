@@ -326,6 +326,24 @@ export function softDeleteAllTransactions(db: Database): void {
 }
 
 /**
+ * Restores a single soft-deleted transaction by setting `IsDeleted = 0`.
+ * Idempotent: calling on an already-active row is a no-op (the UPDATE simply
+ * affects zero rows). Intended for the Edit screen's "Undelete" action so users
+ * can recover accidentally- or auto-deleted transactions.
+ *
+ * Note: this only flips the flag on the target row. IngestionService's
+ * auto-soft-delete (step 3) can still re-soft-delete a future re-ingest of the
+ * same notification when a matching soft-deleted sibling exists — that is an
+ * intended, separate interaction and is NOT suppressed by undelete.
+ *
+ * @param db - sql.js Database instance.
+ * @param id - Primary key of the transaction to restore.
+ */
+export function undeleteTransaction(db: Database, id: number): void {
+  db.run("UPDATE Transactions SET IsDeleted = 0 WHERE Id = ?", [id]);
+}
+
+/**
  * Flips the `ExcludeFromAutoLearn` flag on a single transaction.
  *
  * @param db - sql.js Database instance.
