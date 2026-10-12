@@ -108,7 +108,7 @@ export interface UseEditTransactionResult {
   save: () => void;
   /**
    * Restore a soft-deleted transaction by setting `IsDeleted = 0`.
-   * Re-loads `isDeleted` from the DB and fires `onDatabaseChanged` so the UI
+   * Sets `isDeleted` to false and fires `onDatabaseChanged` so the UI
    * can re-render. No-op when no transaction has been loaded.
    */
   undelete: () => void;
